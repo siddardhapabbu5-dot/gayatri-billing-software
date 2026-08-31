@@ -1,0 +1,866 @@
+html.lux-page,
+html.lux-page body,
+html.lux-page #root {
+  height: 100%;
+  overflow: hidden;
+  background: #f3ead8;
+  color: #333333;
+  font-family: "Cormorant Garamond", Georgia, serif;
+}
+
+html.lux-page body.menu-lock {
+  overflow: hidden;
+}
+
+html.lux-page .lux-root {
+  height: 100%;
+  overflow: hidden;
+}
+
+html.lux-page .lux-deck {
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+html.lux-page .lux-deck::-webkit-scrollbar {
+  display: none;
+}
+
+html.lux-page .lux-deck > section {
+  position: relative;
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: #f3ead8;
+}
+
+html.lux-page .hero {
+  position: relative !important;
+  min-height: 100% !important;
+  height: 100%;
+  padding: 5.5rem 1.4rem 3.5rem;
+  overflow: hidden !important;
+  background: #0b0907 !important;
+}
+
+html.lux-page .hero-film,
+html.lux-page .hero-film-shade,
+html.lux-page .film-slide,
+html.lux-page .hero-aurora {
+  position: absolute;
+  inset: 0;
+}
+
+html.lux-page .hero-film {
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(176, 141, 58, 0.35), transparent 55%),
+    radial-gradient(ellipse at 80% 80%, rgba(90, 40, 18, 0.45), transparent 50%),
+    #0b0907;
+}
+
+html.lux-page .hero-aurora {
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 38% at 18% 30%, rgba(198, 164, 82, 0.42), transparent 70%),
+    radial-gradient(36% 42% at 82% 22%, rgba(232, 180, 35, 0.24), transparent 68%),
+    radial-gradient(48% 40% at 70% 78%, rgba(140, 62, 28, 0.34), transparent 70%);
+  animation: auroraDrift 16s ease-in-out infinite alternate;
+  transform: scale(1.15);
+}
+
+html.lux-page .hero-rays {
+  position: absolute;
+  inset: -55%;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-conic-gradient(
+    from 0deg,
+    transparent 0 14deg,
+    rgba(232, 180, 35, 0.08) 14deg 17deg
+  );
+  animation: raySpin 48s linear infinite;
+  opacity: 0.85;
+}
+
+html.lux-page .film-slide {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.06);
+  transition: opacity 1.5s ease;
+  z-index: 1;
+}
+
+html.lux-page .film-slide.is-on {
+  opacity: 1;
+  animation: filmKen 8s linear forwards;
+}
+
+html.lux-page .hero-film-shade {
+  z-index: 2;
+  background:
+    linear-gradient(180deg, rgba(11, 9, 7, 0.18), rgba(11, 9, 7, 0.42) 70%, rgba(11, 9, 7, 0.78)),
+    radial-gradient(ellipse at 50% 42%, rgba(58, 42, 18, 0.12), rgba(11, 9, 7, 0.28));
+  pointer-events: none;
+}
+
+html.lux-page .petals {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+html.lux-page .petals span,
+html.lux-page .petals .rose-fall {
+  position: absolute;
+  top: -16%;
+  display: block;
+  animation-name: roseFall !important;
+  animation-timing-function: linear !important;
+  animation-iteration-count: infinite !important;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+html.lux-page .petals .rose-fall.is-petal {
+  width: 14px;
+  height: 20px;
+  border-radius: 2px 16px 2px 16px;
+  background: radial-gradient(circle at 28% 22%, #ff7a86, #c41e3a 52%, #6b1020 100%);
+  box-shadow: 0 0 8px rgba(160, 22, 44, 0.4);
+  opacity: 0.88;
+}
+
+html.lux-page .petals .rose-fall.is-gold {
+  width: 11px;
+  height: 16px;
+  border-radius: 10px 2px 10px 2px;
+  background: linear-gradient(#e8b423, #c45a1a);
+  opacity: 0.7;
+}
+
+html.lux-page .hero-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 70vmin;
+  height: 70vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(198, 164, 82, 0.28), transparent 68%);
+  animation: glowPulse 6s ease-in-out infinite !important;
+  pointer-events: none;
+}
+
+html.lux-page .hero-brand {
+  position: relative;
+  z-index: 4;
+}
+
+html.lux-page .hero-emblem-wrap {
+  width: min(720px, 92%);
+  margin: 0 auto 1.4rem;
+}
+
+html.lux-page .hero-emblem {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.45));
+  animation: emblemFloat 7s ease-in-out 1.6s infinite !important;
+}
+
+@keyframes auroraDrift {
+  from { transform: scale(1.12) translate(-4%, -3%) rotate(-4deg); }
+  to { transform: scale(1.22) translate(5%, 4%) rotate(5deg); }
+}
+
+@keyframes filmKen {
+  from { transform: scale(1.06); }
+  to { transform: scale(1.2); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+}
+
+@keyframes roseFall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(0deg) scale(var(--s, 1));
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  42% {
+    transform: translate3d(calc(var(--drift, 16) * 1px), 46vh, 0) rotate(150deg) scale(var(--s, 1));
+  }
+  100% {
+    transform: translate3d(calc(var(--drift, 16) * -0.45px), 118vh, 0) rotate(340deg) scale(var(--s, 1));
+    opacity: 0;
+  }
+}
+
+@keyframes petalFall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+  12% { opacity: 0.85; }
+  100% { transform: translateY(110vh) rotate(220deg); opacity: 0; }
+}
+
+@keyframes raySpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes emblemFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+html.lux-page .intro,
+html.lux-page .locations,
+html.lux-page .banquets,
+html.lux-page .gallery,
+html.lux-page .stories,
+html.lux-page .contact,
+html.lux-page .staff-gate {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 5.6rem 4.8rem 3.2rem !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: #f3ead8;
+}
+
+html.lux-page .lux-deck > section.organize {
+  overflow: hidden !important;
+}
+
+html.lux-page .lux-deck > section.contact,
+html.lux-page .lux-deck > section.staff-gate {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+html.lux-page .organize {
+  width: 100%;
+  height: 100%;
+  padding: 4.7rem 1.6rem 1rem !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  text-align: left;
+  background: #f3ead8 !important;
+  color: #333333 !important;
+}
+
+html.lux-page .book-shell {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+  max-height: 100%;
+}
+
+html.lux-page .book-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+html.lux-page .book-head h2 {
+  font-size: clamp(1.45rem, 2.4vw, 1.9rem) !important;
+  margin: 0 !important;
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+  color: #333333 !important;
+}
+
+html.lux-page .book-head p {
+  margin: 0;
+  font-family: Jost, sans-serif;
+  font-size: 0.82rem;
+  color: #6b6256;
+}
+
+html.lux-page .organize .kicker {
+  display: none;
+}
+
+html.lux-page .organize-lead {
+  display: none;
+}
+
+html.lux-page .booking-form .form-error {
+  grid-column: 1 / -1;
+  color: #9b2c2c !important;
+  font-size: 0.85rem !important;
+  margin: 0;
+}
+
+html.lux-page .booking-form .book-agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.1rem 0 0;
+  font-family: Jost, sans-serif;
+  font-size: 0.82rem;
+  color: #3a342c;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+html.lux-page .booking-form .book-agree input {
+  width: auto;
+  height: auto;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+  accent-color: #8a6a2f;
+}
+
+html.lux-page .booking-form .book-agree a {
+  color: #8a6a2f;
+  text-decoration: underline;
+}
+
+html.lux-page .book-sent {
+  background: #fff;
+  border: 1px solid #d9cbb0;
+  padding: 1rem 1.1rem;
+}
+
+html.lux-page .book-sent .home-ok {
+  margin: 0 0 0.75rem;
+}
+
+html.lux-page .book-sent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+html.lux-page .book-sent-actions .btn {
+  width: auto;
+  min-width: 0;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+}
+
+html.lux-page .booking-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem 0.65rem;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #d9cbb0;
+  padding: 0.85rem 0.95rem 0.9rem;
+  box-shadow: 0 8px 24px rgba(80, 60, 20, 0.06);
+}
+
+html.lux-page .booking-form .btn.full,
+html.lux-page .booking-form .book-agree,
+html.lux-page .hall-picks,
+html.lux-page .avail-board {
+  grid-column: 1 / -1;
+}
+
+html.lux-page .organize .field {
+  margin-bottom: 0;
+}
+
+html.lux-page .organize .field label {
+  font-size: 0.7rem !important;
+  letter-spacing: 0.08em !important;
+  color: #3a342c !important;
+  margin-bottom: 0.28rem !important;
+}
+
+html.lux-page .booking-form input,
+html.lux-page .booking-form select,
+html.lux-page .booking-form textarea {
+  width: 100%;
+  border: 1.5px solid #cbb892 !important;
+  background: #fffdf8 !important;
+  color: #2c271f !important;
+  font-family: Jost, sans-serif !important;
+  font-size: 0.92rem !important;
+  padding: 0.55rem 0.7rem !important;
+  min-height: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  border-radius: 2px;
+}
+
+html.lux-page .booking-form input::placeholder {
+  color: #9a8f7c !important;
+}
+
+html.lux-page .booking-form input:focus,
+html.lux-page .booking-form select:focus {
+  outline: 2px solid #b08d3a;
+  outline-offset: 0;
+  border-color: #b08d3a !important;
+  background: #fff !important;
+}
+
+html.lux-page .hall-picks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+html.lux-page .hall-pick {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.45rem 0.6rem;
+  border: 1.5px solid #cbb892;
+  background: #fffdf8;
+  color: #2c271f;
+  text-align: left;
+  cursor: pointer;
+  font-family: Jost, sans-serif;
+  min-height: 42px;
+}
+
+html.lux-page .hall-pick strong {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+html.lux-page .hall-pick em {
+  font-style: normal;
+  font-size: 0.72rem;
+  color: #3d6b4f;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+html.lux-page .hall-pick.is-held em {
+  color: #9b2c2c;
+}
+
+html.lux-page .hall-pick.is-on {
+  border-color: #b08d3a;
+  background: #f6edd8;
+  box-shadow: inset 0 0 0 1px #b08d3a;
+}
+
+html.lux-page .avail-board {
+  background: #f7f0e2;
+  border: 1px solid #d9cbb0;
+  padding: 0.5rem 0.6rem 0.55rem;
+}
+
+html.lux-page .avail-status {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  color: #3d6b4f !important;
+}
+
+html.lux-page .avail-status.is-booked {
+  color: #9b2c2c !important;
+}
+
+html.lux-page .avail-days {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 0.28rem;
+  overflow: visible;
+}
+
+html.lux-page .avail-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  padding: 0.28rem 0.08rem;
+  border: 1.5px solid #cbb892;
+  background: #fff;
+  color: #3a342c;
+  font-size: 0.62rem;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+html.lux-page .avail-day span {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.7;
+}
+
+html.lux-page .avail-day strong {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+html.lux-page .avail-day.is-booked {
+  background: #f8e8e8;
+  border-color: #e0b4b4;
+  color: #7a2e2e;
+}
+
+html.lux-page .avail-day.is-on {
+  background: #b08d3a;
+  border-color: #8f702c;
+  color: #fff;
+}
+
+html.lux-page .avail-day.is-on span {
+  opacity: 0.9;
+  color: #fff;
+}
+
+html.lux-page .booking-form .btn.full {
+  margin: 0.1rem 0 0;
+  min-height: 44px;
+  height: 44px;
+  font-size: 0.95rem;
+}
+
+html.lux-page .booking-form .btn.full:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+html.lux-page .venue-hold {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 0.78rem;
+  color: #9b2c2c;
+}
+
+html.lux-page .venue-hold.is-free {
+  color: #3d6b4f;
+}
+
+html.lux-page .intro-photos {
+  min-height: 300px;
+}
+
+html.lux-page .ghost-title {
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  margin-bottom: 1rem;
+}
+
+html.lux-page .venue-card img {
+  height: 150px;
+}
+
+html.lux-page .page-title {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+}
+
+html.lux-page .page-sub {
+  margin-bottom: 1rem;
+}
+
+html.lux-page .filter-row {
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.8rem;
+}
+
+html.lux-page .banquet-wide {
+  height: 260px;
+}
+
+html.lux-page .banquet-side img {
+  height: 140px;
+}
+
+html.lux-page .gallery-item img {
+  height: 220px;
+}
+
+html.lux-page .map-wrap {
+  width: min(720px, 100%);
+  height: 180px;
+  margin: 0.8rem auto 0.9rem;
+}
+
+html.lux-page .contact {
+  align-items: center;
+}
+
+html.lux-page .contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.8rem;
+  margin-top: 0.35rem;
+}
+
+html.lux-page .contact-actions .btn {
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: 0.72rem 1.2rem;
+}
+
+html.lux-page .contact .site-footer {
+  align-self: stretch;
+  width: 100%;
+  margin-top: 1.2rem;
+  padding: 0.8rem 0 0;
+  border-top: 1px solid var(--line);
+}
+
+html.lux-page .terms-page {
+  justify-content: flex-start;
+}
+
+html.lux-page .terms-copy {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 0 0 1.6rem 1.3rem;
+  text-align: left;
+  font-family: Jost, sans-serif;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #3a342c;
+}
+
+html.lux-page .terms-copy li {
+  margin: 0 0 0.65rem;
+}
+
+html.lux-page .menu button {
+  border: 0;
+  background: none;
+  font-family: Jost, sans-serif;
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+html.lux-page .slide-arrow {
+  position: fixed;
+  top: 50%;
+  z-index: 28;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(166, 147, 75, 0.55);
+  background: rgba(26, 25, 23, 0.45);
+  color: #f3e6b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(6px);
+}
+
+html.lux-page .slide-arrow.prev {
+  left: 14px;
+}
+
+html.lux-page .slide-arrow.next {
+  right: 14px;
+}
+
+html.lux-page .slide-arrow:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+html.lux-page .lux-root.is-light .slide-arrow {
+  background: rgba(255, 255, 248, 0.85);
+  color: #333;
+  border-color: #d9d3c8;
+}
+
+html.lux-page .swipe-hint {
+  margin-top: 1.6rem;
+  font-family: Jost, sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #d8c48a;
+  animation: fadeRise 1.1s ease 1.6s both;
+}
+
+html.lux-page .menu-btn,
+html.lux-page .menu {
+  display: none !important;
+}
+
+html.lux-page .site-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.8rem 1.2rem;
+  padding: 0.7rem 1.2rem;
+}
+
+html.lux-page .site-header .logo {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+html.lux-page .site-header .logo-mark {
+  width: 42px;
+}
+
+html.lux-page .site-header .logo strong {
+  font-size: 1.15rem;
+  letter-spacing: 0.1em;
+}
+
+html.lux-page .site-header .logo em {
+  font-size: 0.78rem;
+}
+
+html.lux-page .site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.15rem 1.05rem;
+}
+
+html.lux-page .site-nav a,
+html.lux-page .site-nav button {
+  font-family: Jost, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  padding: 0.35rem 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+html.lux-page .site-nav a.is-on {
+  border-bottom-color: currentColor;
+}
+
+html.lux-page .header-actions .btn-ghost {
+  display: inline-flex;
+}
+
+html.lux-page .to-top {
+  position: fixed;
+  left: 18px;
+  bottom: 22px;
+  z-index: 29;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  font-family: Jost, sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted, #7a7670);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+html.lux-page .lux-root:not(.is-light) .to-top {
+  color: #d8c48a;
+}
+
+html.lux-page .to-top span {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  html.lux-page .intro,
+  html.lux-page .locations,
+  html.lux-page .banquets,
+  html.lux-page .gallery,
+  html.lux-page .stories,
+  html.lux-page .contact,
+  html.lux-page .staff-gate,
+  html.lux-page .terms-page {
+    padding: 5.2rem 1.1rem 3.4rem !important;
+    justify-content: flex-start;
+  }
+
+  html.lux-page .organize {
+    padding: 4.6rem 0.8rem 0.7rem !important;
+    justify-content: center;
+  }
+
+  html.lux-page .booking-form {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 0.5rem;
+    padding: 0.7rem;
+  }
+
+  html.lux-page .hall-picks {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  html.lux-page .avail-days {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  html.lux-page .slide-arrow.prev {
+    left: 6px;
+  }
+
+  html.lux-page .slide-arrow.next {
+    right: 6px;
+  }
+
+  html.lux-page .site-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  html.lux-page .site-nav {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 0.15rem;
+  }
+
+  html.lux-page .site-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  html.lux-page .header-actions .btn-ghost {
+    display: inline-flex;
+  }
+}
