@@ -1,68 +1,205 @@
 import { useMemo, useState } from "react";
 import { addDays, formatDateDMY, money, nightsBetween, telHref, todayISO, waMe } from "../lib";
-import { buildFolioLinesFromDraft, folioTotals, lineKind, originLabel } from "../engine";
+import { buildFolioLinesFromDraft, folioTotals, hallDayStatus, lineKind, originLabel, roomClash } from "../engine";
+import { housekeepingOf, occupancyOf, policiesOf, roomCheckInOutText, suggestedAdvance } from "../policies";
 import { requiredFromDraft } from "../docTypes";
+import { DEFAULT_EVENT_TYPES } from "../seed";
 import { PageHead, Pill } from "../ui";
 import DocPanel from "./DocPanel.jsx";
 
-const OPEN_ROOMS = new Set(["Available", "Inspected"]);
-const HELD_ROOMS = new Set(["Occupied", "Reserved"]);
+const CLOSED_OCC = new Set(["Maintenance", "Out of order"]);
+const CLOSED_HK = new Set(["Dirty", "Cleaning"]);
 
-function activeRoomStay(state, roomId) {
-  return (state.roomReservations || []).find(
-    (r) => r.roomId === roomId && !["Cancelled", "Checked out"].includes(r.status)
-  );
+function stayOnDates(state, roomId, checkIn, checkOut) {
+  return roomClash(state.roomReservations || [], roomId, checkIn, checkOut);
 }
 
-function roomOccupant(state, roomId) {
+function roomChipLabel(room, stay) {
+  if (stay) return stay.status === "Occupied" ? "Occupied" : "Reserved";
+  const occ = occupancyOf(room);
+  if (CLOSED_OCC.has(occ)) return occ;
+  const hk = housekeepingOf(room);
+  if (CLOSED_HK.has(hk) || hk === "Inspected") return hk;
+  return "Available";
+}
+
+function roomOccupant(state, roomId, checkIn, checkOut) {
   const room = state.rooms.find((r) => r.id === roomId);
-  const stay = activeRoomStay(state, roomId);
+  const stay = stayOnDates(state, roomId, checkIn, checkOut);
   const booking = state.bookings.find((b) => b.id === stay?.bookingId);
   const guest = state.guests.find((g) => g.id === stay?.guestId || g.id === booking?.guestId);
   const type = state.roomTypes.find((t) => t.id === room?.typeId);
   return { room, stay, booking, guest, type };
 }
 
-const EMPTY = {
-  guest: { name: "", phone: "", email: "", address: "", nationality: "India", idProof: { type: "Aadhaar", number: "" } },
-  type: "Marriage",
-  source: "Direct",
-  eventDate: todayISO(),
-  guestsExpected: 200,
-  packageId: "",
-  halls: [],
-  rooms: [],
-  services: [],
-  discount: 0,
-  advance: 0,
-  paymentMode: "UPI",
-  notes: "",
-  pendingDocs: [],
-};
+function eventTypeOptions(property) {
+  const fromProp = (property?.eventTypes || DEFAULT_EVENT_TYPES).filter(Boolean);
+  const tail = ["Room only"].filter((t) => !fromProp.includes(t));
+  return [...fromProp, ...tail];
+}
 
-export default function Reservations({ state, presetDate, onSave, onCancel, onOpen, onDocs }) {
-  const [mode, setMode] = useState("list");
-  const [draft, setDraft] = useState({ ...EMPTY, eventDate: presetDate || todayISO() });
+function defaultEventType(property) {
+  const types = eventTypeOptions(property);
+  return types.find((t) => t !== "Room only" && t !== "Other") || types[0] || "Conference";
+}
+
+function emptyDraft(property, date) {
+  const day = date || todayISO();
+  return {
+    guest: { name: "", phone: "", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "" } },
+    type: defaultEventType(property),
+    source: "Direct",
+    eventDate: day,
+    checkIn: day,
+    checkOut: addDays(day, 1),
+    guestsExpected: 200,
+    packageId: "",
+    halls: [],
+    rooms: [],
+    services: [],
+    discount: 0,
+    advance: 0,
+    paymentMode: "UPI",
+    paymentDate: todayISO(),
+    paymentRef: "",
+    finalPayment: 0,
+    finalPaymentMode: "UPI",
+    finalPaymentDate: todayISO(),
+    finalPaymentRef: "",
+    notes: "",
+    pendingDocs: [],
+    agreeHall: false,
+    agreeRoom: false,
+  };
+}
+
+const EMPTY = emptyDraft(null);
+
+function stayNights(checkIn, checkOut) {
+  return Math.max(1, nightsBetween(checkIn, checkOut) || 1);
+}
+
+function draftFromGuest(property, guest, date) {
+  const base = emptyDraft(property, date);
+  return {
+    ...base,
+    guest: guest
+      ? {
+          name: guest.name || "",
+          phone: guest.phone || "",
+          email: guest.email || "",
+          address: guest.address || "",
+          gstin: guest.gstin || "",
+          nationality: guest.nationality || "India",
+          idProof: guest.idProof || { type: "Aadhaar", number: "" },
+        }
+      : base.guest,
+  };
+}
+
+function roomSaleBlocked(room) {
+  const occ = occupancyOf(room);
+  if (CLOSED_OCC.has(occ)) return occ;
+  const hk = housekeepingOf(room);
+  if (CLOSED_HK.has(hk)) return hk;
+  return null;
+}
+
+function applyHallSlotWindow(h, date) {
+  const slotType = h.slotType === "hourly" ? "half-day" : h.slotType;
+  if (slotType === "half-day") {
+    return {
+      ...h,
+      date,
+      slotType,
+      start: `${date}T18:00`,
+      end: `${addDays(date, 1)}T00:00`,
+    };
+  }
+  return {
+    ...h,
+    date,
+    slotType: "full-day",
+    start: `${date}T06:00`,
+    end: `${addDays(date, 1)}T06:00`,
+  };
+}
+
+function BookingWorkflow({ step, go, bookingId, guestId }) {
+  const items = [
+    { n: 1, label: "Reservations", page: "reserve" },
+    { n: 2, label: "Payment & Invoice", page: "billing", bookingId },
+    { n: 3, label: "Guests / CRM", page: "guests", guestId },
+    { n: 4, label: "Documents", page: "documents", bookingId },
+  ];
+  return (
+    <nav className="booking-workflow" aria-label="Staff booking process — not a live booking record">
+      <p className="booking-workflow-caption muted">Staff process: Reservations → Payment → CRM → Documents</p>
+      {items.map((item, i) => (
+        <span key={item.n} className="booking-workflow-item">
+          {i > 0 && <span className="booking-workflow-arrow">→</span>}
+          <button
+            type="button"
+            className={`booking-workflow-step${step === item.n ? " is-current" : step > item.n ? " is-done" : ""}`}
+            disabled={item.n > 1 && !bookingId && item.page !== "guests"}
+            onClick={() => {
+              if (item.page === "billing" && bookingId) go("billing", { bookingId });
+              else if (item.page === "guests" && guestId) go("guests", { guestId });
+              else if (item.page === "documents" && bookingId) go("documents", { bookingId });
+              else if (item.page === "reserve") go("reserve");
+            }}
+          >
+            <em>{item.n}</em>
+            {item.label}
+          </button>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+export default function Reservations({ state, presetDate, presetGuest, onSave, onCancel, onOpen, onDocs, go }) {
+  const startDate = presetDate || todayISO();
+  const [mode, setMode] = useState(presetGuest ? "form" : "list");
+  const [listTab, setListTab] = useState("active");
+  const [draft, setDraft] = useState(() => draftFromGuest(state.property, presetGuest, startDate));
   const [error, setError] = useState("");
   const [peekRoom, setPeekRoom] = useState(null);
+  const eventOptions = useMemo(() => eventTypeOptions(state.property), [state.property.eventTypes]);
   const lines = useMemo(() => buildFolioLinesFromDraft(state, { ...draft, services: draft.services }), [state, draft]);
-  const totals = folioTotals({ discount: draft.discount }, lines, [{ amount: Number(draft.advance) || 0, type: "Advance" }], state.property.taxPercent);
+  const previewPays = [
+    ...(Number(draft.advance) > 0 ? [{ amount: Number(draft.advance) || 0, type: "Advance" }] : []),
+    ...(Number(draft.finalPayment) > 0 ? [{ amount: Number(draft.finalPayment) || 0, type: "Final" }] : []),
+  ];
+  const totals = folioTotals({ discount: draft.discount }, lines, previewPays, state.property.taxPercent);
+  const pol = policiesOf(state.property);
   const cur = state.property.currency;
   const loc = state.property.locale;
 
   function toggleHall(id) {
+    const hall = state.halls.find((h) => h.id === id);
+    const date = draft.eventDate;
+    const hold = hallDayStatus(state, id, date);
+    if (hold.booked) {
+      const w = hold.slots[0];
+      setError(
+        w
+          ? `${hall?.name} is booked on ${formatDateDMY(date)} (${w.windowLabel || w.slotType}). Pick another hall or date.`
+          : `${hall?.name} is not free on ${formatDateDMY(date)}.`
+      );
+      return;
+    }
+    setError("");
     setDraft((d) => {
       const found = d.halls.find((h) => h.hallId === id);
-      const hall = state.halls.find((h) => h.id === id);
       if (found) return { ...d, halls: d.halls.filter((h) => h.hallId !== id) };
-      const date = d.eventDate;
       return {
         ...d,
         halls: [
           ...d.halls,
-          { hallId: id, date, slotType: "full-day", start: `${date}T06:00`, end: `${addDays(date, 1)}T06:00` },
+          applyHallSlotWindow({ hallId: id, slotType: "full-day", start: "", end: "" }, date),
         ],
-        notes: d.notes,
+        type: d.type === "Room only" ? defaultEventType(state.property) : d.type,
       };
     });
   }
@@ -72,31 +209,44 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
       ...d,
       halls: d.halls.map((h) => {
         if (h.hallId !== id) return h;
-        const next = { ...h, ...patch };
-        if (patch.slotType === "hourly") {
-          next.end = `${next.date}T${(patch.endTime || "12:00")}`;
-        } else if (patch.slotType === "half-day") {
-          next.start = `${next.date}T18:00`;
-          next.end = `${addDays(next.date, 1)}T00:00`;
-        } else if (patch.slotType === "full-day") {
-          next.start = `${next.date}T06:00`;
-          next.end = `${addDays(next.date, 1)}T06:00`;
-        }
+        let next = { ...h, ...patch };
         if (patch.date) {
-          next.start = `${patch.date}T${(next.start || "").slice(11, 16) || "06:00"}`;
+          next = applyHallSlotWindow({ ...next, slotType: next.slotType }, patch.date);
+        } else if (patch.slotType === "half-day") {
+          next = applyHallSlotWindow({ ...next, slotType: "half-day" }, next.date);
+        } else if (patch.slotType === "full-day") {
+          next = applyHallSlotWindow({ ...next, slotType: "full-day" }, next.date);
         }
         return next;
       }),
     }));
   }
 
+  function setEventDate(date) {
+    setDraft((d) => {
+      const checkOut = d.checkOut <= date ? addDays(date, 1) : d.checkOut;
+      return {
+        ...d,
+        eventDate: date,
+        checkIn: date,
+        checkOut,
+        halls: d.halls.map((h) => applyHallSlotWindow(h, date)),
+        rooms: d.rooms.map((r) => ({ ...r, checkIn: date, checkOut: r.checkOut <= date ? addDays(date, 1) : r.checkOut })),
+      };
+    });
+  }
+
   function toggleRoom(id) {
     const room = state.rooms.find((r) => r.id === id);
-    if (HELD_ROOMS.has(room?.status) || activeRoomStay(state, id)) {
+    const checkIn = draft.checkIn || draft.eventDate;
+    const checkOut = draft.checkOut || addDays(checkIn, 1);
+    if (stayOnDates(state, id, checkIn, checkOut)) {
       setPeekRoom(id);
       return;
     }
-    if (!OPEN_ROOMS.has(room?.status)) {
+    const blocked = roomSaleBlocked(room);
+    if (blocked) {
+      setError(`Room ${room?.number} is ${blocked}. Choose an Available or Inspected room.`);
       setPeekRoom(id);
       return;
     }
@@ -104,17 +254,52 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
       if (d.rooms.length === 1 && d.rooms[0].roomId === id) return d;
       return {
         ...d,
-        rooms: [{ roomId: id, checkIn: d.eventDate, checkOut: addDays(d.eventDate, 1), adults: 2, children: 0, extraBed: 0 }],
+        rooms: [{
+          roomId: id,
+          checkIn: d.checkIn || d.eventDate,
+          checkOut: d.checkOut || addDays(d.checkIn || d.eventDate, 1),
+          adults: 2,
+          children: 0,
+          extraBed: 0,
+        }],
       };
     });
     setPeekRoom(id);
   }
 
   function patchRoom(id, patch) {
-    setDraft((d) => ({
-      ...d,
-      rooms: d.rooms.map((r) => (r.roomId === id ? { ...r, ...patch } : r)),
-    }));
+    setDraft((d) => {
+      const rooms = d.rooms.map((r) => (r.roomId === id ? { ...r, ...patch } : r));
+      const row = rooms.find((r) => r.roomId === id);
+      if (patch.checkIn || patch.checkOut) {
+        const checkIn = row.checkIn;
+        const checkOut = row.checkOut <= row.checkIn ? addDays(row.checkIn, 1) : row.checkOut;
+        return {
+          ...d,
+          checkIn,
+          checkOut,
+          rooms: rooms.map((r) => ({ ...r, checkIn, checkOut })),
+        };
+      }
+      return { ...d, rooms };
+    });
+  }
+
+  function setStay(patch) {
+    setDraft((d) => {
+      let checkIn = patch.checkIn ?? d.checkIn ?? d.eventDate;
+      let checkOut = patch.checkOut ?? d.checkOut ?? addDays(checkIn, 1);
+      if (patch.nights != null) {
+        checkOut = addDays(checkIn, Math.max(1, Number(patch.nights) || 1));
+      }
+      if (checkOut <= checkIn) checkOut = addDays(checkIn, 1);
+      return {
+        ...d,
+        checkIn,
+        checkOut,
+        rooms: d.rooms.map((r) => ({ ...r, checkIn, checkOut })),
+      };
+    });
   }
 
   function dropRoom(id) {
@@ -125,12 +310,49 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
   function submit(e) {
     e.preventDefault();
     setError("");
-    if (!draft.guest.name || !draft.guest.phone) {
+    const phone = String(draft.guest.phone || "").trim();
+    if (!draft.guest.name?.trim() || !phone) {
       setError("Guest name and phone are required.");
+      return;
+    }
+    if (!/^[0-9+\-\s]{10,15}$/.test(phone)) {
+      setError("Enter a valid phone number (10–15 digits).");
       return;
     }
     if (!draft.halls.length && !draft.rooms.length) {
       setError("Select at least one hall or room.");
+      return;
+    }
+    for (const h of draft.halls) {
+      const hall = state.halls.find((x) => x.id === h.hallId);
+      const hold = hallDayStatus(state, h.hallId, h.date);
+      if (hold.booked) {
+        const w = hold.slots[0];
+        setError(
+          w
+            ? `${hall?.name} is already booked on ${formatDateDMY(h.date)} (${w.windowLabel || w.slotType}).`
+            : `${hall?.name} is not available on ${formatDateDMY(h.date)}.`
+        );
+        return;
+      }
+    }
+    for (const r of draft.rooms) {
+      if (r.checkOut <= r.checkIn) {
+        setError("Room check-out must be after check-in.");
+        return;
+      }
+      if (stayOnDates(state, r.roomId, r.checkIn, r.checkOut)) {
+        const room = state.rooms.find((x) => x.id === r.roomId);
+        setError(`Room ${room?.number} is already held for those dates.`);
+        return;
+      }
+    }
+    if (draft.halls.length && !draft.agreeHall) {
+      setError("Tick the Convention Terms & Conditions for hall bookings.");
+      return;
+    }
+    if (draft.rooms.length && !draft.agreeRoom) {
+      setError("Tick the Room Booking Terms & Conditions for room stay.");
       return;
     }
     const out = onSave({ ...draft, lines });
@@ -138,12 +360,15 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
     else setMode("list");
   }
 
-  const rows = [...state.bookings];
+  const activeRows = state.bookings.filter((b) => b.status !== "Cancelled");
+  const cancelledRows = state.bookings.filter((b) => b.status === "Cancelled");
+  const rows = listTab === "cancelled" ? cancelledRows : activeRows;
 
   if (mode === "form") {
     return (
       <>
-        <PageHead title="New reservation" sub="Enquiry → hold → payment. Hall holds include setup and teardown so two events cannot collide.">
+        <BookingWorkflow step={1} go={go} />
+        <PageHead title="New reservation" sub="Step 1 — Fill guest details, select Imperial / hall, agree terms → Confirm. Then Step 2 Payment & Invoice, Step 3 Guests / CRM.">
           <button className="btn ghost" onClick={() => { setPeekRoom(null); setMode("list"); }}>Back</button>
         </PageHead>
         <form className="form" onSubmit={submit}>
@@ -152,9 +377,16 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
             <div className="fields">
               <label>Name<input value={draft.guest.name} onChange={(e) => setDraft({ ...draft, guest: { ...draft.guest, name: e.target.value } })} /></label>
               <label>Phone<input value={draft.guest.phone} onChange={(e) => setDraft({ ...draft, guest: { ...draft.guest, phone: e.target.value } })} /></label>
+              <label>Customer GST
+                <input
+                  value={draft.guest.gstin || ""}
+                  onChange={(e) => setDraft({ ...draft, guest: { ...draft.guest, gstin: e.target.value } })}
+                  placeholder="GSTIN if billed to a company"
+                />
+              </label>
               <label>Event
                 <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
-                  {(state.property.eventTypes || ["Marriage", "Reception", "Engagement", "Birthday", "Corporate"]).concat(["Room only", "Other"]).filter((t, i, a) => a.indexOf(t) === i).map((t) => <option key={t}>{t}</option>)}
+                  {eventOptions.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </label>
               <label>Source
@@ -162,7 +394,7 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
                   {["Direct", "Walk-in", "Website", "Corporate", "Group", "Online"].map((t) => <option key={t}>{t}</option>)}
                 </select>
               </label>
-              <label>Event date<input type="date" value={draft.eventDate} onChange={(e) => setDraft({ ...draft, eventDate: e.target.value })} /></label>
+              <label>Event date<input type="date" value={draft.eventDate} min={todayISO()} onChange={(e) => setEventDate(e.target.value)} /></label>
               <label>Nationality
                 <select value={draft.guest.nationality} onChange={(e) => setDraft({ ...draft, guest: { ...draft.guest, nationality: e.target.value } })}>
                   <option>India</option>
@@ -187,27 +419,56 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
             </div>
           </div>
           <div className="panel">
-            <h3>Function · halls</h3>
-            <p className="muted">Marriage, reception and other event halls. Hourly, half-day or full-day.</p>
-            <div className="chips">
-              {state.halls.filter((h) => h.active !== false).map((h) => (
-                <button type="button" key={h.id} className={`chip ${draft.halls.some((x) => x.hallId === h.id) ? "on" : ""}`} onClick={() => toggleHall(h.id)}>
-                  {h.name} · {money(h.rates.fullDay, cur, loc)}
-                </button>
-              ))}
+            <h3>Halls</h3>
+            <p className="muted">Convention halls. Half-day or full-day.</p>
+            <div className="hall-tariff-grid">
+              {state.halls.filter((h) => h.active !== false).map((h) => {
+                const selected = draft.halls.some((x) => x.hallId === h.id);
+                const hold = hallDayStatus(state, h.id, draft.eventDate);
+                const booked = hold.booked;
+                return (
+                  <button
+                    type="button"
+                    key={h.id}
+                    className={`hall-tariff-card${selected ? " on" : ""}${booked ? " is-held" : ""}`}
+                    disabled={booked && !selected}
+                    onClick={() => toggleHall(h.id)}
+                  >
+                    <strong>{h.name}</strong>
+                    {booked && !selected ? (
+                      <span className="hall-tariff-hold">Booked on {formatDateDMY(draft.eventDate)}</span>
+                    ) : null}
+                    <div className="hall-tariff-lines">
+                      <span>
+                        <em>Half day</em>
+                        {money(h.rates.halfDay, cur, loc)}
+                      </span>
+                      <span>
+                        <em>Full day</em>
+                        {money(h.rates.fullDay, cur, loc)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             {draft.halls.map((h) => {
               const hall = state.halls.find((x) => x.id === h.hallId);
+              const slotType = h.slotType === "hourly" ? "half-day" : h.slotType;
+              const slotRate = slotType === "half-day" ? hall?.rates?.halfDay : hall?.rates?.fullDay;
+              const slotLabel = slotType === "half-day" ? "Half day" : "Full day";
               return (
                 <div className="fields" key={h.hallId} style={{ marginTop: 10 }}>
                   <label>{hall.name} date<input type="date" value={h.date} onChange={(e) => patchHall(h.hallId, { date: e.target.value })} /></label>
                   <label>Slot
-                    <select value={h.slotType} onChange={(e) => patchHall(h.hallId, { slotType: e.target.value })}>
-                      <option value="hourly">Hourly</option>
-                      <option value="half-day">Half day</option>
-                      <option value="full-day">Full day 24h</option>
+                    <select value={slotType} onChange={(e) => patchHall(h.hallId, { slotType: e.target.value })}>
+                      <option value="half-day">Half day · {money(hall.rates.halfDay, cur, loc)}</option>
+                      <option value="full-day">Full day 24h · {money(hall.rates.fullDay, cur, loc)}</option>
                     </select>
                   </label>
+                  <p className="hall-slot-rate muted">
+                    {slotLabel} package: <strong>{money(slotRate, cur, loc)}</strong>
+                  </p>
                   <label>Window
                     <div className="row">
                       <input type="datetime-local" value={h.start} onChange={(e) => patchHall(h.hallId, { start: e.target.value })} />
@@ -220,10 +481,36 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
           </div>
           <div className="panel">
             <h3>Room stay</h3>
-            <p className="muted">Click a room to see it. The previous room is cleared. Occupied or Reserved shows the guest.</p>
+            <p className="muted">
+              Occupied or Reserved only if a guest is already booked for these dates. Then click a free room.
+              Check-in / check-out: {roomCheckInOutText(pol)}.
+            </p>
+            <div className="fields">
+              <label>
+                Check-in
+                <input type="date" value={draft.checkIn || draft.eventDate} onChange={(e) => setStay({ checkIn: e.target.value })} />
+              </label>
+              <label>
+                Check-out
+                <input type="date" value={draft.checkOut || addDays(draft.checkIn || draft.eventDate, 1)} onChange={(e) => setStay({ checkOut: e.target.value })} />
+              </label>
+              <label>
+                Nights
+                <input
+                  type="number"
+                  min="1"
+                  value={stayNights(draft.checkIn || draft.eventDate, draft.checkOut || addDays(draft.checkIn || draft.eventDate, 1))}
+                  onChange={(e) => setStay({ nights: e.target.value })}
+                />
+              </label>
+            </div>
             <div className="chips">
               {state.rooms.map((r) => {
-                const held = HELD_ROOMS.has(r.status) || activeRoomStay(state, r.id);
+                const checkIn = draft.checkIn || draft.eventDate;
+                const checkOut = draft.checkOut || addDays(checkIn, 1);
+                const stay = stayOnDates(state, r.id, checkIn, checkOut);
+                const label = roomChipLabel(r, stay);
+                const held = Boolean(stay);
                 const selected = draft.rooms.some((x) => x.roomId === r.id);
                 return (
                   <button
@@ -232,7 +519,7 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
                     className={`chip${selected ? " on" : ""}${held ? " held" : ""}${peekRoom === r.id ? " peek" : ""}`}
                     onClick={() => toggleRoom(r.id)}
                   >
-                    {r.number} {r.status}
+                    {r.number} {label}
                   </button>
                 );
               })}
@@ -248,7 +535,14 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
               />
             )}
             {peekRoom && !draft.rooms.some((r) => r.roomId === peekRoom) && (
-              <RoomGuestPeek state={state} roomId={peekRoom} onClose={() => setPeekRoom(null)} onOpen={onOpen} />
+              <RoomGuestPeek
+                state={state}
+                roomId={peekRoom}
+                checkIn={draft.checkIn || draft.eventDate}
+                checkOut={draft.checkOut || addDays(draft.checkIn || draft.eventDate, 1)}
+                onClose={() => setPeekRoom(null)}
+                onOpen={onOpen}
+              />
             )}
           </div>
           <div className="panel">
@@ -266,13 +560,74 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
               <h3>Commercials</h3>
               <div className="fields two">
                 <label>Discount<input type="number" value={draft.discount} onChange={(e) => setDraft({ ...draft, discount: Number(e.target.value) || 0 })} /></label>
-                <label>Advance<input type="number" value={draft.advance} onChange={(e) => setDraft({ ...draft, advance: e.target.value })} /></label>
-                <label>Mode
+                <div />
+                <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>
+                  Policy advance {pol.advancePercent}% is {money(suggestedAdvance(totals.total, state.property), cur, loc)}. Security deposit {money(pol.securityDeposit, cur, loc)} is collected separately from room revenue.
+                </p>
+
+                <h4 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Advance payment</h4>
+                <label>
+                  Advance amount
+                  <input type="number" min="0" value={draft.advance} onChange={(e) => setDraft({ ...draft, advance: e.target.value })} />
+                </label>
+                <label>
+                  Advance date
+                  <input type="date" value={draft.paymentDate || todayISO()} onChange={(e) => setDraft({ ...draft, paymentDate: e.target.value })} />
+                </label>
+                <label>
+                  Advance mode
                   <select value={draft.paymentMode} onChange={(e) => setDraft({ ...draft, paymentMode: e.target.value })}>
                     {["Cash", "UPI", "Card", "Net banking", "Bank transfer", "International card"].map((m) => <option key={m}>{m}</option>)}
                   </select>
                 </label>
-                <label>Notes<input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>
+                <label>
+                  Advance ref / note
+                  <input value={draft.paymentRef || ""} onChange={(e) => setDraft({ ...draft, paymentRef: e.target.value })} placeholder="UPI ref / receipt no." />
+                </label>
+
+                <h4 style={{ gridColumn: "1 / -1", margin: "12px 0 0" }}>Final payment</h4>
+                <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>
+                  Optional at booking. After confirm, the party is tracked by <strong>booking no. (BK-…)</strong> — same number for advance, final payment and report close.
+                  Remaining after advance: {money(Math.max(0, totals.total - (Number(draft.advance) || 0)), cur, loc)}.
+                </p>
+                <label>
+                  Final amount
+                  <input
+                    type="number"
+                    min="0"
+                    value={draft.finalPayment}
+                    onChange={(e) => setDraft({ ...draft, finalPayment: e.target.value })}
+                    placeholder={String(Math.max(0, Math.round(totals.total - (Number(draft.advance) || 0))) || "")}
+                  />
+                </label>
+                <label>
+                  Final payment date
+                  <input type="date" value={draft.finalPaymentDate || todayISO()} onChange={(e) => setDraft({ ...draft, finalPaymentDate: e.target.value })} />
+                </label>
+                <label>
+                  Final mode
+                  <select value={draft.finalPaymentMode} onChange={(e) => setDraft({ ...draft, finalPaymentMode: e.target.value })}>
+                    {["Cash", "UPI", "Card", "Net banking", "Bank transfer", "International card"].map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Final ref / note
+                  <input value={draft.finalPaymentRef || ""} onChange={(e) => setDraft({ ...draft, finalPaymentRef: e.target.value })} placeholder="UPI ref / receipt no." />
+                </label>
+
+                {draft.halls.length > 0 && (
+                <label className="check">
+                  I have read and agree to the Convention Terms & Conditions.
+                  <input type="checkbox" checked={!!draft.agreeHall} onChange={(e) => setDraft({ ...draft, agreeHall: e.target.checked })} />
+                </label>
+                )}
+                {draft.rooms.length > 0 && (
+                <label className="check">
+                  I have read and agree to the Room Booking Terms & Conditions.
+                  <input type="checkbox" checked={!!draft.agreeRoom} onChange={(e) => setDraft({ ...draft, agreeRoom: e.target.checked })} />
+                </label>
+                )}
+                <label style={{ gridColumn: "1 / -1" }}>Booking notes<input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>
               </div>
               {error && <p style={{ color: "var(--due)" }}>{error}</p>}
               <button className="btn" type="submit" style={{ marginTop: 8 }}>Confirm reservation</button>
@@ -282,14 +637,14 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
               <table>
                 <tbody>
                   {lines.some((l) => lineKind(l) === "function") && (
-                    <tr><td colSpan={2}><strong>Function</strong></td></tr>
+                    <tr><td colSpan={2}><strong>Hall</strong></td></tr>
                   )}
                   {lines.filter((l) => lineKind(l) === "function").map((l) => (
                     <tr key={l.id}><td>{l.description}</td><td>{money(l.amount, cur, loc)}</td></tr>
                   ))}
                   {lines.some((l) => lineKind(l) === "function") && (
                     <tr>
-                      <td>Function subtotal</td>
+                      <td>Hall subtotal</td>
                       <td>{money(lines.filter((l) => lineKind(l) === "function").reduce((s, l) => s + Number(l.amount || 0), 0), cur, loc)}</td>
                     </tr>
                   )}
@@ -309,6 +664,8 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
                   <tr><td>Discount</td><td>{money(totals.discount, cur, loc)}</td></tr>
                   <tr><td>{state.property.taxName} {state.property.taxPercent}%</td><td>{money(totals.tax, cur, loc)}</td></tr>
                   <tr><td><strong>Total</strong></td><td><strong>{money(totals.total, cur, loc)}</strong></td></tr>
+                  <tr><td>Advance paid</td><td>{money(Number(draft.advance) || 0, cur, loc)}</td></tr>
+                  <tr><td>Final payment</td><td>{money(Number(draft.finalPayment) || 0, cur, loc)}</td></tr>
                   <tr><td>Balance</td><td>{money(totals.balance, cur, loc)}</td></tr>
                 </tbody>
               </table>
@@ -321,15 +678,36 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
 
   return (
     <>
-      <PageHead title="Reservations" sub="Pipeline: enquiry → quotation → confirmation. Cancel releases halls and rooms and can post a refund.">
-        <button className="btn" onClick={() => { setDraft({ ...EMPTY, eventDate: presetDate || todayISO() }); setMode("form"); }}>New reservation</button>
+      <BookingWorkflow step={1} go={go} />
+      <PageHead title="Reservations" sub="Step 1 — All bookings start here. After Confirm, use Payment & Invoice, then Guests / CRM.">
+        <button className="btn" onClick={() => {
+          // Always start on today's date unless staff came from Calendar with a chosen day.
+          setDraft(draftFromGuest(state.property, null, presetDate || todayISO()));
+          setError("");
+          setMode("form");
+        }}>New reservation</button>
       </PageHead>
+      <div className="chips no-print" style={{ marginBottom: 10 }}>
+        <button type="button" className={`chip${listTab === "active" ? " on" : ""}`} onClick={() => setListTab("active")}>
+          Active ({activeRows.length})
+        </button>
+        <button type="button" className={`chip${listTab === "cancelled" ? " on" : ""}`} onClick={() => setListTab("cancelled")}>
+          Cancelled ({cancelledRows.length})
+        </button>
+      </div>
       <div className="panel">
         <table>
           <thead>
             <tr><th>No.</th><th>Guest</th><th>Type</th><th>Date</th><th>Source</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
+            {!rows.length && (
+              <tr>
+                <td colSpan={7} className="muted">
+                  {listTab === "cancelled" ? "No cancelled bookings." : "No active bookings."}
+                </td>
+              </tr>
+            )}
             {rows.map((b) => {
               const g = state.guests.find((x) => x.id === b.guestId);
               return (
@@ -342,8 +720,11 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
                   <td><Pill status={b.status} /></td>
                   <td className="row">
                     <button className="btn small" onClick={() => onOpen(b.id)}>Payment</button>
+                    <button className="btn ghost small" type="button" onClick={() => go?.("guests", { guestId: g?.id })}>
+                      CRM
+                    </button>
                     {g?.phone ? (
-                      <a className="btn ghost small" href={waMe(g.phone, `Gayatri Function Hall: regarding ${b.number}`)} target="_blank" rel="noreferrer">
+                      <a className="btn ghost small" href={waMe(g.phone, `${state.property.name}: regarding ${b.number}`)} target="_blank" rel="noreferrer">
                         WhatsApp
                       </a>
                     ) : null}
@@ -351,8 +732,12 @@ export default function Reservations({ state, presetDate, onSave, onCancel, onOp
                       <a className="btn ghost small" href={telHref(g.phone)}>Call</a>
                     ) : null}
                     <button className="btn ghost small" onClick={() => onDocs?.(b.id)}>Documents</button>
-                    {b.status !== "Cancelled" && (
+                    {b.status !== "Cancelled" ? (
                       <button className="btn danger small" onClick={() => onCancel(b.id)}>Cancel</button>
+                    ) : (
+                      <button className="btn ghost small" type="button" onClick={() => go?.("reports")}>
+                        Report
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -376,7 +761,7 @@ function RoomStayEditor({ state, row, currency, locale, onChange, onRemove }) {
   return (
     <div className="guest-peek">
       <div className="panel-head">
-        <h4>Room {room?.number} · {type?.name || "Room"} · Floor {room?.floor}</h4>
+        <h4>Room {room?.number} · {type?.name || "Room"}</h4>
         <button type="button" className="btn danger small" onClick={onRemove}>Remove</button>
       </div>
       <p className="muted" style={{ margin: "0 0 10px" }}>
@@ -407,11 +792,11 @@ function RoomStayEditor({ state, row, currency, locale, onChange, onRemove }) {
   );
 }
 
-function RoomGuestPeek({ state, roomId, onClose, onOpen }) {
-  const { room, stay, booking, guest, type } = roomOccupant(state, roomId);
-  const held = HELD_ROOMS.has(room?.status);
+function RoomGuestPeek({ state, roomId, checkIn, checkOut, onClose, onOpen }) {
+  const { room, stay, booking, guest, type } = roomOccupant(state, roomId, checkIn, checkOut);
+  const blocked = roomSaleBlocked(room);
 
-  if (!held && !stay) {
+  if (!stay && blocked) {
     return (
       <div className="guest-peek">
         <div className="panel-head">
@@ -419,7 +804,7 @@ function RoomGuestPeek({ state, roomId, onClose, onOpen }) {
           <button type="button" className="btn ghost small" onClick={onClose}>Close</button>
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          This room is {room?.status}. It cannot be added to a new booking until it is Available or Inspected.
+          This room is {blocked}. It cannot be added to a new booking until it is Available or Inspected.
         </p>
       </div>
     );
@@ -429,7 +814,7 @@ function RoomGuestPeek({ state, roomId, onClose, onOpen }) {
     <div className="guest-peek">
       <div className="panel-head">
         <h4>
-          Room {room?.number} · {room?.status}
+          Room {room?.number} · {stay.status === "Occupied" ? "Occupied" : "Reserved"}
         </h4>
         <button type="button" className="btn ghost small" onClick={onClose}>Close</button>
       </div>
@@ -461,7 +846,7 @@ function RoomGuestPeek({ state, roomId, onClose, onOpen }) {
               {booking?.number || "—"}
             </div>
             <div>
-              <div className="muted">Occasion</div>
+              <div className="muted">Event type</div>
               {booking?.type || "Room stay"}
             </div>
             <div>
@@ -488,7 +873,7 @@ function RoomGuestPeek({ state, roomId, onClose, onOpen }) {
           <p className="muted">This room is already booked. Choose an Available or Inspected room for a new reservation.</p>
           <div className="row">
             {guest.phone ? (
-              <a className="btn small" href={waMe(guest.phone, `Gayatri Function Hall: regarding room ${room?.number}`)} target="_blank" rel="noreferrer">
+              <a className="btn small" href={waMe(guest.phone, `${state.property.name}: regarding room ${room?.number}`)} target="_blank" rel="noreferrer">
                 WhatsApp
               </a>
             ) : null}

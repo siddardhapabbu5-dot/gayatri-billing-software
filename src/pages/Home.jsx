@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { publicAvailability } from "../engine";
-import { termsLines } from "../seed";
-import { addDays, enquiryAlertText, smsHref, telHref, todayISO, waMe } from "../lib";
+import { TERM_LANGS, TERM_SECTIONS, sectionLines, termLocaleOf } from "../policies";
+import { addDays, capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
+import RetreatOffer from "./RetreatOffer.jsx";
 import "../home.css";
 
 const PAGES = [
   { id: "home", label: "Home" },
   { id: "about", label: "The Hall" },
   { id: "venues", label: "Venues" },
-  { id: "packages", label: "Banquets" },
+  { id: "stay", label: "The Royal Family Retreat" },
+  { id: "stay-space", label: "The Royal Family Retreat", hideNav: true },
   { id: "gallery", label: "Gallery" },
   { id: "booking", label: "Book" },
   { id: "contact", label: "Visit" },
@@ -21,29 +23,84 @@ const DARK_PAGES = new Set(["home"]);
 const IMG = "/site/images";
 
 const FILM = [
-  { src: `${IMG}/film/mandap.jpg`, alt: "Hindu marriage mandap" },
-  { src: `${IMG}/film/agni.jpg`, alt: "Couple walking around the sacred fire" },
-  { src: `${IMG}/gallery-3.jpg`, alt: "Indian Hindu wedding ceremony" },
-  { src: `${IMG}/venue-garden.jpg`, alt: "Floral mandap and garden wedding" },
-  { src: `${IMG}/hero.jpg`, alt: "Wedding celebration" },
+  { src: `${IMG}/film/mandap.jpg`, alt: "Convention hall interior" },
+  { src: `${IMG}/film/agni.jpg`, alt: "Hall stage and lighting" },
+  { src: `${IMG}/gallery-3.jpg`, alt: "Delegates in the hall" },
+  { src: `${IMG}/venue-garden.jpg`, alt: "Garden pavilion for outdoor sessions" },
+  { src: `${IMG}/hero.jpg`, alt: "Evening programme at the hall" },
 ];
 
 const GALLERY = [
-  { src: `${IMG}/gallery-1.jpg`, alt: "Couple at the venue" },
-  { src: `${IMG}/gallery-2.jpg`, alt: "Garden ceremony" },
-  { src: `${IMG}/gallery-3.jpg`, alt: "Wedding ceremony" },
-  { src: `${IMG}/about.jpg`, alt: "Outdoor seating" },
+  {
+    src: `${IMG}/gallery/videos/gayatri-convention-reel.mp4`,
+    poster: `${IMG}/gallery/aerial-dusk-grove.jpg`,
+    alt: "Gayatri Convention highlight reel",
+    label: "Gayatri Convention reel",
+    span: "hero",
+    kind: "video",
+  },
+  {
+    src: `${IMG}/gallery/videos/drone-night-flyover.mp4`,
+    poster: `${IMG}/gallery/aerial-night-front.jpg`,
+    alt: "Night drone flyover of Gayatri Convention",
+    label: "Night flyover",
+    span: "tall",
+    kind: "video",
+  },
+  {
+    src: `${IMG}/gallery/videos/drone-approach-lights.mp4`,
+    poster: `${IMG}/gallery/aerial-night-side.jpg`,
+    alt: "Drone approach with fairy lights and parking",
+    label: "Approach at night",
+    kind: "video",
+  },
+  {
+    src: `${IMG}/gallery/videos/drone-courtyard-night.mp4`,
+    poster: `${IMG}/gallery/aerial-night-top.jpg`,
+    alt: "Courtyard and halls from the air at night",
+    label: "Courtyard night",
+    kind: "video",
+  },
+  {
+    src: `${IMG}/gallery/aerial-dusk-grove.jpg`,
+    alt: "Gayatri Convention at dusk among the palm grove",
+    label: "Dusk over the grove",
+    kind: "image",
+  },
+  {
+    src: `${IMG}/gallery/imperial-hall-ceremony.jpg`,
+    alt: "Imperial Ballroom filled for a ceremony",
+    label: "Imperial Ballroom",
+    kind: "image",
+  },
+  {
+    src: `${IMG}/gallery/aerial-night-side.jpg`,
+    alt: "Night aerial of the lit convention complex",
+    label: "Night lights",
+    kind: "image",
+  },
+  {
+    src: `${IMG}/gallery/aerial-night-front.jpg`,
+    alt: "Front aerial of Gayatri Convention at night",
+    label: "The approach",
+    kind: "image",
+  },
+  {
+    src: `${IMG}/gallery/aerial-night-top.jpg`,
+    alt: "Top-down night view of halls, courtyard and parking",
+    label: "Full campus",
+    kind: "image",
+  },
+  {
+    src: `${IMG}/gallery/evening-buffet-crowd.jpg`,
+    alt: "Evening buffet and guests outside the hall",
+    label: "An evening in motion",
+    kind: "image",
+  },
 ];
 
-function lakhs(n) {
-  const v = n / 100000;
-  return `₹${Number.isInteger(v) ? v : v.toFixed(1)}L`;
-}
-
-function sizeOf(capacity) {
-  if (capacity > 800) return "large";
-  if (capacity > 300) return "mid";
-  return "intimate";
+function isGalleryVideo(item) {
+  return item?.kind === "video" || /\.(mp4|mov|webm|m4v)$/i.test(item?.src || "");
 }
 
 const emptyForm = {
@@ -53,8 +110,7 @@ const emptyForm = {
   eventType: "",
   eventDate: todayISO(),
   guests: "",
-  venue: "Any available",
-  pkg: "",
+  venue: "",
   notes: "",
 };
 
@@ -67,7 +123,8 @@ function loadDraft() {
     if (!raw) return base;
     const saved = JSON.parse(raw);
     const eventDate = saved.eventDate && String(saved.eventDate) >= todayISO() ? saved.eventDate : todayISO();
-    return { ...base, ...saved, eventDate };
+    const venue = saved.venue && saved.venue !== "Any available" ? saved.venue : "";
+    return { ...base, ...saved, eventDate, venue };
   } catch {
     return base;
   }
@@ -96,13 +153,17 @@ export default function Home({ state, onEnquire, onStaff }) {
   const wheelLock = useRef(false);
   const [page, setPage] = useState(0);
   const [filmFrame, setFilmFrame] = useState(0);
-  const [filter, setFilter] = useState("all");
   const [form, setForm] = useState(loadDraft);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [done, setDone] = useState(null);
-  const [agreed, setAgreed] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [termLang, setTermLang] = useState("en");
+  const [termLangOpen, setTermLangOpen] = useState(false);
+  const termLangDropRef = useRef(null);
   const [lightbox, setLightbox] = useState(null);
+  const [availView, setAvailView] = useState("month");
+  const [availMonth, setAvailMonth] = useState(() => todayISO().slice(0, 7));
   pageRef.current = page;
 
   const reduceMotion = useMemo(
@@ -129,13 +190,15 @@ export default function Home({ state, onEnquire, onStaff }) {
     .filter((h) => h.active !== false)
     .map((h) => ({
       ...h,
-      size: sizeOf(h.capacity),
       jp: h.jp || h.kind,
       copy: h.copy || h.tag,
       photo: h.webPhoto || h.photo,
     }));
   const occasions = p.eventTypes?.length ? p.eventTypes : [];
-  const mapQ = encodeURIComponent(p.mapQuery || (p.address || []).join(" ") || "Palagummi");
+  const mapSrc = mapEmbedSrc(p);
+  const mapLink = mapGoogleUrl(p);
+  const termLoc = termLocaleOf(p, termLang);
+  const termLangLabel = TERM_LANGS.find((l) => l.id === termLang)?.label || "English";
 
   const dateAvail = useMemo(
     () => publicAvailability(state, form.venue, form.eventDate),
@@ -155,6 +218,36 @@ export default function Home({ state, onEnquire, onStaff }) {
       };
     });
   }, [state, form.venue]);
+
+  const availMonthCells = useMemo(() => {
+    const [y, m] = availMonth.split("-").map(Number);
+    const today = todayISO();
+    const cells = monthMatrix(y, m - 1);
+    return cells.map((day) => {
+      if (!day) return null;
+      const iso = `${y}-${pad(m)}-${pad(day)}`;
+      if (iso < today) return { iso, day, past: true, booked: false };
+      const a = publicAvailability(state, form.venue, iso);
+      return { iso, day, past: false, booked: a.blocked };
+    });
+  }, [state, form.venue, availMonth]);
+
+  const availMonthLabel = useMemo(() => {
+    const d = parseISO(`${availMonth}-01`);
+    return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  }, [availMonth]);
+
+  function shiftAvailMonth(n) {
+    const d = parseISO(`${availMonth}-01`);
+    d.setMonth(d.getMonth() + n);
+    setAvailMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+  }
+
+  useEffect(() => {
+    if (form.eventDate && form.eventDate.length >= 7) {
+      setAvailMonth(form.eventDate.slice(0, 7));
+    }
+  }, [form.eventDate]);
 
   useLayoutEffect(() => {
     document.documentElement.classList.add("lux-page");
@@ -176,7 +269,7 @@ export default function Home({ state, onEnquire, onStaff }) {
   }, []);
 
   useEffect(() => {
-    document.title = p.name || "Gayatri | Marriage & Function Hall";
+    document.title = p.name || "Gayatri | Convention";
   }, [p.name]);
 
   useEffect(() => {
@@ -241,7 +334,16 @@ export default function Home({ state, onEnquire, onStaff }) {
   useEffect(() => {
     const onWheel = (e) => {
       if (lightbox) return;
-      if (e.target?.closest?.("input, textarea, select, .booking-form, .terms-page")) return;
+      const sheet = e.target?.closest?.(".terms-scroll");
+      if (sheet) {
+        const { scrollTop, scrollHeight, clientHeight } = sheet;
+        const dy = e.deltaY + e.deltaX;
+        if (scrollHeight > clientHeight + 4) {
+          if (dy > 0 && scrollTop + clientHeight < scrollHeight - 2) return;
+          if (dy < 0 && scrollTop > 2) return;
+        }
+      }
+      if (e.target?.closest?.("input, textarea, select, .booking-form")) return;
       e.preventDefault();
       if (wheelLock.current) return;
       const delta = e.deltaY + e.deltaX;
@@ -257,7 +359,19 @@ export default function Home({ state, onEnquire, onStaff }) {
         setLightbox(null);
         return;
       }
-      if (lightbox) return;
+      if (lightbox) {
+        if (e.key === "ArrowRight" || e.key === "PageDown") {
+          e.preventDefault();
+          const i = (lightbox.index + 1) % GALLERY.length;
+          setLightbox({ ...GALLERY[i], index: i });
+        }
+        if (e.key === "ArrowLeft" || e.key === "PageUp") {
+          e.preventDefault();
+          const i = (lightbox.index - 1 + GALLERY.length) % GALLERY.length;
+          setLightbox({ ...GALLERY[i], index: i });
+        }
+        return;
+      }
       if (e.target?.closest?.("input, textarea, select")) return;
       if (e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault();
@@ -286,6 +400,31 @@ export default function Home({ state, onEnquire, onStaff }) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    if (PAGES[page]?.id !== "terms") return;
+    const sheet = document.querySelector("#terms .terms-scroll");
+    if (sheet) sheet.scrollTop = 0;
+  }, [page, termLang]);
+
+  useEffect(() => {
+    setTermLangOpen(false);
+  }, [page]);
+
+  useEffect(() => {
+    if (!termLangOpen) return undefined;
+    const close = (e) => {
+      if (termLangDropRef.current && !termLangDropRef.current.contains(e.target)) {
+        setTermLangOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [termLangOpen]);
+
   function goBooking(patch) {
     if (patch) setForm((f) => ({ ...f, ...patch }));
     goTo("booking");
@@ -294,6 +433,14 @@ export default function Home({ state, onEnquire, onStaff }) {
   function onPageNav(e, id) {
     e.preventDefault();
     goTo(id);
+  }
+
+  function scrollToTermSection(id) {
+    const sheet = document.querySelector("#terms .terms-scroll");
+    const el = document.querySelector(`#terms-${id}`);
+    if (!sheet || !el) return;
+    const top = el.getBoundingClientRect().top - sheet.getBoundingClientRect().top + sheet.scrollTop - 10;
+    sheet.scrollTo({ top, behavior: "smooth" });
   }
 
   const currentId = PAGES[page]?.id || "home";
@@ -306,15 +453,18 @@ export default function Home({ state, onEnquire, onStaff }) {
           <img className="logo-mark" src={`${IMG}/logo-mark.png`} alt="" />
           <span>
             <strong>{p.brandName || "Gayatri"}</strong>
-            <em>{p.place || ""}</em>
+            <em>{currentId.startsWith("stay") ? "The Royal Family Retreat" : (p.place || "")}</em>
           </span>
         </a>
         <nav className="site-nav" aria-label="Site">
-          {PAGES.map((item) => (
+          {PAGES.filter((item) => !item.hideNav).map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
-              className={currentId === item.id ? "is-on" : ""}
+              className={[
+                item.id === "stay" ? "stay-nav" : "",
+                item.id === "stay" ? (currentId.startsWith("stay") ? "is-on" : "") : currentId === item.id ? "is-on" : "",
+              ].filter(Boolean).join(" ")}
               onClick={(e) => onPageNav(e, item.id)}
             >
               {item.label}
@@ -366,10 +516,13 @@ export default function Home({ state, onEnquire, onStaff }) {
             <figure className="hero-emblem-wrap">
               <img className="hero-emblem" src={`${IMG}/logo-gold.png`} alt={p.brandName || "Gayatri"} />
             </figure>
-            <p className="hero-kicker">{p.tagline || "Marriage & Function Hall"}</p>
             <h1>{p.brandName || "Gayatri"}</h1>
+            <div className="hero-offers">
+              <p>Convention</p>
+              <p>Luxury banquets</p>
+              <p>Resorts</p>
+            </div>
             <p className="hero-place">{p.place}</p>
-            <p className="swipe-hint">Swipe or use the arrows</p>
           </div>
         </section>
 
@@ -380,41 +533,45 @@ export default function Home({ state, onEnquire, onStaff }) {
               {p.about}
             </p>
             <div className="intro-photos">
-              <img className="photo-back" src={`${IMG}/gallery-5.jpg`} alt="Evening reception tables" />
-              <img className="photo-front" src={`${IMG}/gallery-1.jpg`} alt="Couple celebrating" />
+              <img className="photo-back" src={`${IMG}/gallery-5.jpg`} alt="Hall dining setup" />
+              <img className="photo-front" src={`${IMG}/gallery-1.jpg`} alt="Delegates at the venue" />
             </div>
           </div>
         </section>
 
         <section className="locations reveal" id="venues">
-          <p className="crumb">Home / Banquets</p>
-          <h2 className="page-title">Wedding Reception</h2>
-          <p className="page-sub">Banquet</p>
-          <div className="filters">
-            <p>Filter by category</p>
-            <div className="filter-row">
-              {[
-                ["all", "all"],
-                ["large", "800+ guests"],
-                ["mid", "300 – 800"],
-                ["intimate", "up to 300"],
-              ].map(([id, label]) => (
-                <button key={id} type="button" className={filter === id ? "is-active" : ""} onClick={() => setFilter(id)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="crumb">Home / Halls</p>
+          <h2 className="page-title">Convention halls</h2>
+          <p className="page-sub">Venues</p>
           <div className="venue-grid">
             {halls.map((h) => (
-              <article key={h.id} className="venue-card" hidden={filter !== "all" && h.size !== filter}>
+              <article key={h.id} className="venue-card">
                 <img src={h.photo} alt={h.name} />
                 <p className="venue-jp">{h.jp}</p>
                 <h3>{h.name}</h3>
-                <p>{h.copy}</p>
+                <p className="venue-copy">{h.copy}</p>
                 <p className="capacity">
-                  Capacity <span>|</span> Maximum {h.capacity.toLocaleString("en-IN")} people
+                  Capacity <span>|</span> {capacityText(h)}
                 </p>
+                {(() => {
+                  const cur = p.currency || "INR";
+                  const loc = p.locale || "en-IN";
+                  const slots = [
+                    ["Half day", h.rates?.halfDay],
+                    ["Full day", h.rates?.fullDay],
+                  ].filter(([, amount]) => Number(amount) > 0);
+                  if (!slots.length) return null;
+                  return (
+                    <ul className="venue-packages">
+                      {slots.map(([label, amount]) => (
+                        <li key={label}>
+                          <span>{label}</span>
+                          <strong>{money(amount, cur, loc)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
                 {(() => {
                   const todayHold = publicAvailability(state, h.name, todayISO());
                   const w = todayHold.rows[0]?.windows[0];
@@ -432,43 +589,52 @@ export default function Home({ state, onEnquire, onStaff }) {
           </div>
         </section>
 
-        <section className="banquets reveal" id="packages">
-          <div className="banquet-head">
-            <h2>
-              Bespoke banquets<span className="dot"></span>
-            </h2>
-            <p className="script-line">hall packages</p>
-          </div>
-          <div className="banquet-layout">
-            <img className="banquet-wide" src={`${IMG}/gallery-5.jpg`} alt="Banquet table setting" />
-            <div className="banquet-side">
-              <img src={`${IMG}/gallery-4.jpg`} alt="Floral décor" />
-              <p>
-                {p.banquetIntro}
-              </p>
-              <p>Our desk will help you plan timings, rooms, and hall setup for the day.</p>
-              <div className="package-row">
-                {state.packages.map((pkg) => (
-                  <button key={pkg.id} type="button" onClick={() => goBooking({ pkg: pkg.name })}>
-                    {pkg.name} · from {lakhs(pkg.price)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+        <section className="stay-page stay-hero-page reveal" id="stay">
+          <RetreatOffer
+            part="hero"
+            onBook={() =>
+              goBooking({
+                eventType: "Family retreat",
+                notes: "Royal Family Retreat — ₹30,000 · 4 rooms, kitchen, dining hall, lobby",
+                guests: "8",
+              })
+            }
+          />
+        </section>
+
+        <section className="stay-page stay-story-page reveal" id="stay-space">
+          <RetreatOffer part="space" />
         </section>
 
         <section className="gallery reveal" id="gallery">
           <p className="kicker">Gallery</p>
-          <div className="gallery-strip">
-            {GALLERY.map((item) => (
+          <h2 className="gallery-title">Seen from the sky, felt in the hall</h2>
+          <p className="gallery-lead">Night lights, full ceremonies, and the grove around Palagummi. Tap a photo or video to open it.</p>
+          <div className="gallery-mosaic">
+            {GALLERY.map((item, index) => (
               <button
                 key={item.src}
                 type="button"
-                className="gallery-item"
-                onClick={() => setLightbox(item)}
+                className={`gallery-item${item.span ? ` is-${item.span}` : ""}${isGalleryVideo(item) ? " is-video" : ""}`}
+                style={{ "--i": index }}
+                onClick={() => setLightbox({ ...item, index })}
               >
-                <img src={item.src} alt={item.alt} />
+                {isGalleryVideo(item) ? (
+                  <video
+                    src={item.src}
+                    poster={item.poster || undefined}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    aria-label={item.alt}
+                  />
+                ) : (
+                  <img src={item.src} alt={item.alt} loading="lazy" />
+                )}
+                <span className="gallery-caption">
+                  {isGalleryVideo(item) ? <em className="gallery-play">Play</em> : null}
+                  {item.label}
+                </span>
               </button>
             ))}
           </div>
@@ -487,6 +653,9 @@ export default function Home({ state, onEnquire, onStaff }) {
                 {state.property.notifyWhatsApp !== false ? " and WhatsApp should open so you can send it to us." : "."}
               </p>
               <div className="book-sent-actions">
+                <button type="button" className="btn btn-ghost dark" onClick={() => setDone(null)}>
+                  Back
+                </button>
                 {done.wa ? (
                   <a className="btn btn-gold" href={done.wa} target="_blank" rel="noreferrer">
                     Send on WhatsApp
@@ -511,6 +680,10 @@ export default function Home({ state, onEnquire, onStaff }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 const phoneOk = /^[0-9+\-\s]{10,15}$/.test(form.phone.trim());
+                if (!form.venue) {
+                  setError("Please select a hall.");
+                  return;
+                }
                 if (!form.name.trim() || !form.email.trim() || !form.eventType || !form.eventDate || !form.guests || !phoneOk) {
                   setError(phoneOk ? "Please complete the required fields." : "Enter a valid 10-digit phone number.");
                   return;
@@ -519,12 +692,12 @@ export default function Home({ state, onEnquire, onStaff }) {
                   setError(dateAvail.message);
                   return;
                 }
-                if (!agreed) {
-                  setError("Please read and agree to the terms and conditions.");
+                if (!agreedTerms) {
+                  setError("Please read and agree to the Terms & Conditions.");
                   return;
                 }
                 setError("");
-                const wishes = [form.pkg && `Package: ${form.pkg}`, form.notes].filter(Boolean).join(" — ");
+                const wishes = form.notes.trim();
                 const payload = {
                   name: form.name.trim(),
                   phone: form.phone.trim(),
@@ -534,6 +707,8 @@ export default function Home({ state, onEnquire, onStaff }) {
                   guests: form.guests,
                   type: form.eventType,
                   message: wishes,
+                  agreeHall: true,
+                  agreeRoom: true,
                 };
                 const out = onEnquire(payload);
                 if (out?.error) {
@@ -546,7 +721,7 @@ export default function Home({ state, onEnquire, onStaff }) {
                 const wa = waMe(desk, text);
                 const sent = { number: out.booking.number, wa, sms: smsHref(desk, text), tel: telHref(desk), desk };
                 setDone(sent);
-                setAgreed(false);
+                setAgreedTerms(false);
                 setToast(`Thank you, ${payload.name.split(" ")[0]}. Opening WhatsApp to the desk.`);
                 clearDraft();
                 setForm({ ...emptyForm, eventDate: todayISO() });
@@ -596,7 +771,7 @@ export default function Home({ state, onEnquire, onStaff }) {
                 />
               </div>
               <div className="field">
-                <label htmlFor="eventType">Occasion *</label>
+                <label htmlFor="eventType">Event type *</label>
                 <select
                   id="eventType"
                   name="eventType"
@@ -604,7 +779,7 @@ export default function Home({ state, onEnquire, onStaff }) {
                   value={form.eventType}
                   onChange={(e) => setForm({ ...form, eventType: e.target.value })}
                 >
-                  <option value="">Choose occasion</option>
+                  <option value="">Choose event type</option>
                   {occasions.map((ev) => (
                     <option key={ev}>{ev}</option>
                   ))}
@@ -640,43 +815,19 @@ export default function Home({ state, onEnquire, onStaff }) {
                 />
               </div>
               <div className="field">
-                <label htmlFor="package">Package</label>
-                <select
-                  id="package"
-                  name="package"
-                  value={form.pkg}
-                  onChange={(e) => setForm({ ...form, pkg: e.target.value })}
-                >
-                  <option value="">Help me choose</option>
-                  {state.packages.map((pkg) => (
-                    <option key={pkg.id}>{pkg.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="notes">Wishes</label>
+                <label htmlFor="notes">Notes</label>
                 <input
                   id="notes"
                   name="notes"
                   type="text"
-                  placeholder="Mandap, rooms…"
+                  placeholder="Hall setup, rooms…"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
               </div>
 
+              <label className="hall-picks-label">Hall *</label>
               <div className="hall-picks">
-                <button
-                  type="button"
-                  className={`hall-pick${form.venue === "Any available" ? " is-on" : ""}`}
-                  onClick={() => {
-                    setError("");
-                    setForm((f) => ({ ...f, venue: "Any available" }));
-                  }}
-                >
-                  <strong>Any hall</strong>
-                  <em>We choose</em>
-                </button>
                 {halls.map((h) => {
                   const hold = publicAvailability(state, h.name, form.eventDate);
                   return (
@@ -698,59 +849,121 @@ export default function Home({ state, onEnquire, onStaff }) {
               </div>
 
               <div className="avail-board">
-                <p className={`avail-status ${dateAvail.blocked ? "is-booked" : "is-free"}`}>
-                  {dateAvail.blocked
-                    ? dateAvail.message
-                    : dateAvail.anyBooked
-                      ? `Hold: ${dateAvail.rows
-                          .filter((r) => r.booked)
-                          .map((r) => {
-                            const w = r.windows[0];
-                            return w
-                              ? `${r.hallName} ${w.windowLabel || `${w.startLabel} – ${w.endLabel}`}`
-                              : r.hallName;
-                          })
-                          .join(" · ")}`
-                      : `${form.venue === "Any available" ? "All halls" : form.venue} — free`}
-                </p>
-                <div className="avail-days" role="list">
-                  {availStrip.map((d) => (
+                <div className="avail-board-head">
+                  <p className={`avail-status ${dateAvail.blocked ? "is-booked" : "is-free"}`}>
+                    {dateAvail.blocked
+                      ? dateAvail.message
+                      : dateAvail.anyBooked
+                        ? `Hold: ${dateAvail.rows
+                            .filter((r) => r.booked)
+                            .map((r) => {
+                              const w = r.windows[0];
+                              return w
+                                ? `${r.hallName} ${w.windowLabel || `${w.startLabel} – ${w.endLabel}`}`
+                                : r.hallName;
+                            })
+                            .join(" · ")}`
+                        : form.venue
+                          ? `${form.venue} — free`
+                          : "Select a hall to check availability"}
+                  </p>
+                  <div className="avail-view-toggle" role="group" aria-label="Calendar view">
                     <button
-                      key={d.iso}
                       type="button"
-                      role="listitem"
-                      aria-label={`${d.iso} ${d.booked ? "booked" : "free"}`}
-                      className={`avail-day${d.booked ? " is-booked" : ""}${d.iso === form.eventDate ? " is-on" : ""}`}
-                      onClick={() => {
-                        setError("");
-                        setForm((f) => ({ ...f, eventDate: d.iso }));
-                      }}
+                      className={availView === "month" ? "is-on" : ""}
+                      onClick={() => setAvailView("month")}
                     >
-                      <span>{d.wd}</span>
-                      <strong>{d.day}</strong>
+                      Month
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      className={availView === "strip" ? "is-on" : ""}
+                      onClick={() => setAvailView("strip")}
+                    >
+                      14 days
+                    </button>
+                  </div>
                 </div>
+
+                {availView === "month" ? (
+                  <div className="avail-month">
+                    <div className="avail-month-nav">
+                      <button type="button" className="avail-month-shift" onClick={() => shiftAvailMonth(-1)} aria-label="Previous month">
+                        ‹
+                      </button>
+                      <strong>{availMonthLabel}</strong>
+                      <button type="button" className="avail-month-shift" onClick={() => shiftAvailMonth(1)} aria-label="Next month">
+                        ›
+                      </button>
+                    </div>
+                    <div className="avail-month-grid" role="grid" aria-label="Availability calendar">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => (
+                        <span key={w} className="avail-wd">
+                          {w}
+                        </span>
+                      ))}
+                      {availMonthCells.map((cell, i) =>
+                        !cell ? (
+                          <span key={`e${i}`} className="avail-day is-empty" />
+                        ) : (
+                          <button
+                            key={cell.iso}
+                            type="button"
+                            disabled={cell.past}
+                            aria-label={`${cell.iso} ${cell.past ? "past" : cell.booked ? "booked" : "free"}`}
+                            className={`avail-day${cell.booked ? " is-booked" : ""}${cell.past ? " is-past" : ""}${
+                              cell.iso === form.eventDate ? " is-on" : ""
+                            }`}
+                            onClick={() => {
+                              if (cell.past) return;
+                              setError("");
+                              setForm((f) => ({ ...f, eventDate: cell.iso }));
+                            }}
+                          >
+                            <strong>{cell.day}</strong>
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="avail-days" role="list">
+                    {availStrip.map((d) => (
+                      <button
+                        key={d.iso}
+                        type="button"
+                        role="listitem"
+                        aria-label={`${d.iso} ${d.booked ? "booked" : "free"}`}
+                        className={`avail-day${d.booked ? " is-booked" : ""}${d.iso === form.eventDate ? " is-on" : ""}`}
+                        onClick={() => {
+                          setError("");
+                          setForm((f) => ({ ...f, eventDate: d.iso }));
+                        }}
+                      >
+                        <span>{d.wd}</span>
+                        <strong>{d.day}</strong>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               {error ? <p className="form-error">{error}</p> : null}
               <label className="book-agree">
                 <input
                   type="checkbox"
-                  checked={agreed}
+                  checked={agreedTerms}
                   onChange={(e) => {
-                    setAgreed(e.target.checked);
+                    setAgreedTerms(e.target.checked);
                     if (e.target.checked) setError("");
                   }}
                 />
                 <span>
                   I have read and agree to the{" "}
-                  <a href="#terms" onClick={(e) => onPageNav(e, "terms")}>
-                    terms and conditions
-                  </a>
-                  .
+                  <a href="#terms" onClick={(e) => onPageNav(e, "terms")}>Terms & Conditions</a>
+                  {" "}(English · తెలుగు · हिन्दी).
                 </span>
               </label>
-              <button className="btn btn-gold full" type="submit" disabled={dateAvail.blocked}>
+              <button className="btn btn-gold full" type="submit" disabled={dateAvail.blocked || !form.venue}>
                 {dateAvail.blocked ? "Choose a free date" : "Send booking request"}
               </button>
             </form>
@@ -779,8 +992,8 @@ export default function Home({ state, onEnquire, onStaff }) {
           </p>
           <div className="map-wrap">
             <iframe
-              title={`${p.name} on Google Maps`}
-              src={`https://maps.google.com/maps?q=${mapQ}&z=15&hl=en&output=embed`}
+              title="Gayatri Water and Beverages, Palagummi on Google Maps"
+              src={mapSrc}
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               allowFullScreen
@@ -789,34 +1002,108 @@ export default function Home({ state, onEnquire, onStaff }) {
           <div className="contact-actions">
             <a
               className="btn btn-ghost dark"
-              href={`https://www.google.com/maps/search/?api=1&query=${mapQ}`}
+              href={mapLink}
               target="_blank"
               rel="noreferrer"
             >
               Open in Google Maps <span>↗</span>
             </a>
-            <a className="btn btn-gold" href="/Gayatri-Brochure.pdf" download>
+            <a className="btn btn-gold" href="/Gayatri-Brochure.pdf?v=20260902d" download="Gayatri-Brochure.pdf">
               Download brochure PDF
             </a>
           </div>
         </section>
 
-        <section className="contact terms-page reveal" id="terms">
-          <p className="kicker">Terms</p>
-          <h2>Terms and conditions</h2>
-          <p className="page-sub">
-            These apply to hall hire and guest rooms at {p.name}. Catering, decoration, DJ and photography are not provided by the hall.
-          </p>
-          <ol className="terms-copy">
-            {termsLines(p).map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ol>
+        <section className="terms-page reveal" id="terms">
+          <div className="terms-panel">
+            <header className={`terms-banner lang-${termLang}`}>
+              <div className="terms-banner-inner">
+                <h2>{termLoc.ui.title}</h2>
+              </div>
+            </header>
+            <div className="terms-body">
+              <aside className="terms-side" aria-label="Terms navigation">
+                <div className="terms-lang-drop" ref={termLangDropRef}>
+                  <button
+                    type="button"
+                    className={`terms-lang-trigger${termLangOpen ? " is-open" : ""}`}
+                    aria-expanded={termLangOpen}
+                    aria-haspopup="listbox"
+                    onClick={() => setTermLangOpen((open) => !open)}
+                  >
+                    <span className="terms-lang-kicker">{termLoc.ui.langLabel}</span>
+                    <span className="terms-lang-current">{termLangLabel}</span>
+                    <span className="terms-lang-chevron" aria-hidden="true" />
+                  </button>
+                  {termLangOpen && (
+                    <ul className="terms-lang-menu" role="listbox" aria-label={termLoc.ui.langLabel}>
+                      {TERM_LANGS.map((l) => (
+                        <li key={l.id}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={termLang === l.id}
+                            className={termLang === l.id ? "is-on" : ""}
+                            onClick={() => {
+                              setTermLang(l.id);
+                              setTermLangOpen(false);
+                            }}
+                          >
+                            {l.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <nav className={`terms-toc lang-${termLang}`} aria-label={termLoc.ui.tocLabel}>
+                  <p className="terms-toc-kicker">{termLoc.ui.tocLabel}</p>
+                  {TERM_SECTIONS.map((sec, i) => {
+                    const lines = sectionLines(termLoc.sections[sec.id], p);
+                    if (!lines.length) return null;
+                    return (
+                      <button
+                        key={sec.id}
+                        type="button"
+                        className="terms-toc-item"
+                        onClick={() => scrollToTermSection(sec.id)}
+                      >
+                        <span className="terms-toc-num">{String(i + 1).padStart(2, "0")}</span>
+                        <span className="terms-toc-label">{termLoc.labels[sec.id] || sec.label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </aside>
+              <div className="terms-scroll">
+                <div className={`terms-articles lang-${termLang}`}>
+                  {TERM_SECTIONS.map((sec, i) => {
+                    const lines = sectionLines(termLoc.sections[sec.id], p);
+                    if (!lines.length) return null;
+                    return (
+                      <article key={sec.id} id={`terms-${sec.id}`} className="terms-article">
+                        <div className="terms-article-num">{String(i + 1).padStart(2, "0")}</div>
+                        <div className="terms-article-body">
+                          <h3>{termLoc.labels[sec.id] || sec.label}</h3>
+                          <ul className="terms-list">
+                            {lines.map((line) => (
+                              <li key={line}>{line}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </article>
+                    );
+                  })}
+                  <p className={`terms-foot lang-${termLang}`}>{termLoc.ui.disclaimer}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="contact staff-gate reveal" id="staff">
           <p className="kicker">Staff</p>
-          <h2>Hall desk</h2>
+          <h2>Convention desk</h2>
           <p className="page-sub">
             For the Gayatri team. Open the calendar, rooms, reservations, and payments.
           </p>
@@ -852,7 +1139,42 @@ export default function Home({ state, onEnquire, onStaff }) {
         >
           ×
         </button>
-        {lightbox ? <img src={lightbox.src} alt={lightbox.alt} onClick={(e) => e.stopPropagation()} /> : null}
+        {lightbox ? (
+          <>
+            <button
+              type="button"
+              className="lightbox-nav prev"
+              aria-label="Previous photo"
+              onClick={(e) => {
+                e.stopPropagation();
+                const i = (lightbox.index - 1 + GALLERY.length) % GALLERY.length;
+                setLightbox({ ...GALLERY[i], index: i });
+              }}
+            >
+              ‹
+            </button>
+            <figure className="lightbox-frame" onClick={(e) => e.stopPropagation()}>
+              {isGalleryVideo(lightbox) ? (
+                <video key={lightbox.src} src={lightbox.src} poster={lightbox.poster || undefined} controls autoPlay playsInline />
+              ) : (
+                <img src={lightbox.src} alt={lightbox.alt} />
+              )}
+              <figcaption>{lightbox.label || lightbox.alt}</figcaption>
+            </figure>
+            <button
+              type="button"
+              className="lightbox-nav next"
+              aria-label="Next photo"
+              onClick={(e) => {
+                e.stopPropagation();
+                const i = (lightbox.index + 1) % GALLERY.length;
+                setLightbox({ ...GALLERY[i], index: i });
+              }}
+            >
+              ›
+            </button>
+          </>
+        ) : null}
       </div>
       <button
         type="button"

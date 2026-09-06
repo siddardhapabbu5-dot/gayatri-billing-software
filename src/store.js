@@ -1,8 +1,171 @@
-import { KEY, seqNo, uid } from "./lib";
-import { createSeed, DEFAULT_ABOUT, DEFAULT_BANQUET, DEFAULT_EVENT_TYPES, DEFAULT_TERMS } from "./seed";
+import { KEY, seqNo, uid, dayToISO } from "./lib";
+import { createSeed, defaultRetreatType, defaultRooms, defaultRoomTypes, DEFAULT_ABOUT, DEFAULT_BANQUET, DEFAULT_EVENT_TYPES, DEFAULT_TERMS } from "./seed";
+import { DEFAULT_POLICIES, DEFAULT_TERM_SECTIONS, DEFAULT_TERM_SECTIONS_HI, DEFAULT_TERM_SECTIONS_TE, housekeepingOf, occupancyOf, termSetsOf } from "./policies";
 import { bookingFolio, folioTotals, hallClash, publicAvailability, roomClash } from "./engine";
 import { specById } from "./docTypes";
 import { clearBlobs, deleteBlob, putBlob } from "./fileStore";
+
+const WEDDING_EVENT_TYPES = new Set([
+  "Wedding",
+  "Sangeet / Mehendi",
+  "Engagement",
+  "Nikaah / Walima",
+  "Birthday / Family function",
+]);
+
+function rewriteConventionCopy(text) {
+  return String(text || "")
+    .replace(/Gayatri Function Hall/gi, "Gayatri Convention")
+    .replace(/Gayatri Convention Hall/gi, "Gayatri Convention")
+    .replace(/Marriage & Function Hall/gi, "Convention")
+    .replace(/Function Hall/gi, "Convention")
+    .replace(/\bConvention Hall\b/g, "Convention")
+    .replace(/\bfunction hall\b/gi, "convention")
+    .replace(/\bfunction-hall\b/gi, "convention")
+    .replace(/before the function starts/gi, "before the event starts")
+    .replace(/\bthe function starts\b/gi, "the event starts");
+}
+
+const TERM_BRANDING_FIXES = [
+  ["Gayatri Convention Hall", "Gayatri Convention"],
+  ["Convention Hall", "Convention"],
+  ["Gayatri may refuse", "Gayatri Convention may refuse"],
+  ["Gayatri is not responsible", "Gayatri Convention is not responsible"],
+  ["గాయత్రి కన్వెన్షన్ హాల్", "గాయత్రి కన్వెన్షన్"],
+  ["గాయత్రి తిరస్కరించ", "గాయత్రి కన్వెన్షన్ తిరస్కరించ"],
+  ["గాయత్రి బాధ్యత వహించదు", "గాయత్రి కన్వెన్షన్ బాధ్యత వహించదు"],
+  ["गायत्री कन्वेंशन हॉल", "गायत्री कन्वेंशन"],
+  ["गायत्री मना कर", "गायत्री कन्वेंशन मना कर"],
+  ["गायत्री जिम्मेदार नहीं", "गायत्री कन्वेंशन जिम्मेदार नहीं"],
+];
+
+function patchTermBrandingText(text) {
+  let out = String(text || "");
+  TERM_BRANDING_FIXES.forEach(([from, to]) => {
+    out = out.split(from).join(to);
+  });
+  return rewriteConventionCopy(out);
+}
+
+/** Runs on every load so saved data and print/PDF always match current branding defaults. */
+function normalizePropertyLive(p) {
+  if (!p) return false;
+  let dirty = false;
+  if (/Gayatri Convention Hall/i.test(p.name || "")) {
+    p.name = "Gayatri Convention";
+    dirty = true;
+  }
+  if (p.tagline === "Convention Hall") {
+    p.tagline = "Convention";
+    dirty = true;
+  }
+  if (!Array.isArray(p.eventTypes) || !p.eventTypes.length) {
+    p.eventTypes = [...DEFAULT_EVENT_TYPES];
+    dirty = true;
+  }
+  const about = rewriteConventionCopy(p.about || "");
+  if (about !== p.about) {
+    p.about = about;
+    dirty = true;
+  }
+  const banquet = rewriteConventionCopy(p.banquetIntro || "");
+  if (banquet !== p.banquetIntro) {
+    p.banquetIntro = banquet;
+    dirty = true;
+  }
+  if (p.terms && /Convention Hall|Gayatri Convention Hall/i.test(p.terms)) {
+    const next = patchTermBrandingText(p.terms);
+    if (next !== p.terms) {
+      p.terms = next;
+      dirty = true;
+    }
+  }
+  const ts = p.termSets;
+  if (ts) {
+    const blob = JSON.stringify(ts);
+    if (/Gayatri Convention Hall|Convention Hall/.test(blob)) {
+      if (ts.sections) {
+        ts.sections = Object.fromEntries(
+          Object.entries(ts.sections).map(([k, v]) => [k, patchTermBrandingText(v)])
+        );
+      }
+      if (ts.locales) {
+        ts.locales = Object.fromEntries(
+          Object.entries(ts.locales).map(([lang, sections]) => [
+            lang,
+            Object.fromEntries(Object.entries(sections || {}).map(([k, v]) => [k, patchTermBrandingText(v)])),
+          ])
+        );
+      }
+      dirty = true;
+    }
+  }
+  return dirty;
+}
+
+function applyConventionHallRebrand(state) {
+  const p = state.property;
+  if (p) {
+    if (!p.name || /function hall|marriage|convention hall/i.test(p.name)) p.name = "Gayatri Convention";
+    if (!p.tagline || /marriage|function hall|convention hall/i.test(p.tagline)) p.tagline = "Convention";
+    if (!p.about || /wedding|marriage|welcome parties/i.test(p.about)) p.about = DEFAULT_ABOUT;
+    if (!p.banquetIntro || /wedding|reception|family function/i.test(p.banquetIntro)) p.banquetIntro = DEFAULT_BANQUET;
+    const types = p.eventTypes || [];
+    if (!types.length || types.some((t) => WEDDING_EVENT_TYPES.has(t))) {
+      p.eventTypes = [...DEFAULT_EVENT_TYPES];
+    }
+    if (p.termSets?.sections) {
+      p.termSets.sections = Object.fromEntries(
+        Object.entries(p.termSets.sections).map(([k, v]) => [k, rewriteConventionCopy(v)])
+      );
+    }
+    if (p.terms) p.terms = rewriteConventionCopy(p.terms);
+  }
+  state.halls = (state.halls || []).map((h) => {
+    const blob = `${h.tag || ""} ${h.jp || ""} ${h.copy || ""} ${(h.seating || []).join(" ")}`;
+    if (!/mandap|phera|nikaah|mehendi|wedding|reception|intimate functions/i.test(blob)) return h;
+    if (h.id === "hall-1") {
+      return {
+        ...h,
+        tag: "Plenary sessions. Stage, crystal light.",
+        jp: "Plenary sessions",
+        copy: "A double-height hall for conferences and exhibitions, with crystal light and a full stage.",
+        seating: ["Banquet", "Theatre", "U-shape"],
+      };
+    }
+    if (h.id === "hall-2") {
+      return {
+        ...h,
+        tag: "Outdoor conferences. Covered pavilion.",
+        jp: "Outdoor conference",
+        copy: "Lawn, fountain court, and a covered pavilion — made for outdoor conferences and exhibitions.",
+        seating: ["Theatre", "Banquet", "Exhibition"],
+      };
+    }
+    if (h.id === "hall-3") {
+      return {
+        ...h,
+        name: "Heritage Courtyard (MINI)",
+        tag: "Board meetings. Quiet inner court.",
+        jp: "Board meetings",
+        copy: "A quieter hall for board meetings and training, with a private inner court.",
+        seating: ["Cluster", "U-shape"],
+      };
+    }
+    return {
+      ...h,
+      tag: rewriteConventionCopy(h.tag),
+      jp: rewriteConventionCopy(h.jp),
+      copy: rewriteConventionCopy(h.copy),
+    };
+  });
+  state.packages = (state.packages || []).map((pkg) => {
+    if (pkg.id === "pkg-mandap" || /mandap evening/i.test(pkg.name || "")) return { ...pkg, name: "Workshop Day" };
+    if (pkg.id === "pkg-royal" || /royal wedding/i.test(pkg.name || "")) return { ...pkg, name: "Grand Convention" };
+    if (pkg.id === "pkg-garden" || /garden celebration/i.test(pkg.name || "")) return { ...pkg, name: "Outdoor Conference" };
+    return pkg;
+  });
+}
 
 function load() {
   try {
@@ -10,34 +173,282 @@ function load() {
     const parsed = raw ? JSON.parse(raw) : createSeed();
     if (!Array.isArray(parsed.documents)) parsed.documents = [];
     parsed.services = [];
+    parsed.pricingRules = [];
     if (parsed.property) {
       const p = parsed.property;
+      const beforeBanquet = p.banquetIntro || "";
+      const beforeTerms = p.terms || "";
       if (p.notifyWhatsApp == null) p.notifyWhatsApp = true;
       if (!p.notifyPhone) p.notifyPhone = p.phone || "+91 98496 00555";
       if (!p.brandName) p.brandName = "Gayatri";
       if (!p.place) p.place = "Palagummi · Konaseema";
       if (!p.about) p.about = DEFAULT_ABOUT;
+      p.banquetIntro = String(p.banquetIntro || DEFAULT_BANQUET)
+        .replace(/Gayatri provides the venue[\s\S]*?arranged by you\.?/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
       if (!p.banquetIntro) p.banquetIntro = DEFAULT_BANQUET;
+      p.terms = String(p.terms || DEFAULT_TERMS)
+        .split(/\n+/)
+        .map((line) => line.replace(/^\s*\d+[.)]\s*/, "").trim())
+        .filter((line) => line && !/hall hire and guest rooms only/i.test(line) && !/catering,\s*decoration,\s*DJ/i.test(line))
+        .join("\n");
       if (!p.terms) p.terms = DEFAULT_TERMS;
-      if (!p.mapQuery) p.mapQuery = Array.isArray(p.address) ? p.address.join(" ") : "Palagummi Village Razole";
+      if (!p.mapQuery) {
+        p.mapQuery =
+          "GAYATRI WATER AND BEVERAGES, Palagummi Village, Razole Mandal, Dr. B.R.A. Konaseema, Andhra Pradesh 533249";
+      }
+      if (!p.mapLat) p.mapLat = 16.4748165;
+      if (!p.mapLng) p.mapLng = 81.875945;
       if (!Array.isArray(p.eventTypes) || !p.eventTypes.length) p.eventTypes = [...DEFAULT_EVENT_TYPES];
       if (!p.storiesCleared) {
         p.stories = [];
         p.storiesCleared = true;
       }
       if (!Array.isArray(p.stories)) p.stories = [];
+      p.policies = { ...DEFAULT_POLICIES, ...(p.policies || {}) };
+      if (!p.termSets?.sections) p.termSets = termSetsOf(p);
+      if (p.banquetIntro !== beforeBanquet || p.terms !== beforeTerms) persist(parsed);
+      if (normalizePropertyLive(p)) persist(parsed);
     }
     parsed.halls = (parsed.halls || []).map((h) => ({
       ...h,
       jp: h.jp || h.kind || "",
       copy: h.copy || h.tag || "",
+      rates: {
+        halfDay: Number(h.rates?.halfDay) || 0,
+        fullDay: Number(h.rates?.fullDay) || 0,
+      },
     }));
+    parsed.hallReservations = (parsed.hallReservations || []).map((r) =>
+      r.slotType === "hourly" ? { ...r, slotType: "half-day" } : r
+    );
     if (!Array.isArray(parsed.roomTypes)) parsed.roomTypes = [];
     if (!Array.isArray(parsed.packages)) parsed.packages = [];
+    if (!Array.isArray(parsed.agreements)) parsed.agreements = [];
+    parsed.rooms = (parsed.rooms || []).map((r) => ({
+      ...r,
+      status: occupancyOf(r),
+      hkStatus: housekeepingOf(r),
+    }));
+    if (!parsed.meta) parsed.meta = {};
+    if (!parsed.meta.ledgerCleared) {
+      parsed.guests = [];
+      parsed.bookings = [];
+      parsed.hallReservations = [];
+      parsed.roomReservations = [];
+      parsed.folios = [];
+      parsed.folioLines = [];
+      parsed.payments = [];
+      parsed.invoices = [];
+      parsed.events = [];
+      parsed.cateringOrders = [];
+      parsed.purchaseOrders = [];
+      parsed.notifications = [];
+      parsed.enquiries = [];
+      parsed.documents = [];
+      parsed.audit = [];
+      parsed.rooms = (parsed.rooms || []).map((r) =>
+        ["Occupied", "Reserved"].includes(r.status) ? { ...r, status: "Available" } : r
+      );
+      parsed.meta.ledgerCleared = true;
+      persist(parsed);
+      clearBlobs().catch(() => {});
+    }
+    if (!parsed.meta.roomsAllAvailable) {
+      parsed.rooms = (parsed.rooms || []).map((r) => ({ ...r, status: "Available" }));
+      parsed.meta.roomsAllAvailable = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.conventionHall) {
+      applyConventionHallRebrand(parsed);
+      parsed.meta.conventionHall = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.conventionHallTerms && parsed.property) {
+      const p = parsed.property;
+      if (p.termSets?.sections) {
+        p.termSets.sections = Object.fromEntries(
+          Object.entries(p.termSets.sections).map(([k, v]) => [k, rewriteConventionCopy(v)])
+        );
+      }
+      if (p.terms) p.terms = rewriteConventionCopy(p.terms);
+      parsed.meta.conventionHallTerms = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.hallTariffSep2026) {
+      const tariff = {
+        "hall-1": {
+          capacityMin: 1000,
+          capacity: 3000,
+          floating: 3000,
+          dining: 1500,
+          rates: { hourly: 37500, halfDay: 300000, fullDay: 450000 },
+          minValue: 300000,
+          active: true,
+        },
+        "hall-2": {
+          capacityMin: 800,
+          capacity: 800,
+          floating: 800,
+          dining: 500,
+          rates: { hourly: 16000, halfDay: 125000, fullDay: 250000 },
+          minValue: 125000,
+          active: true,
+        },
+        "hall-3": {
+          capacityMin: 100,
+          capacity: 500,
+          floating: 500,
+          dining: 250,
+          rates: { hourly: 16000, halfDay: 125000, fullDay: 200000 },
+          minValue: 125000,
+          active: true,
+        },
+      };
+      parsed.halls = (parsed.halls || []).map((h) => {
+        const next = tariff[h.id];
+        if (!next) return h;
+        return { ...h, ...next, rates: { ...h.rates, ...next.rates } };
+      });
+      parsed.packages = (parsed.packages || []).map((pkg) => {
+        if (pkg.id === "pkg-royal") {
+          return { ...pkg, includes: ["Imperial Ballroom", "up to 3,000 guests", "full-day hall"], price: 450000, minGuests: 1000 };
+        }
+        if (pkg.id === "pkg-garden") {
+          return { ...pkg, includes: ["Garden Pavilion", "up to 800 guests", "lawn and covered dining"], price: 250000, minGuests: 200 };
+        }
+        if (pkg.id === "pkg-mandap") {
+          return { ...pkg, includes: ["Heritage Courtyard (MINI)", "up to 500 guests", "8-hour hall access"], price: 200000, minGuests: 100 };
+        }
+        return pkg;
+      });
+      parsed.meta.hallTariffSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.heritageMiniSep2026) {
+      const rename = (value) =>
+        String(value || "").replace(/Heritage Courtyard(?!\s*\(MINI\))/gi, "Heritage Courtyard (MINI)");
+      parsed.halls = (parsed.halls || []).map((h) =>
+        h.id === "hall-3" || /^Heritage Courtyard$/i.test(h.name || "") ? { ...h, name: "Heritage Courtyard (MINI)" } : h
+      );
+      parsed.packages = (parsed.packages || []).map((pkg) => ({
+        ...pkg,
+        includes: (pkg.includes || []).map(rename),
+      }));
+      parsed.bookings = (parsed.bookings || []).map((b) => (b.hall ? { ...b, hall: rename(b.hall) } : b));
+      parsed.enquiries = (parsed.enquiries || []).map((e) => (e.hall ? { ...e, hall: rename(e.hall) } : e));
+      parsed.meta.heritageMiniSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.roomInventorySep2026) {
+      const liveIds = new Set(
+        (parsed.roomReservations || [])
+          .filter((r) => !["Cancelled", "Checked out"].includes(r.status))
+          .map((r) => r.roomId)
+      );
+      const next = defaultRooms().map((room) => {
+        const old = (parsed.rooms || []).find((r) => r.id === room.id || String(r.number) === room.number);
+        if (old && liveIds.has(old.id)) {
+          return { ...room, id: old.id, status: old.status, hkStatus: old.hkStatus || "Clean" };
+        }
+        return room;
+      });
+      const kept = (parsed.rooms || []).filter((r) => liveIds.has(r.id) && !next.some((n) => n.id === r.id));
+      parsed.roomTypes = defaultRoomTypes();
+      parsed.rooms = [...next, ...kept];
+      parsed.meta.roomInventorySep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.roomTariffSep2026) {
+      const types = defaultRoomTypes();
+      const byId = new Map((parsed.roomTypes || []).map((t) => [t.id, t]));
+      const known = new Set(types.map((t) => t.id));
+      parsed.roomTypes = [
+        ...types.map((t) => ({ ...(byId.get(t.id) || {}), ...t })),
+        ...(parsed.roomTypes || []).filter((t) => !known.has(t.id)),
+      ];
+      const have = new Set((parsed.rooms || []).map((r) => String(r.number)));
+      const extra = defaultRooms().filter((r) => !have.has(r.number));
+      if (extra.length) parsed.rooms = [...(parsed.rooms || []), ...extra];
+      parsed.meta.roomTariffSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.royalRetreatTypeSep2026) {
+      const retreat = defaultRetreatType();
+      const list = parsed.roomTypes || [];
+      const i = list.findIndex((t) => t.id === retreat.id || /royal family retreat/i.test(t.name || ""));
+      if (i < 0) parsed.roomTypes = [...list, retreat];
+      else parsed.roomTypes = list.map((t, idx) => (idx === i ? { ...t, ...retreat } : t));
+      parsed.meta.royalRetreatTypeSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.palagummiMapSep2026 && parsed.property) {
+      const p = parsed.property;
+      const q = String(p.mapQuery || "");
+      const isOld =
+        !q ||
+        /Dr\.?\s*B\.?R\.?A\.?/i.test(q) ||
+        /Palagummi Village Razole Mandal/i.test(q);
+      p.mapLat = 16.4748165;
+      p.mapLng = 81.875945;
+      if (isOld) p.mapQuery = "16.4748165, 81.875945";
+      parsed.meta.palagummiMapSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.gayatriWaterMapSep2026 && parsed.property) {
+      const p = parsed.property;
+      p.mapLat = p.mapLat || 16.4748165;
+      p.mapLng = p.mapLng || 81.875945;
+      p.mapQuery =
+        "GAYATRI WATER AND BEVERAGES, Palagummi Village, Razole Mandal, Dr. B.R.A. Konaseema, Andhra Pradesh 533249";
+      parsed.meta.gayatriWaterMapSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.termLocalesSep2026 && parsed.property) {
+      const next = termSetsOf(parsed.property);
+      parsed.property.termSets = {
+        version: next.version,
+        publishedAt: next.publishedAt,
+        sections: next.sections,
+        locales: next.locales,
+      };
+      parsed.meta.termLocalesSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.roomCheckInOut24Sep2026 && parsed.property) {
+      parsed.property.policies = {
+        ...(parsed.property.policies || {}),
+        roomCheckInOut: "24 hrs",
+      };
+      if (parsed.property.termSets?.locales || parsed.property.termSets?.sections) {
+        const ts = parsed.property.termSets;
+        ts.sections = { ...ts.sections, room: DEFAULT_TERM_SECTIONS.room };
+        ts.locales = {
+          ...ts.locales,
+          en: { ...ts.locales?.en, room: DEFAULT_TERM_SECTIONS.room },
+          te: { ...ts.locales?.te, room: DEFAULT_TERM_SECTIONS_TE.room },
+          hi: { ...ts.locales?.hi, room: DEFAULT_TERM_SECTIONS_HI.room },
+        };
+      }
+      parsed.meta.roomCheckInOut24Sep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.gayatriConventionTermsSep2026) parsed.meta.gayatriConventionTermsSep2026 = true;
+    if (!parsed.meta.marriageReceptionEventsSep2026) parsed.meta.marriageReceptionEventsSep2026 = true;
+    if (!parsed.meta.gayatriConventionBrandingSep2026) parsed.meta.gayatriConventionBrandingSep2026 = true;
+    pruneEvents(parsed);
     return parsed;
   } catch {
     return createSeed();
   }
+}
+
+function pruneEvents(state) {
+  state.events = (state.events || []).filter((e) => {
+    const bk = (state.bookings || []).find((b) => b.id === e.bookingId);
+    return bk && bk.status !== "Cancelled";
+  });
 }
 
 function persist(state) {
@@ -77,20 +488,120 @@ export function resetDemo() {
   return persist(next);
 }
 
+/** Removes all bookings, guests, payments and invoices. Keeps halls, rooms, rates and property settings. */
+export async function clearAllBookings() {
+  await clearBlobs().catch(() => {});
+  const state = load();
+  state.guests = [];
+  state.bookings = [];
+  state.hallReservations = [];
+  state.roomReservations = [];
+  state.folios = [];
+  state.folioLines = [];
+  state.payments = [];
+  state.invoices = [];
+  state.events = [];
+  state.cateringOrders = [];
+  state.purchaseOrders = [];
+  state.notifications = [];
+  state.enquiries = [];
+  state.documents = [];
+  state.agreements = [];
+  state.rooms = (state.rooms || []).map((r) => ({
+    ...r,
+    status: "Available",
+    hkStatus: ["Dirty", "Cleaning"].includes(housekeepingOf(r)) ? "Clean" : housekeepingOf(r),
+  }));
+  state.audit = [];
+  audit(state, "All bookings cleared", "—", "Dashboard and reservations reset to zero");
+  return persist(state);
+}
+
+function recordAgreement(state, { bookingId, guestId, sections, source }) {
+  const agreed = (sections || []).filter(Boolean);
+  if (!agreed.length) return;
+  const sets = termSetsOf(state.property);
+  const user = state.users.find((u) => u.id === state.session.userId);
+  state.agreements = [
+    {
+      id: uid("ag"),
+      bookingId,
+      guestId,
+      at: new Date().toISOString(),
+      userId: state.session.userId,
+      user: source === "Website" ? "Website guest" : user?.name || "Staff",
+      source: source || "Staff",
+      version: sets.version || 1,
+      sections: agreed,
+    },
+    ...(state.agreements || []),
+  ];
+}
+
 export function updateProperty(patch) {
   const state = load();
-  const old = { ...state.property };
   state.property = { ...state.property, ...patch };
-  audit(state, "Property updated", state.property.name, JSON.stringify(patch));
+  if (patch.termSets?.sections) {
+    const prev = termSetsOf({ termSets: patch.termSets.version ? patch.termSets : state.property.termSets });
+    const version = Number(patch.termSets.version) || (Number(prev.version) || 1);
+    state.property.termSets = {
+      version,
+      publishedAt: patch.termSets.publishedAt || new Date().toISOString(),
+      sections: { ...prev.sections, ...patch.termSets.sections },
+      locales: {
+        en: { ...prev.locales.en, ...(patch.termSets.locales?.en || patch.termSets.sections) },
+        te: { ...prev.locales.te, ...(patch.termSets.locales?.te || {}) },
+        hi: { ...prev.locales.hi, ...(patch.termSets.locales?.hi || {}) },
+      },
+    };
+    state.property.terms = Object.values(state.property.termSets.sections).filter(Boolean).join("\n");
+  }
+  if (patch.policies) {
+    state.property.policies = { ...DEFAULT_POLICIES, ...(state.property.policies || {}), ...patch.policies };
+  }
+  audit(state, "Property updated", state.property.name, Object.keys(patch).join(", "));
+  return persist(state);
+}
+
+export function publishTermSets(payload) {
+  const state = load();
+  const prev = termSetsOf(state.property);
+  const bump = Boolean(prev.publishedAt);
+  const sections = payload?.sections || payload;
+  const locales = payload?.locales || {};
+  const en = { ...prev.sections, ...sections, ...(locales.en || {}) };
+  state.property.termSets = {
+    version: bump ? (Number(prev.version) || 1) + 1 : Math.max(1, Number(prev.version) || 1),
+    publishedAt: new Date().toISOString(),
+    sections: en,
+    locales: {
+      en,
+      te: { ...prev.locales.te, ...(locales.te || {}) },
+      hi: { ...prev.locales.hi, ...(locales.hi || {}) },
+    },
+  };
+  state.property.terms = Object.values(state.property.termSets.sections).filter(Boolean).join("\n");
+  audit(state, "Terms published", `v${state.property.termSets.version}`, "Staff T&C master");
   return persist(state);
 }
 
 export function setRoomStatus(roomId, status) {
+  const HK = ["Clean", "Dirty", "Cleaning", "Inspected"];
+  if (HK.includes(status)) return setRoomHousekeeping(roomId, status);
   const state = load();
   const room = state.rooms.find((r) => r.id === roomId);
-  const prev = room?.status;
+  const prev = occupancyOf(room);
   state.rooms = state.rooms.map((r) => (r.id === roomId ? { ...r, status } : r));
-  audit(state, "Room status", `Room ${room?.number}`, `${prev} → ${status}`);
+  audit(state, "Room occupancy", `Room ${room?.number}`, `${prev} → ${status}`);
+  return persist(state);
+}
+
+export function setRoomHousekeeping(roomId, hkStatus) {
+  const state = load();
+  const room = state.rooms.find((r) => r.id === roomId);
+  const prev = housekeepingOf(room);
+  state.rooms = state.rooms.map((r) => (r.id === roomId ? { ...r, hkStatus } : r));
+  audit(state, "Housekeeping", `Room ${room?.number}`, `${prev} → ${hkStatus}`);
   return persist(state);
 }
 
@@ -120,6 +631,7 @@ export function saveHall(item) {
   const hall = {
     ...item,
     capacity: Number(item.capacity) || 0,
+    capacityMin: Number(item.capacityMin) || 0,
     floating: Number(item.floating) || 0,
     dining: Number(item.dining) || 0,
     parking: Number(item.parking) || 0,
@@ -128,7 +640,6 @@ export function saveHall(item) {
     bufferMinutes: Number(item.bufferMinutes) || 0,
     minValue: Number(item.minValue) || 0,
     rates: {
-      hourly: Number(item.rates?.hourly) || 0,
       halfDay: Number(item.rates?.halfDay) || 0,
       fullDay: Number(item.rates?.fullDay) || 0,
     },
@@ -136,6 +647,18 @@ export function saveHall(item) {
     active: item.active !== false,
   };
   state.halls = upsert(state.halls, hall, "hall");
+  state.packages = (state.packages || []).map((pkg) => {
+    if (pkg.hallId !== hall.id) return pkg;
+    const includes = [hall.name];
+    if (hall.capacity) includes.push(`up to ${Number(hall.capacity).toLocaleString("en-IN")} guests`);
+    if (hall.rates.fullDay) includes.push("full-day hall");
+    return {
+      ...pkg,
+      price: hall.rates.fullDay || pkg.price,
+      minGuests: hall.capacityMin || pkg.minGuests,
+      includes: includes.length > 1 ? includes : pkg.includes,
+    };
+  });
   audit(state, "Master data", hall.name, "Hall saved");
   return persist(state);
 }
@@ -144,8 +667,10 @@ export function saveRoomType(item) {
   const state = load();
   const row = {
     ...item,
+    composition: String(item.composition || "").trim(),
     baseRate: Number(item.baseRate) || 0,
     extraBed: Number(item.extraBed) || 0,
+    extraBeds: Number(item.extraBeds) || 0,
     childRate: Number(item.childRate) || 0,
     maxGuests: Number(item.maxGuests) || 2,
   };
@@ -166,6 +691,19 @@ export function saveRoom(item) {
   if (!row.number) return { error: "Room number is required." };
   state.rooms = upsert(state.rooms, row, "r");
   audit(state, "Master data", `Room ${row.number}`, "Room saved");
+  return persist(state);
+}
+
+export function removeRoom(id) {
+  const state = load();
+  const room = state.rooms.find((r) => r.id === id);
+  if (!room) return { error: "Room not found." };
+  const live = (state.roomReservations || []).some(
+    (r) => r.roomId === id && !["Cancelled", "Checked out"].includes(r.status)
+  );
+  if (live) return { error: `Room ${room.number} has a live booking. Cancel or check out that stay first.` };
+  state.rooms = state.rooms.filter((r) => r.id !== id);
+  audit(state, "Master data", `Room ${room.number}`, "Room removed");
   return persist(state);
 }
 
@@ -200,16 +738,20 @@ export function removePackage(id) {
 
 export function saveGuest(guest) {
   const state = load();
-  if (guest.id) {
-    state.guests = state.guests.map((g) => (g.id === guest.id ? { ...g, ...guest } : g));
-    audit(state, "Guest updated", guest.name, guest.phone);
+  const row = {
+    ...guest,
+    gstin: String(guest.gstin || "").trim().toUpperCase(),
+  };
+  if (row.id) {
+    state.guests = state.guests.map((g) => (g.id === row.id ? { ...g, ...row } : g));
+    audit(state, "Guest updated", row.name, row.phone);
   } else {
-    guest.id = uid("g");
-    state.guests.unshift(guest);
-    audit(state, "Guest created", guest.name, guest.phone);
+    row.id = uid("g");
+    state.guests.unshift(row);
+    audit(state, "Guest created", row.name, row.phone);
   }
   persist(state);
-  return { state: load(), guest };
+  return { state: load(), guest: row };
 }
 
 export function convertEnquiry(enquiryId) {
@@ -237,8 +779,16 @@ export function createReservation(draft) {
   const state = load();
   let guest = state.guests.find((g) => g.phone === draft.guest.phone);
   if (!guest) {
-    guest = { id: uid("g"), ...draft.guest, idProof: draft.guest.idProof || { type: "Aadhaar", number: "" }, tags: [draft.source || "Direct"] };
+    guest = {
+      id: uid("g"),
+      ...draft.guest,
+      gstin: String(draft.guest.gstin || "").trim().toUpperCase(),
+      idProof: draft.guest.idProof || { type: "Aadhaar", number: "" },
+      tags: [draft.source || "Direct"],
+    };
     state.guests.unshift(guest);
+  } else if (draft.guest.gstin) {
+    guest.gstin = String(draft.guest.gstin).trim().toUpperCase();
   }
 
   for (const h of draft.halls || []) {
@@ -269,6 +819,7 @@ export function createReservation(draft) {
     packageId: draft.packageId || "",
     notes: draft.notes || "",
     createdAt: new Date().toISOString(),
+    termsVersion: termSetsOf(state.property).version || 1,
   };
 
   const halls = (draft.halls || []).map((h) => {
@@ -303,7 +854,9 @@ export function createReservation(draft) {
 
   rooms.forEach((r) => {
     state.rooms = state.rooms.map((room) =>
-      room.id === r.roomId && room.status === "Available" ? { ...room, status: "Reserved" } : room
+      room.id === r.roomId && occupancyOf(room) === "Available"
+        ? { ...room, status: "Reserved" }
+        : room
     );
   });
 
@@ -342,7 +895,7 @@ export function createReservation(draft) {
       amount: advance,
       method: draft.paymentMode || "Cash",
       type: "Advance",
-      at: new Date().toISOString(),
+      at: dayToISO(draft.paymentDate),
       ref: draft.paymentRef || "",
     });
     state.invoices.unshift({
@@ -351,7 +904,30 @@ export function createReservation(draft) {
       type: "Advance receipt",
       bookingId: booking.id,
       folioId: folio.id,
-      at: new Date().toISOString(),
+      at: dayToISO(draft.paymentDate),
+      status: "Issued",
+    });
+  }
+
+  const finalPay = Number(draft.finalPayment) || 0;
+  if (finalPay > 0) {
+    state.payments.unshift({
+      id: uid("pay"),
+      folioId: folio.id,
+      bookingId: booking.id,
+      amount: finalPay,
+      method: draft.finalPaymentMode || draft.paymentMode || "Cash",
+      type: "Final",
+      at: dayToISO(draft.finalPaymentDate || draft.paymentDate),
+      ref: draft.finalPaymentRef || "",
+    });
+    state.invoices.unshift({
+      id: uid("inv"),
+      number: seqNo(state.invoices, "number", "FN"),
+      type: "Final invoice",
+      bookingId: booking.id,
+      folioId: folio.id,
+      at: dayToISO(draft.finalPaymentDate || draft.paymentDate),
       status: "Issued",
     });
   }
@@ -366,7 +942,18 @@ export function createReservation(draft) {
     status: "Draft",
   });
 
+  const { totals: afterPay } = bookingFolio(state, booking.id);
+  if (afterPay.balance <= 0 && afterPay.total > 0) {
+    booking.status = "Confirmed";
+    const f = state.folios.find((x) => x.id === folio.id);
+    if (f) f.status = "Settled";
+  }
+
   audit(state, "Booking created", booking.number, `${guest.name} · ${booking.type}`);
+  const agreed = [];
+  if ((draft.halls || []).length && draft.agreeHall) agreed.push("hall");
+  if ((draft.rooms || []).length && draft.agreeRoom) agreed.push("room");
+  recordAgreement(state, { bookingId: booking.id, guestId: guest.id, sections: agreed, source: "Staff" });
   persist(state);
   return { state: load(), booking };
 }
@@ -381,15 +968,23 @@ export function addPayment(folioId, payload) {
     amount: Number(payload.amount) || 0,
     method: payload.method || "Cash",
     type: payload.type || "Payment",
-    at: new Date().toISOString(),
+    at: payload.date ? dayToISO(payload.date) : payload.at || new Date().toISOString(),
     ref: payload.ref || "",
   };
   state.payments.unshift(pay);
-  const prefix = pay.type === "Refund" ? "RF" : "RC";
+  const prefix = pay.type === "Refund" ? "RF" : pay.type === "Advance" ? "AR" : pay.type === "Final" ? "FN" : "RC";
+  const invType =
+    pay.type === "Refund"
+      ? "Refund receipt"
+      : pay.type === "Advance"
+        ? "Advance receipt"
+        : pay.type === "Final"
+          ? "Final invoice"
+          : "Payment receipt";
   state.invoices.unshift({
     id: uid("inv"),
     number: seqNo(state.invoices, "number", prefix),
-    type: pay.type === "Refund" ? "Refund receipt" : "Payment receipt",
+    type: invType,
     bookingId: folio?.bookingId,
     folioId,
     at: pay.at,
@@ -403,7 +998,7 @@ export function addPayment(folioId, payload) {
   if (totals.balance <= 0 && folio) folio.status = "Settled";
   audit(
     state,
-    pay.type === "Refund" ? "Refund posted" : "Payment recorded",
+    pay.type === "Refund" ? "Refund posted" : pay.type === "Final" ? "Final payment recorded" : "Payment recorded",
     folio?.bookingId,
     `${pay.method} ${pay.amount}`
   );
@@ -425,14 +1020,24 @@ export function setFolioDiscount(folioId, discount) {
 export function cancelBooking(bookingId, refund) {
   const state = load();
   const bk = state.bookings.find((b) => b.id === bookingId);
-  if (!bk) return state;
+  if (!bk || bk.status === "Cancelled") return state;
   bk.status = "Cancelled";
+  bk.cancelledAt = new Date().toISOString();
   state.hallReservations = state.hallReservations.map((r) =>
     r.bookingId === bookingId ? { ...r, status: "Cancelled" } : r
   );
   state.roomReservations = state.roomReservations.map((r) =>
     r.bookingId === bookingId ? { ...r, status: "Cancelled" } : r
   );
+  for (const r of (state.roomReservations || []).filter((x) => x.bookingId === bookingId)) {
+    if (!liveStaysForRoom(state, r.roomId, bookingId)) {
+      state.rooms = state.rooms.map((room) =>
+        room.id === r.roomId && ["Occupied", "Reserved"].includes(room.status)
+          ? { ...room, status: "Available" }
+          : room
+      );
+    }
+  }
   const folio = state.folios.find((f) => f.bookingId === bookingId);
   if (folio) folio.status = "Cancelled";
   if (refund && folio) {
@@ -448,6 +1053,60 @@ export function cancelBooking(bookingId, refund) {
     });
   }
   audit(state, "Booking cancelled", bk.number, refund ? `Refund ${refund}` : "No refund");
+  pruneEvents(state);
+  return persist(state);
+}
+
+function liveStaysForRoom(state, roomId, ignoreBookingId) {
+  return (state.roomReservations || []).some(
+    (r) =>
+      r.roomId === roomId &&
+      r.bookingId !== ignoreBookingId &&
+      !["Cancelled", "Checked out"].includes(r.status)
+  );
+}
+
+function purgeBooking(state, bookingId, { keepGuest } = {}) {
+  const bk = state.bookings.find((b) => b.id === bookingId);
+  if (!bk) return;
+  const guestId = bk.guestId;
+  for (const r of (state.roomReservations || []).filter((x) => x.bookingId === bookingId)) {
+    if (!liveStaysForRoom(state, r.roomId, bookingId)) {
+      state.rooms = state.rooms.map((room) =>
+        room.id === r.roomId && ["Occupied", "Reserved"].includes(room.status)
+          ? { ...room, status: "Available" }
+          : room
+      );
+    }
+  }
+  state.bookings = state.bookings.filter((b) => b.id !== bookingId);
+  state.hallReservations = (state.hallReservations || []).filter((r) => r.bookingId !== bookingId);
+  state.roomReservations = (state.roomReservations || []).filter((r) => r.bookingId !== bookingId);
+  state.events = (state.events || []).filter((e) => e.bookingId !== bookingId);
+  if (!keepGuest) {
+    const still = state.bookings.some((b) => b.guestId === guestId && b.status !== "Cancelled");
+    if (!still) state.guests = state.guests.filter((g) => g.id !== guestId);
+  }
+}
+
+export function removeBooking(bookingId) {
+  const state = load();
+  const bk = state.bookings.find((b) => b.id === bookingId);
+  if (!bk) return state;
+  const label = `${bk.number} · ${bk.guestId}`;
+  purgeBooking(state, bookingId);
+  audit(state, "Booking deleted", bk.number, label);
+  return persist(state);
+}
+
+export function removeGuest(guestId) {
+  const state = load();
+  const guest = state.guests.find((g) => g.id === guestId);
+  if (!guest) return state;
+  const ids = state.bookings.filter((b) => b.guestId === guestId).map((b) => b.id);
+  ids.forEach((id) => purgeBooking(state, id, { keepGuest: true }));
+  state.guests = state.guests.filter((g) => g.id !== guestId);
+  audit(state, "Guest deleted", guest.name, guest.phone);
   return persist(state);
 }
 
@@ -456,7 +1115,12 @@ export function checkInRoom(resId) {
   const res = state.roomReservations.find((r) => r.id === resId);
   if (res) {
     res.status = "Occupied";
+    res.checkedInAt = new Date().toISOString();
+    const user = state.users.find((u) => u.id === state.session.userId);
+    res.checkedInBy = user?.name || "";
     state.rooms = state.rooms.map((r) => (r.id === res.roomId ? { ...r, status: "Occupied" } : r));
+    const bk = state.bookings.find((b) => b.id === res.bookingId);
+    if (bk && bk.status === "Confirmed") bk.status = "Checked-in";
     audit(state, "Check-in", res.roomId, res.guestId);
   }
   return persist(state);
@@ -467,8 +1131,11 @@ export function checkOutRoom(resId) {
   const res = state.roomReservations.find((r) => r.id === resId);
   if (res) {
     res.status = "Checked out";
-    state.rooms = state.rooms.map((r) => (r.id === res.roomId ? { ...r, status: "Dirty" } : r));
-    audit(state, "Check-out", res.roomId, "Status → Dirty");
+    res.checkedOutAt = new Date().toISOString();
+    state.rooms = state.rooms.map((r) =>
+      r.id === res.roomId ? { ...r, status: "Available", hkStatus: "Dirty" } : r
+    );
+    audit(state, "Check-out", res.roomId, "Occupancy Available · Housekeeping Dirty");
   }
   return persist(state);
 }
@@ -480,9 +1147,13 @@ export function transferRoom(resId, newRoomId) {
   const clash = roomClash(state.roomReservations, newRoomId, res.checkIn, res.checkOut, res.id);
   if (clash) return { error: "Target room is not free for this stay." };
   const prev = res.roomId;
-  state.rooms = state.rooms.map((r) => (r.id === prev ? { ...r, status: "Dirty" } : r));
+  state.rooms = state.rooms.map((r) =>
+    r.id === prev ? { ...r, status: "Available", hkStatus: "Dirty" } : r
+  );
   res.roomId = newRoomId;
-  state.rooms = state.rooms.map((r) => (r.id === newRoomId ? { ...r, status: res.status === "Occupied" ? "Occupied" : "Reserved" } : r));
+  state.rooms = state.rooms.map((r) =>
+    r.id === newRoomId ? { ...r, status: res.status === "Occupied" ? "Occupied" : "Reserved" } : r
+  );
   audit(state, "Room transfer", res.bookingId, `${prev} → ${newRoomId}`);
   persist(state);
   return { state: load() };
@@ -561,8 +1232,13 @@ export function addEnquiry(enq) {
     packageId: "",
     notes: enq.message || "",
     createdAt: new Date().toISOString(),
+    termsVersion: termSetsOf(state.property).version || 1,
   };
   state.bookings.unshift(booking);
+  const agreed = [];
+  if (enq.agreeHall) agreed.push("hall");
+  if (enq.agreeRoom) agreed.push("room");
+  recordAgreement(state, { bookingId: booking.id, guestId: guest.id, sections: agreed, source: "Website" });
   state.enquiries.unshift({
     id: uid("en"),
     bookingId: booking.id,
@@ -616,16 +1292,37 @@ export function issueDocument(bookingId, type) {
 }
 
 const MAX_DOC = 8 * 1024 * 1024;
+const MAX_VIDEO = 100 * 1024 * 1024;
+
+function isVideoFile(file) {
+  return /^video\//.test(file.type || "") || /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(file.name || "");
+}
+
+function isAllowedUpload(file) {
+  return (
+    /^(image\/|application\/pdf|video\/)/.test(file.type || "") ||
+    /\.(pdf|jpe?g|png|webp|gif|mp4|mov|webm|m4v|avi|mkv)$/i.test(file.name || "")
+  );
+}
 
 export async function attachDocument({ bookingId, guestId, typeId, file }) {
   if (!file) return { error: "Choose a file." };
-  if (file.size > MAX_DOC) return { error: "Each file must be under 8 MB." };
-  const ok = /^(image\/|application\/pdf)/.test(file.type) || /\.(pdf|jpe?g|png|webp)$/i.test(file.name);
-  if (!ok) return { error: "Upload PDF or image (JPG, PNG, WebP)." };
+  const video = isVideoFile(file);
+  const limit = video ? MAX_VIDEO : MAX_DOC;
+  if (file.size > limit) {
+    return { error: video ? "Each video must be under 100 MB." : "Each file must be under 8 MB." };
+  }
+  if (!isAllowedUpload(file)) {
+    return { error: "Upload PDF, image (JPG, PNG, WebP) or video (MP4, MOV, WebM)." };
+  }
   const spec = specById(typeId);
   const id = uid("doc");
   await putBlob(id, file);
   const state = load();
+  const same = (state.documents || []).filter(
+    (d) => d.typeId === typeId && ((bookingId && d.bookingId === bookingId) || (!bookingId && guestId && d.guestId === guestId))
+  );
+  for (const old of same) await deleteBlob(old.id);
   const rec = {
     id,
     bookingId: bookingId || "",
@@ -641,7 +1338,7 @@ export async function attachDocument({ bookingId, guestId, typeId, file }) {
     verified: false,
     storage: "This computer",
   };
-  state.documents = [rec, ...(state.documents || [])];
+  state.documents = [rec, ...(state.documents || []).filter((d) => !same.some((old) => old.id === d.id))];
   audit(state, "Document uploaded", rec.label, rec.fileName);
   persist(state);
   return { state: load(), doc: rec };

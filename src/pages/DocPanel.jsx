@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { coverage, formatBytes, requiredList } from "../docTypes";
 import { downloadBlob, getBlob } from "../fileStore";
+import { formatDateTime } from "../lib";
 import { Pill } from "../ui";
 
 export default function DocPanel({ state, bookingId, guestId, types: typeOverride, pending, onPending, onAttach, onRemove, onVerify }) {
@@ -12,6 +13,7 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
   const cov = bookingId ? coverage(state, bookingId) : null;
   const [view, setView] = useState(null);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState(null);
 
   useEffect(() => {
     return () => {
@@ -34,15 +36,31 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
     downloadBlob(row, doc.fileName);
   }
 
-  async function pick(typeId, file) {
+  async function pick(typeId, file, hadFile) {
     setErr("");
     if (!file) return;
     if (onPending) {
       onPending([...(pending || []).filter((p) => p.typeId !== typeId), { typeId, file }]);
+      setNote({ typeId, text: hadFile ? `Updated · ${file.name}` : `Uploaded · ${file.name}` });
       return;
     }
     const out = await onAttach({ bookingId, guestId, typeId, file });
-    if (out?.error) setErr(out.error);
+    if (out?.error) {
+      setErr(out.error);
+      return;
+    }
+    setNote({ typeId, text: hadFile ? `Updated · ${file.name}` : `Uploaded · ${file.name}` });
+  }
+
+  function dropStaged(typeId) {
+    onPending?.((pending || []).filter((p) => p.typeId !== typeId));
+    setNote({ typeId, text: "Removed. Upload the correct file." });
+  }
+
+  async function dropSaved(rec) {
+    if (!onRemove) return;
+    await onRemove(rec.id);
+    setNote({ typeId: rec.typeId, text: "Deleted. Upload the correct file if needed." });
   }
 
   const pendingMap = Object.fromEntries((pending || []).map((p) => [p.typeId, p.file]));
@@ -52,7 +70,7 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
       {cov && (
         <p className="muted">
           {cov.ok ? "All required documents are on file." : `${cov.missing.length} required document(s) missing.`}{" "}
-          Storage: this computer (IndexedDB) · PDF or image · max 8 MB each.
+          Storage: this computer (IndexedDB) · PDF, image or video · images/PDF max 8 MB · videos max 100 MB. Wrong file? Use Delete, then Upload.
         </p>
       )}
       {err && <p style={{ color: "var(--due)" }}>{err}</p>}
@@ -70,6 +88,8 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
           {types.map((t) => {
             const rec = uploaded.find((d) => d.typeId === t.id);
             const staged = pendingMap[t.id];
+            const hasFile = Boolean(rec || staged);
+            const justNow = note?.typeId === t.id;
             return (
               <tr key={t.id}>
                 <td>
@@ -79,12 +99,17 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
                 <td>{t.required ? <Pill status="Due">Required</Pill> : <Pill status="Cancelled">Optional</Pill>}</td>
                 <td>
                   {rec ? (
-                    rec.verified ? <Pill status="Paid">Verified</Pill> : <Pill status="Advance">Uploaded</Pill>
+                    rec.verified ? <Pill status="Paid">Verified</Pill> : <Pill status="Paid">{justNow ? "Updated" : "On file"}</Pill>
                   ) : staged ? (
-                    <Pill status="Advance">Ready to save</Pill>
+                    <Pill status="Paid">{justNow && note?.text?.startsWith("Updated") ? "Updated" : "Uploaded"}</Pill>
                   ) : (
                     <Pill status="Due">Missing</Pill>
                   )}
+                  {justNow ? (
+                    <div style={{ color: "var(--ok)", fontSize: 12, marginTop: 4 }}>{note.text}</div>
+                  ) : rec?.uploadedAt ? (
+                    <div className="muted">{formatDateTime(rec.uploadedAt)}</div>
+                  ) : null}
                 </td>
                 <td>
                   {rec ? (
@@ -100,14 +125,22 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
                 </td>
                 <td className="row">
                   <label className="btn ghost small" style={{ margin: 0 }}>
-                    {rec || staged ? "Replace" : "Upload"}
+                    {hasFile ? "Replace" : "Upload"}
                     <input
                       type="file"
-                      accept="image/*,.pdf,application/pdf"
+                      accept="image/*,video/*,.pdf,.mp4,.mov,.webm,.m4v,application/pdf"
                       hidden
-                      onChange={(e) => pick(t.id, e.target.files?.[0])}
+                      onChange={(e) => {
+                        pick(t.id, e.target.files?.[0], hasFile);
+                        e.target.value = "";
+                      }}
                     />
                   </label>
+                  {staged && (
+                    <button type="button" className="btn danger small" onClick={() => dropStaged(t.id)}>
+                      Delete
+                    </button>
+                  )}
                   {rec && (
                     <>
                       <button type="button" className="btn small" onClick={() => open(rec)}>View</button>
@@ -118,7 +151,7 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
                         </button>
                       )}
                       {onRemove && (
-                        <button type="button" className="btn danger small" onClick={() => onRemove(rec.id)}>Delete</button>
+                        <button type="button" className="btn danger small" onClick={() => dropSaved(rec)}>Delete</button>
                       )}
                     </>
                   )}
@@ -138,6 +171,8 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
             </div>
             {String(view.mime).startsWith("image/") ? (
               <img src={view.url} alt={view.fileName} style={{ maxWidth: "100%", maxHeight: "70vh" }} />
+            ) : String(view.mime).startsWith("video/") || /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(view.fileName || "") ? (
+              <video src={view.url} controls playsInline style={{ maxWidth: "100%", maxHeight: "70vh" }} />
             ) : (
               <iframe title={view.fileName} src={view.url} style={{ width: "100%", height: "70vh", border: 0 }} />
             )}

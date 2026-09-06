@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { hallDayStatus, roomOccupiesDate } from "../engine";
 import { addDays, formatDate, monthMatrix, parseISO, pad, todayISO, weekDays } from "../lib";
 import { PageHead, Pill } from "../ui";
@@ -6,8 +6,7 @@ import { PageHead, Pill } from "../ui";
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function slotWords(type) {
-  if (type === "half-day") return "Evening";
-  if (type === "hourly") return "By hours";
+  if (type === "half-day") return "Half day";
   return "Full day";
 }
 
@@ -101,6 +100,12 @@ export default function Calendar({ state, go, focusDate }) {
   const today = todayISO();
   const [view, setView] = useState("month");
   const [cursor, setCursor] = useState(focusDate || today);
+
+  // Always land on today when opened without a specific date (stays current month).
+  useEffect(() => {
+    setCursor(focusDate || todayISO());
+  }, [focusDate]);
+
   const d = parseISO(cursor);
   const cells = monthMatrix(d.getFullYear(), d.getMonth());
   const week = weekDays(cursor);
@@ -307,7 +312,7 @@ function DayPanel({ state, iso, marks, go }) {
       </p>
 
       <div className="cal-block">
-        <h4>Function halls</h4>
+        <h4>Convention halls</h4>
         {marks.halls.map(({ hall, booked, slots }) => {
           const slot = slots[0];
           return (

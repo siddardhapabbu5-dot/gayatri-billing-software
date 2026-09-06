@@ -4,7 +4,12 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 5177,
+    strictPort: true,
     host: true,
+    watch: {
+      // Large MP4s under OneDrive can lock and crash Vite's file watcher (EBUSY).
+      ignored: ["**/public/site/images/gallery/videos/**"],
+    },
   },
 });

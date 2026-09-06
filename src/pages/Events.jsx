@@ -1,12 +1,17 @@
 import { PageHead, Pill } from "../ui";
 
 export default function Events({ state, onTask }) {
+  const activeEvents = state.events.filter((ev) => {
+    const bk = state.bookings.find((b) => b.id === ev.bookingId);
+    return bk && bk.status !== "Cancelled";
+  });
+
   return (
     <>
-      <PageHead title="Event projects" sub="Each confirmed hall booking becomes an event with a run-sheet. Assign vendors and move tasks from pending → in progress → done." />
-      {state.events.length === 0 && <div className="empty">No event projects yet.</div>}
+      <PageHead title="Event projects" sub="Each confirmed hall booking becomes an event with a run-sheet. Cancelled bookings are removed from this list." />
+      {activeEvents.length === 0 && <div className="empty">No event projects yet.</div>}
       <div className="g2">
-        {state.events.map((ev) => {
+        {activeEvents.map((ev) => {
           const bk = state.bookings.find((b) => b.id === ev.bookingId);
           const guest = state.guests.find((g) => g.id === bk?.guestId);
           const done = ev.tasks.filter((t) => t.status === "Done").length;

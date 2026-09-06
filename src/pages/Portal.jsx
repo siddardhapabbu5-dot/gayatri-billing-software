@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { money, todayISO } from "../lib";
+import { capacityText, money, todayISO } from "../lib";
 import { PageHead } from "../ui";
 
 export default function Portal({ state, onEnquire, onBack }) {
@@ -10,7 +10,7 @@ export default function Portal({ state, onEnquire, onBack }) {
     date: todayISO(),
     hall: state.halls[0]?.name,
     guests: 300,
-    type: "Marriage",
+    type: "Conference",
     message: "",
   });
   const [done, setDone] = useState(null);
@@ -30,12 +30,12 @@ export default function Portal({ state, onEnquire, onBack }) {
           </button>
         )}
       </div>
-      <PageHead title="Check date · hall · rooms · package" sub="Online enquiry posts into the same VHMS. Payment gateway and WhatsApp confirmation connect in Phase 4." />
+      <PageHead title="Check date · hall · rooms" sub="Online enquiry posts into the same VHMS. Payment gateway and WhatsApp confirmation connect in Phase 4." />
       <div className="g3" style={{ marginBottom: 16 }}>
         {state.halls.map((h) => (
           <div key={h.id} className="panel">
             <h3>{h.name}</h3>
-            <p className="muted">{h.capacity} seated · {h.parking} parking · {h.kind}</p>
+            <p className="muted">{capacityText(h)} · {h.parking} parking · {h.kind}</p>
             <p>{money(h.rates.fullDay, state.property.currency, state.property.locale)} / 24 hours</p>
           </div>
         ))}

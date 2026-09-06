@@ -15,9 +15,9 @@ export const HALL_DOCS = [
   { id: "hall-contract", label: "Signed hall contract", hint: "Signed quotation / terms / e-contract", required: true, scope: "hall" },
   { id: "hall-advance", label: "Advance payment proof", hint: "UPI screenshot, bank slip or cheque copy", required: true, scope: "hall" },
   { id: "hall-gstin", label: "GSTIN / company PAN", hint: "When the bill is in a company name", required: false, scope: "hall" },
-  { id: "hall-invite", label: "Wedding card / invitation", hint: "Event name and date as printed", required: false, scope: "hall" },
-  { id: "hall-marriage", label: "Marriage certificate", hint: "If requested for marriage bookings", required: false, scope: "hall" },
-  { id: "hall-noc", label: "Police / loudspeaker NOC", hint: "Late DJ or outdoor procession", required: false, scope: "hall" },
+  { id: "hall-invite", label: "Event invitation / agenda", hint: "Event name and date as printed", required: false, scope: "hall" },
+  { id: "hall-po", label: "Purchase order / company letter", hint: "If the organiser is a company", required: false, scope: "hall" },
+  { id: "hall-noc", label: "Police / loudspeaker NOC", hint: "Late sound or outdoor programme", required: false, scope: "hall" },
   { id: "hall-deposit", label: "Security deposit cheque", hint: "Refundable deposit instrument", required: false, scope: "hall" },
 ];
 

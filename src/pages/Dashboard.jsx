@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { bookingFolio, hallDayStatus, hallOccupiesDate, occupancyStats, originLabel, revenueBreakdown, roomOccupiesDate } from "../engine";
-import { addDays, formatDate, money, monthMatrix, pad, todayISO } from "../lib";
+import { bookingFolio, hallDayStatus, hallOccupiesDate, hotelKpis, occupancyStats, originLabel, revenueBreakdown, roomOccupiesDate } from "../engine";
+import { addDays, capacityText, formatDate, money, monthMatrix, pad, todayISO } from "../lib";
+import { housekeepingOf, occupancyOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export default function Dashboard({ state, go }) {
+export default function Dashboard({ state, go, onClearBookings }) {
   const today = todayISO();
   const occ = occupancyStats(state, today);
+  const kpis = hotelKpis(state, today);
   const rev = revenueBreakdown(state);
   const cur = state.property.currency;
   const loc = state.property.locale;
@@ -29,7 +31,7 @@ export default function Dashboard({ state, go }) {
     .filter((b) => !["Cancelled", "Refunded"].includes(b.status) && b.eventDate >= today)
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
   const recent = [...state.bookings].slice(0, 6);
-  const [calMonth, setCalMonth] = useState(upcoming[0]?.eventDate || today);
+  const [calMonth, setCalMonth] = useState(today);
   const calDate = new Date(`${calMonth}T12:00:00`);
   const cells = monthMatrix(calDate.getFullYear(), calDate.getMonth());
   const monthLabel = calDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -38,10 +40,10 @@ export default function Dashboard({ state, go }) {
     .reduce((s, p) => s + Number(p.amount || 0), 0);
 
   const rooms = {
-    available: state.rooms.filter((r) => r.status === "Available" || r.status === "Inspected").length,
-    occupied: state.rooms.filter((r) => r.status === "Occupied" || r.status === "Reserved").length,
-    cleaning: state.rooms.filter((r) => r.status === "Dirty" || r.status === "Cleaning").length,
-    maint: state.rooms.filter((r) => r.status === "Maintenance" || r.status === "Out of order").length,
+    available: state.rooms.filter((r) => occupancyOf(r) === "Available").length,
+    occupied: state.rooms.filter((r) => occupancyOf(r) === "Occupied" || occupancyOf(r) === "Reserved").length,
+    cleaning: state.rooms.filter((r) => housekeepingOf(r) === "Dirty" || housekeepingOf(r) === "Cleaning").length,
+    maint: state.rooms.filter((r) => occupancyOf(r) === "Maintenance" || occupancyOf(r) === "Out of order").length,
   };
 
   const spark = Array.from({ length: 7 }, (_, i) => {
@@ -78,6 +80,11 @@ export default function Dashboard({ state, go }) {
   return (
     <>
       <PageHead title="Dashboard" sub={`${state.property.name} · ${formatDate(today)}`}>
+        {onClearBookings && state.bookings.length > 0 && (
+          <button className="btn ghost danger" type="button" onClick={onClearBookings}>
+            Clean start
+          </button>
+        )}
         <button className="btn ghost" onClick={() => go("calendar")}>
           Calendar
         </button>
@@ -104,6 +111,16 @@ export default function Dashboard({ state, go }) {
           </div>
           <div className="s">{occ.occPct}% occupancy</div>
         </div>
+        <div className="kpi tone-a">
+          <div className="k">ADR</div>
+          <div className="v">{m(kpis.adr)}</div>
+          <div className="s">Room revenue ÷ room nights (MTD)</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">RevPAR</div>
+          <div className="v">{m(kpis.revpar)}</div>
+          <div className="s">Room revenue ÷ available rooms × days</div>
+        </div>
         <div className="kpi tone-d">
           <div className="k">Today's collection</div>
           <div className="v">{m(todayPaid)}</div>
@@ -128,6 +145,9 @@ export default function Dashboard({ state, go }) {
               <h3 className="dash-month">{monthLabel}</h3>
             </div>
             <div className="row">
+              <button className="btn ghost small" type="button" onClick={() => setCalMonth(todayISO())}>
+                Today
+              </button>
               <button className="btn ghost small" type="button" onClick={() => shiftCal(1)}>
                 Next
               </button>
@@ -171,6 +191,7 @@ export default function Dashboard({ state, go }) {
             </button>
           </div>
           <div className="dash-list">
+            {!recent.length && <p className="muted dash-empty">No bookings — calendar is clear.</p>}
             {recent.map((b) => {
               const g = state.guests.find((x) => x.id === b.guestId);
               const { totals } = bookingFolio(state, b.id);
@@ -209,7 +230,7 @@ export default function Dashboard({ state, go }) {
                   <div className="muted">
                     {slot
                       ? `${slot.guestName} · ${slot.source} · ${slot.windowLabel}`
-                      : `Up to ${h.capacity.toLocaleString("en-IN")} guests`}
+                      : `${capacityText(h)} guests`}
                   </div>
                 </div>
                 {st.booked ? <Pill status="Occupied">Booked</Pill> : <Pill status="Available" />}
@@ -265,7 +286,7 @@ export default function Dashboard({ state, go }) {
               ["New booking", "reserve"],
               ["Check hall dates", "calendar"],
               ["Create invoice", "billing"],
-              ["Room rack", "rooms"],
+              ["Rooms", "rooms"],
               ["Add payment", "billing"],
               ["View reports", "reports"],
             ].map(([label, id]) => (

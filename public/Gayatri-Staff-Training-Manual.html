@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gayatri Convention — Staff Software Training Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #2a2724;
+      --muted: #5c544c;
+      --accent: #1a6b5c;
+      --gold: #c6a452;
+      --line: #ddd5c8;
+      --bg: #faf8f4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 11pt;
+      line-height: 1.55;
+      color: var(--ink);
+      background: #888;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 12px auto;
+      padding: 18mm 16mm 20mm;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+    }
+    @media print {
+      body { background: #fff; }
+      .page {
+        margin: 0;
+        box-shadow: none;
+        page-break-after: always;
+        min-height: auto;
+      }
+      .page:last-child { page-break-after: auto; }
+      .no-print { display: none !important; }
+      a { color: inherit; text-decoration: none; }
+    }
+    .print-bar {
+      position: sticky;
+      top: 0;
+      z-index: 9;
+      background: #1a3d36;
+      color: #fff;
+      padding: 10px 16px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .print-bar button {
+      margin-left: 12px;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 6px;
+      background: var(--gold);
+      color: #1a1a1a;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; }
+    h1 { font-size: 28pt; margin: 0 0 8px; color: var(--accent); }
+    h2 { font-size: 16pt; margin: 24px 0 10px; color: var(--accent); border-bottom: 2px solid var(--gold); padding-bottom: 4px; }
+    h3 { font-size: 12pt; margin: 16px 0 6px; }
+    p { margin: 0 0 8px; }
+    .muted { color: var(--muted); font-size: 10pt; }
+    .cover {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 250mm;
+      text-align: center;
+    }
+    .cover .tag { letter-spacing: .2em; text-transform: uppercase; font-size: 10pt; color: var(--gold); }
+    .cover h1 { font-size: 32pt; }
+    .cover .sub { font-size: 14pt; margin: 12px 0 24px; }
+    .cover .meta { margin-top: 40px; font-size: 10pt; color: var(--muted); }
+    ol.steps, ul.bullets { margin: 8px 0 12px; padding-left: 22px; }
+    ol.steps li { margin-bottom: 6px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin: 10px 0 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 7px 9px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef5f3; font-weight: 600; }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 12px 0;
+      padding: 12px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 10pt;
+    }
+    .flow span {
+      background: #fff;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-weight: 600;
+    }
+    .flow em { color: var(--muted); font-style: normal; }
+    .warn, .tip, .ok {
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin: 10px 0;
+      font-size: 10pt;
+    }
+    .warn { background: #fff4f2; border-left: 4px solid #c44; }
+    .tip { background: #f0f7f5; border-left: 4px solid var(--accent); }
+    .ok { background: #f6f9ee; border-left: 4px solid #6a8; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc li { margin-bottom: 4px; }
+    .step-num {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 10pt;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { padding: 4px 0 4px 24px; position: relative; }
+    .checklist li::before { content: "☐"; position: absolute; left: 0; }
+    .logo-wrap { margin-bottom: 20px; text-align: center; }
+    .logo-wrap img.logo-emblem {
+      width: 140px;
+      height: 140px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 10px;
+    }
+    .logo-wrap img.logo-emblem-fallback {
+      width: 240px;
+      height: 155px;
+      object-fit: cover;
+      object-position: center 8%;
+      display: none;
+      margin: 0 auto 10px;
+      border-radius: 6px;
+    }
+    .logo-wrap .brand-name {
+      font-family: Georgia, serif;
+      font-size: 22pt;
+      color: var(--accent);
+      margin-top: 8px;
+      font-weight: 600;
+    }
+    .logo-wrap .brand-tag { color: var(--gold); letter-spacing: .15em; text-transform: uppercase; font-size: 9pt; }
+    .fill { border-bottom: 1px solid var(--line); min-width: 140px; display: inline-block; }
+    .telugu, .telugu h2, .telugu h3 { font-family: "Noto Sans Telugu", "Segoe UI", sans-serif; }
+    .telugu { font-size: 11.5pt; line-height: 1.65; }
+    .bilingual th { width: 50%; }
+    .contact-box {
+      margin-top: 16px;
+      padding: 12px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 10pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar no-print">
+    Open this file in Chrome or Edge → click <strong>Save as PDF</strong> or press Ctrl+P → Destination: <strong>Save as PDF</strong>
+    <button type="button" onclick="window.print()">Save as PDF / Print</button>
+  </div>
+
+  <!-- COVER -->
+  <section class="page cover">
+    <div class="logo-wrap">
+      <img
+        class="logo-emblem"
+        src="gayatri-logo.png"
+        alt="Gayatri Convention"
+        onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='block';"
+      />
+      <img
+        class="logo-emblem-fallback"
+        src="brochure-1.png"
+        alt="Gayatri Convention"
+      />
+      <div class="brand-tag">Convention</div>
+      <div class="brand-name">Gayatri Convention</div>
+      <p class="muted" style="margin-top:4px;">Palagummi · Konaseema · AP 533249</p>
+    </div>
+    <h1>Staff Software<br />Training Manual</h1>
+    <p class="sub">Step-by-step guide for front desk, accounts &amp; management</p>
+    <p class="muted">Reservations · Payment · CRM · Documents · Calendar · Reports</p>
+    <div class="contact-box">
+      <strong>Desk:</strong> +91 98496 00555 · 10:00 – 20:00<br />
+      <strong>Email:</strong> events@gayatrifunctionhall.com<br />
+      <strong>తెలుగు సారాంశం:</strong> Page at end of this manual
+    </div>
+    <p class="meta">Version for live operations · Print and keep at the front desk<br />Software runs in the browser — data is saved on this computer</p>
+  </section>
+
+  <!-- STAFF ROSTER -->
+  <section class="page" id="staff">
+    <div class="logo-wrap" style="margin-bottom:12px;">
+      <img class="logo-emblem" src="gayatri-logo.png" alt="Gayatri" style="width:64px;height:64px;" />
+    </div>
+    <h2>Staff roster &amp; software access</h2>
+    <p>Write each team member’s <strong>real name</strong> and phone below. Pin this page at the front desk. Only listed staff should use the main booking computer.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Role in software</th>
+          <th>Staff name (write here)</th>
+          <th>Mobile</th>
+          <th>Main duties</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Owner / Administrator</strong></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td>Master data, Settings, rates, clean start, final approval</td>
+        </tr>
+        <tr>
+          <td><strong>Duty manager</strong></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td>All bookings, calendar, events, reports, staff supervision</td>
+        </tr>
+        <tr>
+          <td><strong>Front desk — Shift 1</strong></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td>Reservations, payment, guest CRM, documents, WhatsApp</td>
+        </tr>
+        <tr>
+          <td><strong>Front desk — Shift 2</strong></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td>Same as Shift 1 · hand over pending balances at shift change</td>
+        </tr>
+        <tr>
+          <td><strong>Housekeeping</strong></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td>Rooms page — clean / dirty status, check-out updates</td>
+        </tr>
+        <tr>
+          <td><strong>Accounts</strong></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td><span class="fill">&nbsp;</span></td>
+          <td>Payment &amp; Invoice review, Reports → Collections Excel</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="tip">
+      <strong>Shift handover rule:</strong> Outgoing staff must tell incoming staff: (1) today’s events, (2) balance due list, (3) missing documents, (4) room status.
+    </div>
+    <h3>Software login (current setup)</h3>
+    <p class="muted">Staff panel opens from the website — click <strong>Staff</strong>. User roles in the system:</p>
+    <table>
+      <thead><tr><th>System user</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>Owner</td><td>Administrator — full access</td></tr>
+        <tr><td>Duty manager</td><td>Property manager</td></tr>
+        <tr><td>Housekeeping</td><td>Rooms &amp; calendar only</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Update names in Settings when user management is enabled. Until then, all staff share the same computer session.</p>
+  </section>
+
+  <!-- TOC -->
+  <section class="page">
+    <h2>Contents</h2>
+    <ol class="toc">
+      <li><a href="#staff">Staff roster — write names here</a></li>
+      <li><a href="#s1">1. How to open staff software</a></li>
+      <li><a href="#s2">2. Main menu — what each section does</a></li>
+      <li><a href="#s3">3. The 4-step booking process (most important)</a></li>
+      <li><a href="#s4">4. Step 1 — New reservation (detailed)</a></li>
+      <li><a href="#s5">5. Step 2 — Payment &amp; Invoice</a></li>
+      <li><a href="#s6">6. Step 3 — Guests / CRM</a></li>
+      <li><a href="#s7">7. Step 4 — Documents (KYC &amp; proofs)</a></li>
+      <li><a href="#s8">8. Calendar — check availability</a></li>
+      <li><a href="#s9">9. Rooms — check-in, check-out, housekeeping</a></li>
+      <li><a href="#s10">10. Event projects (run-sheet)</a></li>
+      <li><a href="#s11">11. Reports — collections &amp; cancellations</a></li>
+      <li><a href="#s12">12. Cancel a booking (do not delete)</a></li>
+      <li><a href="#s13">13. Staff roles — who can do what</a></li>
+      <li><a href="#s14">14. Common mistakes to avoid</a></li>
+      <li><a href="#s15">15. Daily checklist for front desk</a></li>
+      <li><a href="#te">తెలుగు సారాంశం — Telugu summary</a></li>
+    </ol>
+    <div class="tip">
+      <strong>Training tip:</strong> Teach staff the <strong>4-step flow</strong> first. Everything else (Calendar, Reports, Events) supports that flow.
+    </div>
+  </section>
+
+  <!-- 1 -->
+  <section class="page" id="s1">
+    <h2>1. How to open staff software</h2>
+    <ol class="steps">
+      <li>Open the Gayatri website in <strong>Chrome</strong> or <strong>Edge</strong> (recommended).</li>
+      <li>Click <strong>Staff</strong> in the top menu (or scroll to the Staff section on the home page).</li>
+      <li>You enter the <strong>staff panel</strong> — left menu shows Dashboard, Calendar, Reservations, etc.</li>
+      <li>Use the same computer every day if possible — <strong>bookings are stored in this browser</strong> (not in the cloud yet).</li>
+    </ol>
+    <div class="warn">
+      <strong>Important:</strong> If you open the software on a different PC, you will not see yesterday’s bookings unless data was backed up. Always use the main front-desk computer for live work.
+    </div>
+    <h3>Refresh if something looks wrong</h3>
+    <p>Press <strong>Ctrl + Shift + R</strong> (hard refresh) after updates. Do not use browser “Clear all data” — that removes all bookings.</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="page" id="s2">
+    <h2>2. Main menu — what each section does</h2>
+    <table>
+      <thead>
+        <tr><th>Menu</th><th>Use when…</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Dashboard</strong></td><td>Quick view: today’s bookings, hall status, recent bookings, KPIs</td></tr>
+        <tr><td><strong>Calendar</strong></td><td>See which hall is booked on which date — before confirming a new booking</td></tr>
+        <tr><td><strong>Venues</strong></td><td>View hall capacity, half-day / full-day rates (read-only rates; edit in Master)</td></tr>
+        <tr><td><strong>Rooms</strong></td><td>Room floor plan, check-in/out, housekeeping status</td></tr>
+        <tr><td><strong>Reservations</strong></td><td><strong>Start every booking here</strong> — create and manage bookings</td></tr>
+        <tr><td><strong>Guests / CRM</strong></td><td>Guest contact history, notes, all their bookings</td></tr>
+        <tr><td><strong>Documents</strong></td><td>Upload ID, contract, payment proofs per booking</td></tr>
+        <tr><td><strong>Events</strong></td><td>Run-sheet tasks after hall booking (Hall, Catering, DJ, etc.)</td></tr>
+        <tr><td><strong>Payment &amp; Invoice</strong></td><td>Collect advance/balance, print bill, issue receipts</td></tr>
+        <tr><td><strong>Reports</strong></td><td>Cash/UPI collections, cancellations — for management &amp; accounts</td></tr>
+        <tr><td><strong>Settings</strong></td><td>Terms, policies, audit log (admin only)</td></tr>
+        <tr><td><strong>Master data</strong></td><td>Halls, rooms, rates, event types (admin only — do not change without approval)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 3 -->
+  <section class="page" id="s3">
+    <h2>3. The 4-step booking process</h2>
+    <p>Every hall or room booking follows this order. The grey bar on the Reservations page is a <strong>guide</strong>, not a live booking.</p>
+    <div class="flow">
+      <span>1 Reservations</span> <em>→</em>
+      <span>2 Payment &amp; Invoice</span> <em>→</em>
+      <span>3 Guests / CRM</span> <em>→</em>
+      <span>4 Documents</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Step</th><th>Action</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td>Enter guest details, pick hall/room, agree terms, click <strong>Confirm reservation</strong></td>
+          <td>Booking created · calendar blocked · bill opened</td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td>Record advance or full payment · print bill / receipt</td>
+          <td>Payment history · AR/RC/TX documents</td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td>Verify guest in CRM · add notes · WhatsApp / call</td>
+          <td>Guest record for repeat bookings</td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td>Upload ID, contract, advance proof</td>
+          <td>Complete KYC file for the booking</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="ok">
+      <strong>Rule:</strong> Never skip Step 1. Do not take payment in a notebook only — always create the reservation in the software first so the calendar stays correct.
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="page" id="s4">
+    <h2>4. Step 1 — New reservation (detailed)</h2>
+    <p><span class="step-num">1</span> Go to <strong>Reservations</strong> → click <strong>+ New reservation</strong></p>
+    <p><span class="step-num">2</span> Fill <strong>Guest</strong> section:</p>
+    <ul class="bullets">
+      <li><strong>Name</strong> and <strong>Phone</strong> — mandatory (10–15 digits)</li>
+      <li><strong>Customer GST</strong> — only if billing to a company</li>
+      <li><strong>Event type</strong> — Marriages, Conference, Seminar, etc.</li>
+      <li><strong>Source</strong> — Direct, Walk-in, Website, Corporate, etc.</li>
+      <li><strong>Event date</strong> — must be today or future</li>
+      <li><strong>ID type &amp; number</strong> — for records</li>
+      <li><strong>Expected guests</strong> — delegate / pax count</li>
+    </ul>
+    <p><span class="step-num">3</span> Select <strong>Hall</strong> (convention booking):</p>
+    <ul class="bullets">
+      <li>Click the hall card (Imperial Ballroom, Garden Pavilion, or Heritage Courtyard)</li>
+      <li>Choose <strong>Half day</strong> or <strong>Full day (24h)</strong> only</li>
+      <li>If hall shows as booked, pick another date or hall — do not force through</li>
+      <li>Tick <strong>Convention Terms &amp; Conditions</strong> checkbox</li>
+    </ul>
+    <p><span class="step-num">4</span> Select <strong>Room</strong> (optional — if guest also stays):</p>
+    <ul class="bullets">
+      <li>Click an <strong>Available</strong> room on the floor plan</li>
+      <li>Set check-in / check-out dates</li>
+      <li>Tick <strong>Room Booking Terms &amp; Conditions</strong></li>
+    </ul>
+    <p><span class="step-num">5</span> Review the <strong>Estimate</strong> panel (subtotal, GST, total, balance)</p>
+    <p><span class="step-num">6</span> Optionally attach documents at booking time (or upload later in Step 4)</p>
+    <p><span class="step-num">7</span> Click <strong>Confirm reservation</strong></p>
+    <div class="warn">
+      <strong>Errors that block confirm:</strong> Missing name/phone · No hall or room selected · Hall already booked · Terms not ticked · Invalid phone format
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="page" id="s5">
+    <h2>5. Step 2 — Payment &amp; Invoice</h2>
+    <p>After confirm, you are taken to the bill automatically. You can also open from Reservations → <strong>Payment</strong> button.</p>
+    <h3>Collect payment</h3>
+    <ol class="steps">
+      <li>Open the booking bill (Payment &amp; Invoice)</li>
+      <li>Scroll to <strong>Collect remaining</strong> form</li>
+      <li>Enter <strong>Amount</strong>, <strong>Payment date</strong>, <strong>Mode</strong> (Cash / UPI / Card / Net banking / Bank transfer)</li>
+      <li>Choose <strong>Kind</strong>: Advance (first payment) or Payment (settlement)</li>
+      <li>Submit — balance updates automatically</li>
+    </ol>
+    <h3>Print bill / PDF</h3>
+    <p>Click <strong>Print / PDF</strong> (top right) → choose “Save as PDF” or print on A4.</p>
+    <h3>Issue documents</h3>
+    <p>At the bottom, click chips to issue: Quotation, Proforma invoice, Tax invoice, Advance receipt, Payment receipt, Final invoice, etc. Each gets a unique number (AR, RC, TX…).</p>
+    <div class="tip">
+      <strong>GST:</strong> Bill shows Gayatri GST and customer GST (if entered). Hall hire + 18% GST is calculated on the estimate panel during reservation.
+    </div>
+  </section>
+
+  <!-- 6 & 7 -->
+  <section class="page" id="s6">
+    <h2>6. Step 3 — Guests / CRM</h2>
+    <ol class="steps">
+      <li>From Reservations, click <strong>CRM</strong> on a booking row</li>
+      <li>View guest name, phone, address, GSTIN, ID proof</li>
+      <li>See all live bookings for this guest</li>
+      <li>Use <strong>WhatsApp</strong> or <strong>Call</strong> buttons to contact guest</li>
+      <li>Edit guest details if guest provides corrections</li>
+    </ol>
+    <p class="muted">Guests appear automatically after Step 1 confirm. One guest can have multiple bookings over time.</p>
+
+    <h2 id="s7">7. Step 4 — Documents (KYC &amp; proofs)</h2>
+    <p>From Reservations → <strong>Documents</strong>, or Payment page → <strong>KYC documents</strong>.</p>
+    <h3>Hall booking — required documents</h3>
+    <ul class="bullets">
+      <li>Booking party photo ID (Aadhaar / PAN / Passport)</li>
+      <li>Address proof</li>
+      <li>Signed hall contract</li>
+      <li>Advance payment proof (UPI screenshot / bank slip)</li>
+    </ul>
+    <h3>Room stay — required documents</h3>
+    <ul class="bullets">
+      <li>Guest photo ID</li>
+      <li>Guest photograph</li>
+    </ul>
+    <h3>How to upload</h3>
+    <ol class="steps">
+      <li>Click document type chip at bottom (e.g. “Guest photo ID”)</li>
+      <li>Choose PDF or image (JPG, PNG) — max 8 MB per file</li>
+      <li>File is saved on this computer (browser storage)</li>
+      <li>Green tick = uploaded · Red = still required</li>
+    </ol>
+    <div class="warn">
+      <strong>Do not</strong> rely only on paper files — upload in software so any staff member can see proofs before the event date.
+    </div>
+  </section>
+
+  <!-- 8 9 10 -->
+  <section class="page" id="s8">
+    <h2>8. Calendar — check availability</h2>
+    <ol class="steps">
+      <li>Open <strong>Calendar</strong> from the left menu</li>
+      <li>Navigate month using arrows</li>
+      <li>Each day shows hall bookings — colour blocks per hall</li>
+      <li>Click a booking to open Payment &amp; Invoice</li>
+      <li>Before confirming a new reservation, always cross-check the event date here</li>
+    </ol>
+    <p class="muted">Cancelled bookings do not block the calendar. Active and confirmed bookings do.</p>
+
+    <h2 id="s9">9. Rooms — check-in, check-out, housekeeping</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Where</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>See room status</td><td>Rooms or Dashboard</td><td>Green = Available · Red = Occupied · Yellow = Cleaning</td></tr>
+        <tr><td>Check in guest</td><td>Rooms → select room</td><td>Check in button when reservation exists</td></tr>
+        <tr><td>Check out</td><td>Rooms → select room</td><td>Check out → room becomes Dirty for housekeeping</td></tr>
+        <tr><td>Mark room clean</td><td>Rooms</td><td>Update housekeeping status to Clean / Inspected</td></tr>
+        <tr><td>Room types &amp; rates</td><td>Rooms → Room types table</td><td>View only; edit in Master data (admin)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="s10">10. Event projects (run-sheet)</h2>
+    <p>When a <strong>hall</strong> booking is confirmed, an event project is created automatically under <strong>Events</strong>.</p>
+    <ul class="bullets">
+      <li>Tasks: Hall, Rooms, Catering, Decoration, Photography, DJ, Parking, Security, Stage</li>
+      <li>Assign vendor names and move status: Pending → In progress → Done</li>
+      <li>If booking is <strong>cancelled</strong>, event disappears from this list</li>
+    </ul>
+    <p class="muted">Catering, decoration, DJ are organised by the guest — Gayatri provides venue only. Tasks help your team track coordination.</p>
+  </section>
+
+  <!-- 11 12 -->
+  <section class="page" id="s11">
+    <h2>11. Reports — collections &amp; cancellations</h2>
+    <h3>Collections tab</h3>
+    <ol class="steps">
+      <li>Reports → <strong>Collections</strong></li>
+      <li>Set <strong>From / To</strong> dates (Today · This month · All dates)</li>
+      <li>Filter: All · Hall · Room stay</li>
+      <li>View Cash, UPI, Advance, Balance totals</li>
+      <li><strong>Download Excel</strong> or <strong>Print / PDF</strong> for accounts</li>
+    </ol>
+    <h3>Cancellations tab</h3>
+    <ol class="steps">
+      <li>Reports → <strong>Cancellations</strong></li>
+      <li>See all cancelled bookings with date, billed amount, refund</li>
+      <li>Click <strong>View bill</strong> to see historical bill (read-only)</li>
+    </ol>
+
+    <h2 id="s12">12. Cancel a booking (do not delete)</h2>
+    <p>On Reservations → Active list → click <strong>Cancel</strong> (red button).</p>
+    <ul class="bullets">
+      <li>Booking stays on record under <strong>Cancelled</strong> tab and Reports → Cancellations</li>
+      <li>Calendar and hall hold are <strong>released</strong> immediately</li>
+      <li>Software asks if you want to record a <strong>refund</strong> if payment was collected</li>
+      <li>Event run-sheet is removed from Events page</li>
+    </ul>
+    <div class="warn">
+      <strong>Do not</strong> use “Reload demo property data” in Settings — that resets all master data.<br />
+      <strong>Clean start</strong> (Dashboard or Settings) clears ALL bookings — use only when starting fresh, not for single cancellations.
+    </div>
+  </section>
+
+  <!-- 13 14 15 -->
+  <section class="page" id="s13">
+    <h2>13. Staff roles — who can do what</h2>
+    <table>
+      <thead><tr><th>Role</th><th>Can access</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Administrator</strong></td><td>Everything including Master data &amp; Settings</td></tr>
+        <tr><td><strong>Property manager</strong></td><td>All operations except full system reset</td></tr>
+        <tr><td><strong>Front desk</strong></td><td>Dashboard, Calendar, Rooms, Reservations, Guests, Billing, Documents</td></tr>
+        <tr><td><strong>Housekeeping</strong></td><td>Dashboard, Rooms, Calendar</td></tr>
+        <tr><td><strong>Accounts</strong></td><td>Dashboard, Billing, Reports, Vendors</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="s14">14. Common mistakes to avoid</h2>
+    <table>
+      <thead><tr><th>Mistake</th><th>Correct action</th></tr></thead>
+      <tbody>
+        <tr><td>Double-booking same hall on same date</td><td>Check Calendar first; software blocks if already booked</td></tr>
+        <tr><td>Taking payment without creating reservation</td><td>Always Step 1 first, then payment</td></tr>
+        <tr><td>Forgetting to tick Terms checkboxes</td><td>Hall terms for hall · Room terms for rooms</td></tr>
+        <tr><td>Wrong slot type</td><td>Only Half day or Full day (24h) — no hourly</td></tr>
+        <tr><td>Thinking 1→2→3→4 bar is a booking</td><td>It is a process guide — check Active list for real bookings</td></tr>
+        <tr><td>Using different PC each day</td><td>Use same front-desk computer; data is local</td></tr>
+        <tr><td>Clearing browser data</td><td>Never clear site data — you lose all bookings</td></tr>
+        <tr><td>Not uploading ID / advance proof</td><td>Complete Documents before event date</td></tr>
+        <tr><td>Editing rates on Venues page only</td><td>Permanent rate changes → Master data (admin)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="page" id="s15">
+    <h2>15. Daily checklist for front desk</h2>
+    <ul class="checklist">
+      <li>Open staff software on the main desk computer</li>
+      <li>Check Dashboard — today’s bookings and hall status</li>
+      <li>Check Calendar for the next 7 days</li>
+      <li>Follow up balance due from Payment &amp; Invoice list</li>
+      <li>Upload missing documents for upcoming events</li>
+      <li>Update room housekeeping status after check-outs</li>
+      <li>Record all cash/UPI in software the same day</li>
+      <li>Use Cancel (not delete) if guest cancels — record refund if applicable</li>
+      <li>End of week: Reports → Collections → Download Excel for accounts</li>
+    </ul>
+
+    <h2>Quick reference — hall rates (verify in Master before quoting)</h2>
+    <table>
+      <thead><tr><th>Hall</th><th>Half day</th><th>Full day (24h)</th></tr></thead>
+      <tbody>
+        <tr><td>Imperial Ballroom</td><td>₹3,00,000</td><td>₹4,50,000</td></tr>
+        <tr><td>Garden Pavilion</td><td>₹1,25,000</td><td>₹2,50,000</td></tr>
+        <tr><td>Heritage Courtyard (MINI)</td><td>₹62,500</td><td>₹1,25,000</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">+ 18% GST on hall hire. Guest rooms billed separately. Rates may change in Master data — always confirm current rates before quoting.</p>
+
+    <div class="ok" style="margin-top: 24px;">
+      <strong>End of manual.</strong> For technical support, contact your system administrator. Keep a printed copy at the front desk and train all new staff on Steps 1–4 before they handle live bookings.
+    </div>
+    <p class="muted" style="margin-top: 16px;">Gayatri Convention · Palagummi Village, Razole Mandal · Dr. B.R. Ambedkar Konaseema, AP 533249 · +91 98496 00555</p>
+  </section>
+
+  <!-- TELUGU SUMMARY -->
+  <section class="page telugu" id="te">
+    <div class="logo-wrap" style="text-align:center;">
+      <img class="logo-emblem" src="gayatri-logo.png" alt="Gayatri Convention" style="width:100px;height:100px;" />
+      <div class="brand-name">గాయత్రి కన్వెన్షన్</div>
+      <div class="brand-tag">స్టాఫ్ సాఫ్ట్‌వేర్ — తెలుగు సారాంశం</div>
+    </div>
+
+    <h2>సాఫ్ట్‌వేర్ తెరవడం</h2>
+    <ol class="steps">
+      <li>వెబ్‌సైట్ Chrome లేదా Edge లో తెరవండి.</li>
+      <li>పైన <strong>Staff</strong> క్లిక్ చేయండి.</li>
+      <li>ఎప్పటికీ <strong>అదే ఫ్రంట్ డెస్క్ కంప్యూటర్</strong> వాడండి — బుకింగ్ డేటా ఈ PC లోనే సేవ్ అవుతుంది.</li>
+    </ol>
+
+    <h2>నాలుగు దశలు — ఇది చాలా ముఖ్యం</h2>
+    <div class="flow">
+      <span>1 Reservations</span> <em>→</em>
+      <span>2 Payment</span> <em>→</em>
+      <span>3 CRM</span> <em>→</em>
+      <span>4 Documents</span>
+    </div>
+    <table class="bilingual">
+      <thead><tr><th>దశ</th><th>ఏమి చేయాలి</th></tr></thead>
+      <tbody>
+        <tr><td><strong>1 — Reservations</strong></td><td>అతిథి పేరు, ఫోన్, హాల్/గది, తేదీ, షరతులు ✓ → <strong>Confirm reservation</strong></td></tr>
+        <tr><td><strong>2 — Payment &amp; Invoice</strong></td><td>అడ్వాన్స్ / బ్యాలెన్స్ స్వీకరించండి · బిల్ ప్రింట్ / PDF</td></tr>
+        <tr><td><strong>3 — Guests / CRM</strong></td><td>అతిథి వివరాలు · WhatsApp / Call</td></tr>
+        <tr><td><strong>4 — Documents</strong></td><td>ID, చిరునామా, కాంట్రాక్ట్, అడ్వాన్స్ ప్రూఫ్ అప్‌లోడ్</td></tr>
+      </tbody>
+    </table>
+    <div class="warn">
+      <strong>ముఖ్యం:</strong> నోట్‌బుక్‌లో మాత్రమే డబ్బు వసూలు చేయకండి. ముందు సాఫ్ట్‌వేర్‌లో బుకింగ్ చేయండి — అప్పుడు క్యాలెండర్ సరిగా ఉంటుంది.
+    </div>
+
+    <h2>కొత్త బుకింగ్ — Step 1 వివరాలు</h2>
+    <ul class="bullets">
+      <li><strong>పేరు + ఫోన్</strong> — తప్పనిసరి (10–15 అంచెలు)</li>
+      <li>హాల్ ఎంచుకోండి — Imperial / Garden / Heritage · <strong>Half day</strong> లేదా <strong>Full day (24h)</strong> మాత్రమే</li>
+      <li>హాల్ ఇప్పటికే బుక్ అయితే — వేరే తేదీ లేదా వేరే హాల్</li>
+      <li><strong>Convention Terms &amp; Conditions</strong> ✓ — తప్పనిసరి</li>
+      <li>గది ఉంటే — <strong>Room Terms</strong> ✓ కూడా</li>
+    </ul>
+
+    <h2>చెల్లింపు (Step 2)</h2>
+    <ul class="bullets">
+      <li>Payment &amp; Invoice → Amount, Date, Mode (Cash / UPI / Card)</li>
+      <li>Advance = మొదటి చెల్లింపు · Payment = మిగతా బ్యాలెన్స్</li>
+      <li><strong>Print / PDF</strong> — అతిథికి కాపీ ఇవ్వండి</li>
+      <li>హాల్ ఛార్జీ + 18% GST — సాఫ్ట్‌వేర్ లెక్కిస్తుంది</li>
+    </ul>
+
+    <h2>పత్రాలు (Step 4) — తప్పక అప్‌లోడ్</h2>
+    <ul class="bullets">
+      <li>హాల్: ID, చిరునామా రుజువు, సంతకం చేసిన కాంట్రాక్ట్, అడ్వాన్స్ ప్రూఫ్</li>
+      <li>గది: ID + ఫోటో</li>
+      <li>PDF లేదా JPG — ఒక్క ఫైల్ 8 MB లోపు</li>
+    </ul>
+
+    <h2>రద్దు (Cancel)</h2>
+    <ul class="bullets">
+      <li>Reservations → <strong>Cancel</strong> బటన్ — Delete కాదు</li>
+      <li>క్యాలెండర్ వెంటనే ఖాళీ అవుతుంది</li>
+      <li>రికార్డ్ Reports → Cancellations లో ఉంటుంది</li>
+      <li>డబ్బు తిరిగి ఇస్తే — Refund రికార్డ్ చేయండి</li>
+    </ul>
+
+    <h2>తప్పులు చేయకండి</h2>
+    <table>
+      <thead><tr><th>తప్పు</th><th>సరైనది</th></tr></thead>
+      <tbody>
+        <tr><td>క్యాలెండర్ చూడకుండా బుక్</td><td>ముందు Calendar చూడండి</td></tr>
+        <tr><td>1→2→3→4 బార్ = బుకింగ్ అని అనుకోవడం</td><td>అది గైడ్ మాత్రమే — Active లిస్ట్ చూడండి</td></tr>
+        <tr><td>వేరే PC లో పని</td><td>అదే డెస్క్ PC</td></tr>
+        <tr><td>బ్రౌజర్ డేటా క్లియర్</td><td>అన్ని బుకింగ్‌లు పోతాయి — చేయకండి</td></tr>
+        <tr><td>షరతులు ✓ మరచిపోవడం</td><td>హాల్ + గది షరతులు</td></tr>
+      </tbody>
+    </table>
+
+    <h2>రోజువారీ చెక్‌లిస్ట్</h2>
+    <ul class="checklist">
+      <li>Dashboard — ఈ రోజు బుకింగ్‌లు</li>
+      <li>Calendar — వచ్చే 7 రోజులు</li>
+      <li>బ్యాలెన్స్ due — Payment &amp; Invoice</li>
+      <li>పత్రాలు లేని బుకింగ్‌లు</li>
+      <li>గదులు Clean / Dirty అప్‌డేట్</li>
+      <li>అన్ని Cash/UPI అదే రోజు సాఫ్ట్‌వేర్‌లో</li>
+    </ul>
+
+    <h2>హాల్ రేట్లు (Master లో నిర్ధారించండి)</h2>
+    <table>
+      <thead><tr><th>హాల్</th><th>అర్ట రోజు</th><th>పూర్తి రోజు (24గం)</th></tr></thead>
+      <tbody>
+        <tr><td>Imperial Ballroom</td><td>₹3,00,000</td><td>₹4,50,000</td></tr>
+        <tr><td>Garden Pavilion</td><td>₹1,25,000</td><td>₹2,50,000</td></tr>
+        <tr><td>Heritage Courtyard</td><td>₹62,500</td><td>₹1,25,000</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">+ 18% GST · గదులు వేరుగా బిల్</p>
+
+    <div class="ok" style="margin-top:20px;">
+      <strong>గమనిక:</strong> సందేహం ఉంటే Duty Manager / Owner ని అడగండి. లైవ్ బుకింగ్‌కు ముందు Step 1–4 ఒకసారి Trainer తో ప్రాక్టీస్ చేయండి.
+    </div>
+    <p class="muted" style="margin-top:12px;">ఫోన్: +91 98496 00555 · events@gayatrifunctionhall.com</p>
+  </section>
+</body>
+</html>

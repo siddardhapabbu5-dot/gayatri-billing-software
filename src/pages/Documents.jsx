@@ -3,7 +3,7 @@ import { coverage, formatBytes, HALL_DOCS, HOTEL_DOCS } from "../docTypes";
 import { PageHead, Pill } from "../ui";
 import DocPanel from "./DocPanel.jsx";
 
-export default function Documents({ state, focusId, onAttach, onRemove, onVerify }) {
+export default function Documents({ state, focusId, onAttach, onRemove, onVerify, onBack }) {
   const [bookingId, setBookingId] = useState(focusId || state.bookings[0]?.id || "");
   const booking = state.bookings.find((b) => b.id === bookingId);
   const guest = state.guests.find((g) => g.id === booking?.guestId);
@@ -23,8 +23,14 @@ export default function Documents({ state, focusId, onAttach, onRemove, onVerify
     <>
       <PageHead
         title="Documents"
-        sub="Hotel check-in KYC and function-hall contracts. Files are stored on this computer, can be viewed here, and a copy can be saved to Downloads."
-      />
+        sub="Hotel check-in KYC and convention-hall contracts. Files are stored on this computer, can be viewed here, and a copy can be saved to Downloads."
+      >
+        {onBack && (
+          <button className="btn ghost" type="button" onClick={onBack}>
+            Back
+          </button>
+        )}
+      </PageHead>
       <div className="kpis">
         <div className="kpi">
           <div className="k">Files on this PC</div>
@@ -63,7 +69,7 @@ export default function Documents({ state, focusId, onAttach, onRemove, onVerify
           </table>
         </div>
         <div className="panel">
-          <h3>Function hall booking</h3>
+          <h3>Convention hall booking</h3>
           <table>
             <tbody>
               {HALL_DOCS.map((d) => (

@@ -5,3 +5,6 @@ dist
 .env
 .env.*
 !.env.example
+
+# Large drone MP4s (~160MB) — keep locally; too heavy for normal GitHub push
+public/site/images/gallery/videos/*.mp4

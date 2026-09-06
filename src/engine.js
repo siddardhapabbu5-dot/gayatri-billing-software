@@ -1,4 +1,4 @@
-import { addHours, inRange, isWeekend, nightsBetween, overlaps, uid } from "./lib";
+import { addDays, addHours, inRange, isWeekend, nightsBetween, overlaps, startOfMonthISO, uid } from "./lib";
 
 export function blockedWindow(res) {
   const setup = Number(res.setupHours) || 0;
@@ -130,8 +130,14 @@ export function applyPricing(base, date, rules) {
 }
 
 export function hallRate(hall, slotType, date, rules) {
-  const base = hall.rates[slotType] || hall.rates.fullDay;
-  return applyPricing(base, date, rules);
+  const rates = hall.rates || {};
+  const base =
+    slotType === "half-day"
+      ? rates.halfDay
+      : slotType === "hourly"
+        ? rates.halfDay
+        : rates.fullDay;
+  return applyPricing(base || rates.fullDay, date, rules);
 }
 
 export function folioTotals(folio, lines, payments, taxPercent) {
@@ -140,9 +146,17 @@ export function folioTotals(folio, lines, payments, taxPercent) {
   const taxable = Math.max(0, subtotal - discount);
   const tax = Math.round((taxable * (taxPercent ?? 0)) / 100);
   const total = taxable + tax;
-  const paid = payments.reduce((s, p) => s + (p.type === "Refund" ? -Number(p.amount) : Number(p.amount)), 0);
+  const paid = payments.reduce((s, p) => {
+    if (p.type === "Deposit" || p.type === "Deposit return") return s;
+    return s + (p.type === "Refund" ? -Number(p.amount) : Number(p.amount));
+  }, 0);
+  const deposit = payments.reduce((s, p) => {
+    if (p.type === "Deposit") return s + Number(p.amount || 0);
+    if (p.type === "Deposit return") return s - Number(p.amount || 0);
+    return s;
+  }, 0);
   const balance = total - paid;
-  return { subtotal, discount, tax, total, paid, balance };
+  return { subtotal, discount, tax, total, paid, balance, deposit };
 }
 
 export function bookingFolio(state, bookingId) {
@@ -154,18 +168,51 @@ export function bookingFolio(state, bookingId) {
 }
 
 function emptyTotals() {
-  return { subtotal: 0, discount: 0, tax: 0, total: 0, paid: 0, balance: 0 };
+  return { subtotal: 0, discount: 0, tax: 0, total: 0, paid: 0, balance: 0, deposit: 0 };
 }
 
 export function occupancyStats(state, date) {
-  const liveRooms = state.rooms.filter((r) => !["Out of order", "Maintenance"].includes(r.status));
-  const occupied = state.rooms.filter((r) => ["Occupied", "Reserved"].includes(r.status)).length;
+  const liveRooms = state.rooms.filter((r) => !["Out of order", "Maintenance"].includes(occupancyOfSafe(r)));
+  const occupied = new Set(
+    (state.roomReservations || [])
+      .filter((r) => roomOccupiesDate(r, date))
+      .map((r) => r.roomId)
+  ).size;
   const occPct = liveRooms.length ? Math.round((occupied / liveRooms.length) * 100) : 0;
   const hallBooked = state.halls.filter((h) =>
     state.hallReservations.some((r) => r.hallId === h.id && hallOccupiesDate(r, date))
   ).length;
   const hallPct = Math.round((hallBooked / Math.max(1, state.halls.length)) * 100);
   return { occupied, live: liveRooms.length, occPct, hallBooked, hallPct };
+}
+
+function occupancyOfSafe(room) {
+  return ["Available", "Reserved", "Occupied", "Out of order", "Maintenance"].includes(room?.status)
+    ? room.status
+    : "Available";
+}
+
+export function hotelKpis(state, date) {
+  const occ = occupancyStats(state, date);
+  const start = startOfMonthISO(new Date(`${date}T12:00:00`));
+  let roomNights = 0;
+  let cursor = start;
+  while (cursor <= date) {
+    roomNights += occupancyStats(state, cursor).occupied;
+    cursor = addDays(cursor, 1);
+  }
+  const days = Math.max(1, nightsBetween(start, addDays(date, 1)) || 1);
+  const roomRev = (state.folioLines || [])
+    .filter((l) => String(l.category || "") === "room")
+    .filter((l) => {
+      const folio = (state.folios || []).find((f) => f.id === l.folioId);
+      const bk = (state.bookings || []).find((b) => b.id === folio?.bookingId);
+      return bk && !["Cancelled", "Refunded"].includes(bk.status);
+    })
+    .reduce((s, l) => s + Number(l.amount || 0), 0);
+  const adr = roomNights ? Math.round(roomRev / roomNights) : 0;
+  const revpar = occ.live && days ? Math.round(roomRev / (occ.live * days)) : 0;
+  return { ...occ, adr, revpar, roomNights, roomRev, days };
 }
 
 function payDay(p) {
@@ -238,12 +285,6 @@ export function collectionsReport(state, from, to) {
       .filter((p) => railOf(p.method) === rail)
       .reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
-  const periodPays = (state.payments || []).filter((p) => p.type !== "Refund" && inPeriod(payDay(p)));
-  const cash = sumRail(periodPays, "cash");
-  const upi = sumRail(periodPays, "upi");
-  const other = sumRail(periodPays, "other");
-  const advance = periodPays.filter((p) => p.type === "Advance").reduce((s, p) => s + (Number(p.amount) || 0), 0);
-
   const rows = [];
   for (const b of state.bookings || []) {
     if (b.status === "Cancelled") continue;
@@ -271,6 +312,7 @@ export function collectionsReport(state, from, to) {
       number: b.number,
       name: guest?.name || "Guest",
       phone: guest?.phone || "",
+      gstin: guest?.gstin || "",
       date: b.eventDate,
       type: b.type,
       kind: split.kind,
@@ -287,6 +329,10 @@ export function collectionsReport(state, from, to) {
     });
   }
   rows.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const cash = rows.reduce((s, r) => s + r.cash, 0);
+  const upi = rows.reduce((s, r) => s + r.upi, 0);
+  const other = rows.reduce((s, r) => s + r.other, 0);
+  const advance = rows.reduce((s, r) => s + r.advance, 0);
   const balance = rows.reduce((s, r) => s + r.balance, 0);
   return {
     cash,
@@ -338,7 +384,7 @@ export function askAssistant(state, question) {
     return `${rows.length} open balances totaling ${money(sum)}. ${big.length} booking(s) above ₹1 lakh.`;
   }
   if (q.includes("available") && q.includes("room")) {
-    const n = state.rooms.filter((r) => r.status === "Available" || r.status === "Inspected").length;
+    const n = state.rooms.filter((r) => r.status === "Available").length;
     return `${n} of ${state.rooms.length} rooms are ready to sell (Available / Inspected).`;
   }
   if (q.includes("weekend") || q.includes("this week")) {

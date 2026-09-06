@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220" role="img" aria-label="Gayatri Convention">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8cc7a"/>
+      <stop offset="45%" stop-color="#c6a452"/>
+      <stop offset="100%" stop-color="#8a6a2f"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="220" fill="none"/>
+  <!-- palms -->
+  <path fill="url(#g)" d="M28 170c8-38 18-62 34-82-4 18-4 36 0 54-10 6-22 16-34 28z"/>
+  <path fill="url(#g)" d="M292 170c-8-38-18-62-34-82 4 18 4 36 0 54 10 6 22 16 34 28z"/>
+  <!-- mandap roof -->
+  <path fill="url(#g)" d="M160 24 108 78h104L160 24zm-44 54h88l-12 18H128l-12-18z"/>
+  <path fill="url(#g)" d="M132 96h56l8 14H124l8-14z"/>
+  <!-- pillars & stage -->
+  <rect x="118" y="110" width="12" height="52" fill="url(#g)"/>
+  <rect x="190" y="110" width="12" height="52" fill="url(#g)"/>
+  <path fill="url(#g)" d="M136 148h48v14H136z"/>
+  <path fill="none" stroke="url(#g)" stroke-width="3" d="M96 176h128"/>
+</svg>
