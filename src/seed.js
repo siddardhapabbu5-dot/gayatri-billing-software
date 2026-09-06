@@ -22,12 +22,13 @@ export const ROLES = {
       "billing",
       "reports",
       "documents",
+      "expenses",
       "settings.property",
     ],
   },
   frontdesk: {
     label: "Front desk",
-    permissions: ["dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents"],
+    permissions: ["dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"],
   },
   housekeeping: {
     label: "Housekeeping",
@@ -35,7 +36,7 @@ export const ROLES = {
   },
   accounts: {
     label: "Accounts",
-    permissions: ["dashboard", "billing", "reports", "vendors"],
+    permissions: ["dashboard", "billing", "reports", "vendors", "expenses"],
   },
 };
 
@@ -334,6 +335,7 @@ export function createSeed() {
     documents: [],
     enquiries: [],
     agreements: [],
+    expenses: [],
     audit: [],
   };
 }

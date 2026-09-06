@@ -1,6 +1,17 @@
 import { useMemo, useState } from "react";
-import { bookingFolio, collectionsReport, kindSplit, lineKind, occupancyStats } from "../engine";
-import { downloadCsv, formatDateDMY, formatDateTime, money, startOfMonthISO, todayISO } from "../lib";
+import {
+  bookingFolio,
+  cashbookReport,
+  collectionsReport,
+  gstReport,
+  kindSplit,
+  lineKind,
+  occupancyRangeReport,
+  occupancyStats,
+  outstandingCustomers,
+} from "../engine";
+import { expenseLabel } from "../finance";
+import { addDays, downloadCsv, formatDateDMY, formatDateTime, money, startOfMonthISO, todayISO } from "../lib";
 import { Kpi, PageHead, Pill } from "../ui";
 
 function cancellationAt(state, booking) {
@@ -100,6 +111,17 @@ function collectionsByRail(summary) {
   return out;
 }
 
+function cashbookRails(book) {
+  const out = {};
+  if (book.rails.cash) out.Cash = book.rails.cash;
+  if (book.rails.upi) out.UPI = book.rails.upi;
+  if (book.rails.card) out.Card = book.rails.card;
+  if (book.rails.bank) out.Bank = book.rails.bank;
+  if (book.rails.other) out.Other = book.rails.other;
+  if (book.creditPending) out["Credit / Pending"] = book.creditPending;
+  return out;
+}
+
 function csvLines(title, summary, rows) {
   return [
     [title],
@@ -130,18 +152,24 @@ export default function Reports({ state, go }) {
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
   const [kind, setKind] = useState("all");
-  const [reportTab, setReportTab] = useState("collections");
+  const [reportTab, setReportTab] = useState("cashbook");
+  const [gstSplit, setGstSplit] = useState("all");
   const occ = occupancyStats(state, today);
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
   const report = useMemo(() => collectionsReport(state, from, to), [state, from, to]);
+  const book = useMemo(() => cashbookReport(state, from, to), [state, from, to]);
+  const gst = useMemo(() => gstReport(state, from, to), [state, from, to]);
+  const occRange = useMemo(() => occupancyRangeReport(state, from || today, to || today), [state, from, to, today]);
+  const outstanding = useMemo(() => outstandingCustomers(state), [state]);
   const cancelled = useMemo(() => cancellationRows(state, from, to), [state, from, to]);
   const allCancelled = useMemo(() => cancellationRows(state, "", ""), [state]);
   const rows = viewRows(report, kind);
   const summary = viewSummary(report, kind);
   const periodRev = useMemo(() => periodRevenueBreakdown(state, report, kind), [state, report, kind]);
   const byMethod = useMemo(() => collectionsByRail(summary), [summary]);
+  const byCashRails = useMemo(() => cashbookRails(book), [book]);
   const receivables = useMemo(() => filteredReceivables(state, kind), [state, kind]);
   const hallRows = useMemo(() => viewRows(report, "function"), [report]);
   const roomRows = useMemo(() => viewRows(report, "room"), [report]);
@@ -154,15 +182,45 @@ export default function Reports({ state, go }) {
       ? Math.round(roomRows.reduce((s, r) => s + r.total, 0) / roomRows.length)
       : 0;
   const rangeLabel = from && to ? `${formatDateDMY(from)} – ${formatDateDMY(to)}` : "All dates";
-  const preset = from === today && to === today ? "today" : from === monthStart && to === today ? "month" : !from && !to ? "all" : "";
+  const weekStart = addDays(today, -((new Date(`${today}T12:00:00`).getDay() + 6) % 7));
+  const sixMonthStart = (() => {
+    const d = new Date(`${today}T12:00:00`);
+    d.setMonth(d.getMonth() - 5);
+    d.setDate(1);
+    return todayISO(d);
+  })();
+  const yearStart = `${new Date(`${today}T12:00:00`).getFullYear()}-01-01`;
+  const preset =
+    from === today && to === today
+      ? "today"
+      : from === weekStart && to === today
+        ? "week"
+        : from === monthStart && to === today
+          ? "month"
+          : from === sixMonthStart && to === today
+            ? "six"
+            : from === yearStart && to === today
+              ? "year"
+              : !from && !to
+                ? "all"
+                : "";
   const kindTitle = kind === "function" ? "Hall" : kind === "room" ? "Room stay" : "All";
 
   function setPreset(which) {
     if (which === "today") {
       setFrom(today);
       setTo(today);
+    } else if (which === "week") {
+      setFrom(weekStart);
+      setTo(today);
     } else if (which === "month") {
       setFrom(monthStart);
+      setTo(today);
+    } else if (which === "six") {
+      setFrom(sixMonthStart);
+      setTo(today);
+    } else if (which === "year") {
+      setFrom(yearStart);
       setTo(today);
     } else {
       setFrom("");
@@ -175,7 +233,20 @@ export default function Reports({ state, go }) {
     const head = [
       [state.property.name],
       [(state.property.address || []).join(", ")],
-      [reportTab === "cancellations" ? "Cancellations report" : "Collections report", rangeLabel],
+      [
+        reportTab === "cancellations"
+          ? "Cancellations report"
+          : reportTab === "cashbook"
+            ? "Daily income & expense / cashbook"
+            : reportTab === "outstanding"
+              ? "Customer outstanding"
+              : reportTab === "gst"
+                ? "GST report"
+                : reportTab === "occupancy"
+                  ? "Occupancy report"
+                  : "Collections report",
+        rangeLabel,
+      ],
       [],
     ];
     let body;
@@ -194,6 +265,73 @@ export default function Reports({ state, go }) {
           row.detail,
         ]),
       ];
+    } else if (reportTab === "outstanding") {
+      body = [
+        ["Customer", "Phone", "Bill", "Paid", "Balance", "Bookings"],
+        ...outstanding.map((r) => [
+          r.name,
+          r.phone,
+          r.bill,
+          r.paid,
+          r.balance,
+          r.bookings.map((b) => b.number).join(" · "),
+        ]),
+      ];
+    } else if (reportTab === "gst") {
+      body = [
+        ["With GST bills", gst.with.count],
+        ["Taxable (with GST)", gst.with.taxable],
+        ["CGST", gst.with.cgst],
+        ["SGST", gst.with.sgst],
+        ["Total GST", gst.with.tax],
+        ["Without GST bills", gst.without.count],
+        ["Without GST total", gst.without.total],
+        [],
+        ["Guest", "Bill no", "Date", "GST", "Taxable", "CGST", "SGST", "Tax", "Total", "Balance"],
+        ...gstRows.map((r) => [
+          r.name,
+          r.number,
+          formatDateDMY(r.date),
+          r.gstMode === "with" ? "With GST" : "Without GST",
+          r.taxable,
+          r.cgst,
+          r.sgst,
+          r.tax,
+          r.total,
+          r.balance,
+        ]),
+      ];
+    } else if (reportTab === "occupancy") {
+      body = [
+        ["Avg room occupancy %", occRange.avgRoomOcc],
+        ["Avg hall occupancy %", occRange.avgHallOcc],
+        ["Room nights", occRange.roomNights],
+        ["Hall-days booked", occRange.hallDays],
+        [],
+        ["Date", "Rooms occupied", "Live rooms", "Room %", "Halls booked", "Hall %"],
+        ...occRange.days.map((d) => [formatDateDMY(d.date), d.occupied, d.live, d.occPct, d.hallBooked, d.hallPct]),
+      ];
+    } else if (reportTab === "cashbook") {
+      body = [
+        ["Opening balance", book.opening],
+        ["Room income", book.room],
+        ["Function hall income", book.hall],
+        ["Food income", book.food],
+        ["Other income", book.otherIncome],
+        ["Advances received", book.advance],
+        ["Total income", book.incomeTotal],
+        [],
+        ...Object.entries(book.expenseByCat).map(([k, v]) => [expenseLabel(k), v]),
+        ["Total expenses", book.expenseTotal],
+        ["Net income", book.net],
+        ["Closing balance", book.closing],
+        [],
+        ["Cash", book.rails.cash],
+        ["UPI", book.rails.upi],
+        ["Card", book.rails.card],
+        ["Bank", book.rails.bank],
+        ["Credit / Pending (all open)", book.creditPending],
+      ];
     } else if (kind === "all") {
       body = [
         ...csvLines("HALL (hall hire)", report.function, viewRows(report, "function")),
@@ -203,11 +341,14 @@ export default function Reports({ state, go }) {
     } else {
       body = csvLines(kindTitle, summary, rows);
     }
-    downloadCsv(`Gayatri-${reportTab === "cancellations" ? "cancellations" : `collections-${kind}`}-${stamp}.csv`, [...head, ...body]);
+    downloadCsv(`Gayatri-${reportTab}-${stamp}.csv`, [...head, ...body]);
   }
 
   const cancelRefundTotal = cancelled.reduce((s, row) => s + row.refundTotal, 0);
   const cancelBilledTotal = cancelled.reduce((s, row) => s + row.totals.total, 0);
+  const outstandingTotal = outstanding.reduce((s, r) => s + r.balance, 0);
+  const gstRows =
+    gstSplit === "with" ? gst.withGst : gstSplit === "without" ? gst.withoutGst : gst.rows;
 
   return (
     <>
@@ -216,7 +357,15 @@ export default function Reports({ state, go }) {
         sub={
           reportTab === "cancellations"
             ? `${allCancelled.length} cancellation record(s) on file. Filter by cancellation date.`
-            : "Separate hall hire and room stay: cash, UPI, advance and balance. Download Excel or print to PDF."
+            : reportTab === "cashbook"
+              ? "Opening + Income − Expenses = Closing. Day / week / month / 6-month / year or custom range."
+              : reportTab === "outstanding"
+                ? "Customers with balance still to collect."
+                : reportTab === "gst"
+                  ? "Split With GST and Without GST bills. CGST + SGST for taxable invoices."
+                  : reportTab === "occupancy"
+                    ? "Day-wise room and function-hall occupancy for the selected range."
+                : "Separate hall hire and room stay: cash, UPI, advance and balance. Download Excel or print to PDF."
         }
       >
         <button className="btn ghost" type="button" onClick={() => window.print()}>
@@ -231,13 +380,25 @@ export default function Reports({ state, go }) {
         <strong>{state.property.name}</strong>
         <div>{(state.property.address || []).join(", ")}</div>
         <div>
-          Collections report · {kindTitle} · {rangeLabel}
+          {reportTab} · {kindTitle} · {rangeLabel}
         </div>
       </div>
 
       <div className="chips no-print" style={{ marginBottom: 10 }}>
+        <button type="button" className={`chip${reportTab === "cashbook" ? " on" : ""}`} onClick={() => setReportTab("cashbook")}>
+          Income & expense
+        </button>
+        <button type="button" className={`chip${reportTab === "gst" ? " on" : ""}`} onClick={() => setReportTab("gst")}>
+          GST
+        </button>
+        <button type="button" className={`chip${reportTab === "occupancy" ? " on" : ""}`} onClick={() => setReportTab("occupancy")}>
+          Occupancy
+        </button>
         <button type="button" className={`chip${reportTab === "collections" ? " on" : ""}`} onClick={() => setReportTab("collections")}>
           Collections
+        </button>
+        <button type="button" className={`chip${reportTab === "outstanding" ? " on" : ""}`} onClick={() => setReportTab("outstanding")}>
+          Outstanding ({outstanding.length})
         </button>
         <button type="button" className={`chip${reportTab === "cancellations" ? " on" : ""}`} onClick={() => setReportTab("cancellations")}>
           Cancellations ({allCancelled.length})
@@ -245,7 +406,7 @@ export default function Reports({ state, go }) {
       </div>
 
       <div className="panel report-filters no-print">
-        <div className="row" style={{ justifyContent: "space-between" }}>
+        <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
           <div className="row">
             <label>
               From
@@ -257,15 +418,18 @@ export default function Reports({ state, go }) {
             </label>
           </div>
           <div className="chips">
-            <button type="button" className={`chip${preset === "today" ? " on" : ""}`} onClick={() => setPreset("today")}>
-              Today
-            </button>
-            <button type="button" className={`chip${preset === "month" ? " on" : ""}`} onClick={() => setPreset("month")}>
-              This month
-            </button>
-            <button type="button" className={`chip${preset === "all" ? " on" : ""}`} onClick={() => setPreset("all")}>
-              All dates
-            </button>
+            {[
+              ["today", "Today"],
+              ["week", "This week"],
+              ["month", "This month"],
+              ["six", "6 months"],
+              ["year", "This year"],
+              ["all", "All dates"],
+            ].map(([id, label]) => (
+              <button key={id} type="button" className={`chip${preset === id ? " on" : ""}`} onClick={() => setPreset(id)}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         {reportTab === "collections" && (
@@ -281,9 +445,268 @@ export default function Reports({ state, go }) {
           ))}
         </div>
         )}
+        {reportTab === "gst" && (
+          <div className="chips" style={{ marginTop: 10 }}>
+            {[
+              ["all", "All bills"],
+              ["with", "With GST only"],
+              ["without", "Without GST only"],
+            ].map(([id, label]) => (
+              <button key={id} type="button" className={`chip${gstSplit === id ? " on" : ""}`} onClick={() => setGstSplit(id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {reportTab === "cancellations" ? (
+      {reportTab === "gst" ? (
+        <>
+          <div className="kpis">
+            <Kpi k="With GST bills" v={String(gst.with.count)} s={rangeLabel} tone="b" />
+            <Kpi k="Taxable value" v={m(gst.with.taxable)} s="Before GST" tone="a" />
+            <Kpi k="CGST" v={m(gst.with.cgst)} s="Half of GST" tone="c" />
+            <Kpi k="SGST" v={m(gst.with.sgst)} s="Half of GST" tone="c" />
+            <Kpi k="Total GST" v={m(gst.with.tax)} s={`${state.property.taxPercent}%`} tone="d" />
+            <Kpi k="Without GST bills" v={String(gst.without.count)} s={m(gst.without.total)} tone="e" />
+          </div>
+          <div className="g2" style={{ marginBottom: 12 }}>
+            <div className="panel">
+              <h3>With GST</h3>
+              <table>
+                <tbody>
+                  <tr><td>Bills</td><td>{gst.with.count}</td></tr>
+                  <tr><td>Taxable</td><td>{m(gst.with.taxable)}</td></tr>
+                  <tr><td>CGST</td><td>{m(gst.with.cgst)}</td></tr>
+                  <tr><td>SGST</td><td>{m(gst.with.sgst)}</td></tr>
+                  <tr><td><strong>Invoice total</strong></td><td><strong>{m(gst.with.total)}</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="panel">
+              <h3>Without GST</h3>
+              <table>
+                <tbody>
+                  <tr><td>Bills</td><td>{gst.without.count}</td></tr>
+                  <tr><td>Taxable / bill value</td><td>{m(gst.without.taxable)}</td></tr>
+                  <tr><td>GST</td><td>{m(0)}</td></tr>
+                  <tr><td><strong>Invoice total</strong></td><td><strong>{m(gst.without.total)}</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="panel">
+            <table>
+              <thead>
+                <tr>
+                  <th>Guest</th>
+                  <th>Bill no</th>
+                  <th>Date</th>
+                  <th>GST</th>
+                  <th>Taxable</th>
+                  <th>CGST</th>
+                  <th>SGST</th>
+                  <th>Total</th>
+                  <th>Balance</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {!gstRows.length && (
+                  <tr><td colSpan={10} className="muted">No bills in this period.</td></tr>
+                )}
+                {gstRows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.name}<div className="muted">{r.phone}</div></td>
+                    <td>{r.number}</td>
+                    <td>{formatDateDMY(r.date)}</td>
+                    <td>{r.gstMode === "with" ? `With GST ${r.taxRate}%` : "Without GST"}</td>
+                    <td>{m(r.taxable)}</td>
+                    <td>{m(r.cgst)}</td>
+                    <td>{m(r.sgst)}</td>
+                    <td>{m(r.total)}</td>
+                    <td>{m(r.balance)}</td>
+                    <td>
+                      {go ? (
+                        <button type="button" className="btn ghost small" onClick={() => go("billing", { bookingId: r.id })}>
+                          Open
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : reportTab === "occupancy" ? (
+        <>
+          <div className="kpis">
+            <Kpi k="Avg room occupancy" v={`${occRange.avgRoomOcc}%`} s={rangeLabel} tone="c" />
+            <Kpi k="Avg hall occupancy" v={`${occRange.avgHallOcc}%`} s={rangeLabel} tone="a" />
+            <Kpi k="Room nights" v={String(occRange.roomNights)} s="Occupied room-days" tone="b" />
+            <Kpi k="Hall-days booked" v={String(occRange.hallDays)} s="Hall × day holds" tone="d" />
+          </div>
+          <div className="panel">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Rooms occupied</th>
+                  <th>Live rooms</th>
+                  <th>Room %</th>
+                  <th>Halls booked</th>
+                  <th>Hall %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!occRange.days.length && (
+                  <tr><td colSpan={6} className="muted">Pick a from/to date range.</td></tr>
+                )}
+                {occRange.days.map((d) => (
+                  <tr key={d.date}>
+                    <td>{formatDateDMY(d.date)}</td>
+                    <td>{d.occupied}</td>
+                    <td>{d.live}</td>
+                    <td>{d.occPct}%</td>
+                    <td>{d.hallBooked}/{state.halls.length}</td>
+                    <td>{d.hallPct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : reportTab === "cashbook" ? (
+        <>
+          <div className="kpis">
+            <Kpi k="Opening balance" v={m(book.opening)} s="Before range start" tone="a" />
+            <Kpi k="Total income" v={m(book.incomeTotal)} s={`${book.paymentCount} payment(s)`} tone="b" />
+            <Kpi k="Total expenses" v={m(book.expenseTotal)} s={`${book.expenses.length} entry(ies)`} tone="e" />
+            <Kpi k="Net income" v={m(book.net)} s="Income − expenses" tone="c" />
+            <Kpi k="Closing balance" v={m(book.closing)} s="Opening + net" tone="d" />
+          </div>
+          <div className="g2">
+            <div className="panel">
+              <h3>Income ({rangeLabel})</h3>
+              <table>
+                <tbody>
+                  <tr><td>Room income</td><td>{m(book.room)}</td></tr>
+                  <tr><td>Function hall income</td><td>{m(book.hall)}</td></tr>
+                  <tr><td>Food income</td><td>{m(book.food)}</td></tr>
+                  <tr><td>Other income</td><td>{m(book.otherIncome)}</td></tr>
+                  <tr><td>Advances received</td><td>{m(book.advance)}</td></tr>
+                  <tr><td><strong>Total income</strong></td><td><strong>{m(book.incomeTotal)}</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="panel">
+              <h3>Expenses ({rangeLabel})</h3>
+              <table>
+                <tbody>
+                  {!Object.keys(book.expenseByCat).length && (
+                    <tr><td colSpan={2} className="muted">No expenses — add via Expense entry.</td></tr>
+                  )}
+                  {Object.entries(book.expenseByCat).map(([k, v]) => (
+                    <tr key={k}><td>{expenseLabel(k)}</td><td>{m(v)}</td></tr>
+                  ))}
+                  <tr><td><strong>Total expenses</strong></td><td><strong>{m(book.expenseTotal)}</strong></td></tr>
+                  <tr><td><strong>Net income</strong></td><td><strong>{m(book.net)}</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="panel" style={{ marginTop: 12 }}>
+            <h3>Collections by rail</h3>
+            <div className="kpis">
+              {Object.entries(byCashRails).map(([k, v]) => (
+                <Kpi key={k} k={k} v={m(v)} s={rangeLabel} tone="a" />
+              ))}
+            </div>
+          </div>
+          <div className="panel" style={{ marginTop: 12 }}>
+            <h3>Credit & balance sheet (management)</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Cash movement for the period, plus credit (customer balances still receivable).
+            </p>
+            <table>
+              <tbody>
+                <tr><td>Opening balance</td><td>{m(book.opening)}</td></tr>
+                <tr><td>Cash collections</td><td>{m(book.balanceSheet?.collectionsCash || book.rails.cash)}</td></tr>
+                <tr><td>UPI + Card + Bank collections</td><td>{m(book.balanceSheet?.collectionsDigital || 0)}</td></tr>
+                <tr><td>Total income (collections)</td><td>{m(book.incomeTotal)}</td></tr>
+                <tr><td>Total expenses paid</td><td>{m(book.expenseTotal)}</td></tr>
+                <tr><td><strong>Net cash (Income − Expenses)</strong></td><td><strong>{m(book.net)}</strong></td></tr>
+                <tr><td><strong>Closing cash position</strong></td><td><strong>{m(book.closing)}</strong></td></tr>
+                <tr>
+                  <td><strong>Credit / receivable (balance due)</strong></td>
+                  <td><strong>{m(book.creditPending)}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="muted" style={{ marginTop: 8 }}>
+              Credit is money customers still owe (Outstanding report). It is not cash in hand until collected.
+              Room occupancy today {occ.occPct}% · Halls booked today {occ.hallBooked}/{state.halls.length}.
+            </p>
+            <div className="row" style={{ marginTop: 8, gap: 8 }}>
+              <button type="button" className="btn ghost small" onClick={() => setReportTab("outstanding")}>
+                Open outstanding
+              </button>
+              <button type="button" className="btn ghost small" onClick={() => go?.("expenses")}>
+                Expense entry
+              </button>
+            </div>
+          </div>
+        </>
+      ) : reportTab === "outstanding" ? (
+        <>
+          <div className="kpis">
+            <Kpi k="Customers due" v={String(outstanding.length)} s="With open balance" tone="e" />
+            <Kpi k="Total receivable" v={m(outstandingTotal)} s="All open bills" tone="d" />
+          </div>
+          <div className="panel">
+            <table>
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Phone</th>
+                  <th>Bill</th>
+                  <th>Paid</th>
+                  <th>Balance</th>
+                  <th>Bookings</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!outstanding.length && (
+                  <tr><td colSpan={6} className="muted">No outstanding balances.</td></tr>
+                )}
+                {outstanding.map((r) => (
+                  <tr key={r.guestId || r.name}>
+                    <td>{r.name}</td>
+                    <td>{r.phone || "—"}</td>
+                    <td>{m(r.bill)}</td>
+                    <td>{m(r.paid)}</td>
+                    <td><strong>{m(r.balance)}</strong></td>
+                    <td>
+                      {r.bookings.map((b) => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          className="btn ghost small"
+                          style={{ marginRight: 4 }}
+                          onClick={() => go?.("billing", { bookingId: b.id })}
+                        >
+                          {b.number}
+                        </button>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : reportTab === "cancellations" ? (
         <>
           <div className="kpis">
             <Kpi k="Cancellation records" v={String(cancelled.length)} s={rangeLabel} tone="e" />

@@ -22,6 +22,107 @@ button { cursor: pointer; }
 a { color: inherit; }
 
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+
+.staff-login {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(196, 163, 90, 0.12), transparent 55%),
+    var(--bg);
+}
+.staff-login-card {
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px;
+  box-sizing: border-box;
+}
+.staff-login-logo {
+  display: block;
+  height: 52px;
+  width: auto;
+  margin: 0 auto 14px;
+}
+.staff-login-card h1 {
+  margin: 0 0 4px;
+  font-family: var(--serif);
+  font-size: 1.55rem;
+  font-weight: 600;
+  text-align: center;
+}
+.staff-login-sub {
+  margin: 0 0 18px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.staff-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.staff-login-form label {
+  width: 100%;
+}
+.staff-login-form input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.staff-login-error {
+  color: var(--due);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.4;
+}
+.staff-login-actions {
+  margin-top: 4px;
+}
+.staff-login-hint {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.staff-login-hint-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.staff-login-hint ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.staff-login-hint li {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.staff-login-hint li span {
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--ink);
+  font-weight: 500;
+}
+.staff-login-hint li code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  background: #f4f6f8;
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+  overflow-wrap: anywhere;
+}
 .nav {
   background: var(--nav);
   color: #e7eef1;
@@ -98,6 +199,12 @@ a { color: inherit; }
 .panel h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
 .panel-head h3 { margin: 0; }
+.dash-section-title {
+  margin: 8px 0 10px;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
 
 .dash-main { display: grid; grid-template-columns: 1.35fr .85fr; gap: 12px; margin-bottom: 12px; }
 .dash-mid { display: grid; grid-template-columns: 1.1fr .9fr .9fr .8fr; gap: 12px; margin-bottom: 12px; }
@@ -176,6 +283,19 @@ tfoot td { border-top: 1px solid var(--line); border-bottom: 0; padding-top: 10p
 .print-only { display: none; }
 .report-filters { margin-bottom: 12px; }
 .report-filters label { min-width: 160px; }
+.bill-filter-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.bill-filters select,
+.bill-filters input[type="search"] {
+  width: 100%;
+}
+@media (max-width: 900px) {
+  .bill-filter-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .bill-filter-grid { grid-template-columns: 1fr; }
+}
 .report-letter { margin-bottom: 14px; }
 .report-letter strong { font-family: var(--serif); font-size: 22px; }
 .master-letter strong { font-family: var(--serif); font-size: 22px; }

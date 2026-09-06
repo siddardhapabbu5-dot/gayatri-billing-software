@@ -10,6 +10,7 @@ import Catering from "./pages/Catering.jsx";
 import Vendors from "./pages/Vendors.jsx";
 import Billing from "./pages/Billing.jsx";
 import Reports from "./pages/Reports.jsx";
+import Expenses from "./pages/Expenses.jsx";
 import Settings from "./pages/Settings.jsx";
 import Master from "./pages/Master.jsx";
 import Documents from "./pages/Documents.jsx";
@@ -31,12 +32,14 @@ import {
   attachDocument,
   attachMany,
   cancelBooking,
+  cancelRoomStay,
   checkInRoom,
   checkOutRoom,
   clearAllBookings,
   createReservation,
   getState,
   issueDocument,
+  loadManagementSample,
   removeDocument,
   removeGuest,
   resetDemo,
@@ -47,6 +50,7 @@ import {
   removeRoom,
   saveGuest,
   setFolioDiscount,
+  setFolioGstMode,
   setRoomHousekeeping,
   setRoomStatus,
   setTaskStatus,
@@ -54,6 +58,9 @@ import {
   updateHall,
   updateProperty,
   verifyDocument,
+  addExpense,
+  removeExpense,
+  addFolioCharge,
 } from "./store";
 
 function applyAuthUser(authUser) {
@@ -99,6 +106,7 @@ const GROUPS = [
     label: "Finance",
     items: [
       { id: "billing", label: "Payment & Invoice", perm: "billing" },
+      { id: "expenses", label: "Expense entry", perm: "expenses" },
       { id: "reports", label: "Reports", perm: "reports" },
     ],
   },
@@ -235,6 +243,7 @@ export default function App() {
     catering: "Catering",
     vendors: "Vendors",
     billing: "Payment & Invoice",
+    expenses: "Expense entry",
     reports: "Reports",
     settings: "Settings",
     master: "Master data",
@@ -334,7 +343,31 @@ export default function App() {
           </div>
         </header>
         <div className="content">
-          {page === "desk" && <Dashboard state={state} go={go} onClearBookings={handleClearAllBookings} />}
+          {page === "desk" && (
+            <Dashboard
+              state={state}
+              go={go}
+              onClearBookings={handleClearAllBookings}
+              onLoadSample={() => {
+                if (
+                  !window.confirm(
+                    "Load sample management day?\n\nThis clears current bookings/payments/expenses and creates sample hall + room bookings (different days), all payment types, room cancel without refund, daily expenses, and credit balances."
+                  )
+                ) {
+                  return;
+                }
+                const out = loadManagementSample();
+                if (out?.error) {
+                  window.alert(out.error);
+                  return;
+                }
+                setState(out);
+                setBookingId(null);
+                setPage("desk");
+                window.alert("Sample day loaded. Open Reports → Income & expense (Today) for the management day report.");
+              }}
+            />
+          )}
           {page === "calendar" && (
             <Calendar key={presetDate || "calendar-today"} state={state} go={go} focusDate={presetDate} />
           )}
@@ -467,11 +500,43 @@ export default function App() {
               onClose={() => setBookingId(null)}
               onPay={(id, p) => setState(addPayment(id, p))}
               onDiscount={(id, d) => setState(setFolioDiscount(id, d))}
+              onGstMode={(id, mode) => {
+                const out = setFolioGstMode(id, mode);
+                if (out?.error) return out;
+                setState(out);
+                return out;
+              }}
+              onCancelRoom={(resId) => {
+                const out = cancelRoomStay(resId, { refund: 0 });
+                if (out?.error) {
+                  window.alert(out.error);
+                  return;
+                }
+                setState(out);
+              }}
+              onCharge={(id, payload) => {
+                const out = addFolioCharge(id, payload);
+                if (out?.error) return out;
+                setState(out);
+                return out;
+              }}
               onIssue={(id, t) => {
                 const out = issueDocument(id, t);
                 setState(out.state);
               }}
               onDocs={(id) => go("documents", { bookingId: id })}
+            />
+          )}
+          {page === "expenses" && (
+            <Expenses
+              state={state}
+              onAdd={(payload) => {
+                const out = addExpense(payload);
+                if (out?.error) return out;
+                setState(out);
+                return out;
+              }}
+              onRemove={(id) => setState(removeExpense(id))}
             />
           )}
           {page === "reports" && <Reports state={state} go={go} />}

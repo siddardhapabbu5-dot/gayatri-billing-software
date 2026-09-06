@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { bookingFolio, hallDayStatus, hallOccupiesDate, hotelKpis, occupancyStats, originLabel, revenueBreakdown, roomOccupiesDate } from "../engine";
-import { addDays, capacityText, formatDate, money, monthMatrix, pad, todayISO } from "../lib";
+import { bookingFolio, cashbookReport, hallDayStatus, hallOccupiesDate, hotelKpis, occupancyStats, originLabel, revenueBreakdown, roomOccupiesDate } from "../engine";
+import { addDays, capacityText, formatDate, money, monthMatrix, pad, startOfMonthISO, todayISO } from "../lib";
 import { housekeepingOf, occupancyOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export default function Dashboard({ state, go, onClearBookings }) {
+export default function Dashboard({ state, go, onClearBookings, onLoadSample }) {
   const today = todayISO();
   const occ = occupancyStats(state, today);
   const kpis = hotelKpis(state, today);
@@ -35,12 +35,14 @@ export default function Dashboard({ state, go, onClearBookings }) {
   const calDate = new Date(`${calMonth}T12:00:00`);
   const cells = monthMatrix(calDate.getFullYear(), calDate.getMonth());
   const monthLabel = calDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-  const todayPaid = state.payments
-    .filter((p) => p.type !== "Refund" && String(p.at || p.date || "").slice(0, 10) === today)
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const monthStart = startOfMonthISO(new Date(`${today}T12:00:00`));
+  const todayBook = cashbookReport(state, today, today);
+  const monthBook = cashbookReport(state, monthStart, today);
+  const hallsToday = occ.hallBooked;
+  const roomsAvailable = state.rooms.filter((r) => occupancyOf(r) === "Available").length;
 
   const rooms = {
-    available: state.rooms.filter((r) => occupancyOf(r) === "Available").length,
+    available: roomsAvailable,
     occupied: state.rooms.filter((r) => occupancyOf(r) === "Occupied" || occupancyOf(r) === "Reserved").length,
     cleaning: state.rooms.filter((r) => housekeepingOf(r) === "Dirty" || housekeepingOf(r) === "Cleaning").length,
     maint: state.rooms.filter((r) => occupancyOf(r) === "Maintenance" || occupancyOf(r) === "Out of order").length,
@@ -85,6 +87,14 @@ export default function Dashboard({ state, go, onClearBookings }) {
             Clean start
           </button>
         )}
+        {onLoadSample && (
+          <button className="btn ghost" type="button" onClick={onLoadSample}>
+            Load sample day
+          </button>
+        )}
+        <button className="btn ghost" onClick={() => go("expenses")}>
+          Expense entry
+        </button>
         <button className="btn ghost" onClick={() => go("calendar")}>
           Calendar
         </button>
@@ -93,7 +103,85 @@ export default function Dashboard({ state, go, onClearBookings }) {
         </button>
       </PageHead>
 
+      <h3 className="dash-section-title">Today</h3>
       <div className="kpis dash-kpis">
+        <div className="kpi tone-c">
+          <div className="k">Rooms occupied</div>
+          <div className="v">{occ.occupied}/{occ.live}</div>
+          <div className="s">{occ.occPct}% · Available {roomsAvailable}</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Function halls booked</div>
+          <div className="v">{hallsToday}/{state.halls.length}</div>
+          <div className="s">Holding today</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Today hotel income</div>
+          <div className="v">{m(todayBook.room)}</div>
+          <div className="s">Room collections today</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Today hall income</div>
+          <div className="v">{m(todayBook.hall)}</div>
+          <div className="s">Function hall collections</div>
+        </div>
+        <div className="kpi tone-d">
+          <div className="k">Today total collection</div>
+          <div className="v">{m(todayBook.incomeTotal)}</div>
+          <div className="s">All payments posted today</div>
+        </div>
+        <div className="kpi tone-e">
+          <div className="k">Today expenses</div>
+          <div className="v">{m(todayBook.expenseTotal)}</div>
+          <div className="s">From expense entry</div>
+        </div>
+        <div className="kpi tone-c">
+          <div className="k">Today net income</div>
+          <div className="v">{m(todayBook.net)}</div>
+          <div className="s">Income − expenses</div>
+        </div>
+        <div className="kpi tone-e">
+          <div className="k">Pending payments</div>
+          <div className="v">{m(due)}</div>
+          <div className="s">{open.length} open bills</div>
+        </div>
+      </div>
+
+      <h3 className="dash-section-title">This month</h3>
+      <div className="kpis dash-kpis">
+        <div className="kpi tone-b">
+          <div className="k">Total revenue</div>
+          <div className="v">{m(monthBook.incomeTotal)}</div>
+          <div className="s">{formatDate(monthStart)} – today</div>
+        </div>
+        <div className="kpi tone-e">
+          <div className="k">Total expenses</div>
+          <div className="v">{m(monthBook.expenseTotal)}</div>
+          <div className="s">Month to date</div>
+        </div>
+        <div className="kpi tone-c">
+          <div className="k">Net profit</div>
+          <div className="v">{m(monthBook.net)}</div>
+          <div className="s">Revenue − expenses</div>
+        </div>
+        <div className="kpi tone-d">
+          <div className="k">Pending receivables</div>
+          <div className="v">{m(due)}</div>
+          <div className="s">All open balances</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Room occupancy</div>
+          <div className="v">{occ.occPct}%</div>
+          <div className="s">Live today · ADR {m(kpis.adr)}</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Function hall revenue</div>
+          <div className="v">{m(monthBook.hall)}</div>
+          <div className="s">Hall collections MTD</div>
+        </div>
+      </div>
+
+      <div className="kpis dash-kpis" style={{ marginTop: 8 }}>
         <div className="kpi tone-a">
           <div className="k">Today's bookings</div>
           <div className="v">{todayBooks.length}</div>
@@ -105,31 +193,16 @@ export default function Dashboard({ state, go, onClearBookings }) {
           <div className="s">Confirmed, quoted and enquiry</div>
         </div>
         <div className="kpi tone-c">
-          <div className="k">Rooms occupied</div>
-          <div className="v">
-            {occ.occupied}/{occ.live}
+          <div className="k">Rooms · Available / Booked / Cleaning / Maint.</div>
+          <div className="v" style={{ fontSize: "1.1rem" }}>
+            {rooms.available} / {rooms.occupied} / {rooms.cleaning} / {rooms.maint}
           </div>
-          <div className="s">{occ.occPct}% occupancy</div>
+          <div className="s">Booked includes Reserved + Occupied</div>
         </div>
-        <div className="kpi tone-a">
-          <div className="k">ADR</div>
-          <div className="v">{m(kpis.adr)}</div>
-          <div className="s">Room revenue ÷ room nights (MTD)</div>
-        </div>
-        <div className="kpi tone-b">
+        <div className="kpi tone-d">
           <div className="k">RevPAR</div>
           <div className="v">{m(kpis.revpar)}</div>
           <div className="s">Room revenue ÷ available rooms × days</div>
-        </div>
-        <div className="kpi tone-d">
-          <div className="k">Today's collection</div>
-          <div className="v">{m(todayPaid)}</div>
-          <div className="s">Payments posted today</div>
-        </div>
-        <div className="kpi tone-e">
-          <div className="k">Pending payments</div>
-          <div className="v">{m(due)}</div>
-          <div className="s">{open.length} open bills</div>
         </div>
       </div>
 

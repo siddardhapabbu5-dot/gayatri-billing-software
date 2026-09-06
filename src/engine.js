@@ -144,7 +144,11 @@ export function folioTotals(folio, lines, payments, taxPercent) {
   const subtotal = lines.reduce((s, l) => s + Number(l.amount || 0), 0);
   const discount = Number(folio?.discount || 0);
   const taxable = Math.max(0, subtotal - discount);
-  const tax = Math.round((taxable * (taxPercent ?? 0)) / 100);
+  const gstMode = folio?.gstMode === "without" ? "without" : "with";
+  const rate = gstMode === "without" ? 0 : Number(taxPercent ?? folio?.taxPercent ?? 0) || 0;
+  const tax = Math.round((taxable * rate) / 100);
+  const cgst = Math.round(tax / 2);
+  const sgst = tax - cgst;
   const total = taxable + tax;
   const paid = payments.reduce((s, p) => {
     if (p.type === "Deposit" || p.type === "Deposit return") return s;
@@ -156,19 +160,37 @@ export function folioTotals(folio, lines, payments, taxPercent) {
     return s;
   }, 0);
   const balance = total - paid;
-  return { subtotal, discount, tax, total, paid, balance, deposit };
+  return { subtotal, discount, taxable, tax, cgst, sgst, taxRate: rate, gstMode, total, paid, balance, deposit };
 }
 
 export function bookingFolio(state, bookingId) {
   const folio = state.folios.find((f) => f.bookingId === bookingId);
   const lines = state.folioLines.filter((l) => l.folioId === folio?.id);
   const pays = state.payments.filter((p) => p.folioId === folio?.id);
-  const tax = state.property.taxPercent;
+  const tax =
+    folio?.gstMode === "without"
+      ? 0
+      : folio?.taxPercent != null
+        ? Number(folio.taxPercent)
+        : state.property.taxPercent;
   return { folio, lines, pays, totals: folio ? folioTotals(folio, lines, pays, tax) : emptyTotals() };
 }
 
 function emptyTotals() {
-  return { subtotal: 0, discount: 0, tax: 0, total: 0, paid: 0, balance: 0, deposit: 0 };
+  return {
+    subtotal: 0,
+    discount: 0,
+    taxable: 0,
+    tax: 0,
+    cgst: 0,
+    sgst: 0,
+    taxRate: 0,
+    gstMode: "with",
+    total: 0,
+    paid: 0,
+    balance: 0,
+    deposit: 0,
+  };
 }
 
 export function occupancyStats(state, date) {
@@ -223,7 +245,227 @@ export function railOf(method) {
   const m = String(method || "").toLowerCase();
   if (m.includes("cash")) return "cash";
   if (m.includes("upi")) return "upi";
+  if (m.includes("card") || m.includes("visa") || m.includes("master") || m.includes("rupay")) return "card";
+  if (m.includes("bank") || m.includes("neft") || m.includes("rtgs") || m.includes("imps") || m.includes("transfer") || m.includes("net banking")) {
+    return "bank";
+  }
+  if (m.includes("credit") || m.includes("pending") || m.includes("due")) return "credit";
   return "other";
+}
+
+function inPeriodDay(d, from, to) {
+  const day = String(d || "").slice(0, 10);
+  if (!day) return false;
+  if (from && to) return inRange(day, from, to);
+  if (from) return day >= from;
+  if (to) return day <= to;
+  return true;
+}
+
+/** Cashbook: Opening + Income − Expenses = Closing (cash basis). */
+export function cashbookReport(state, from, to) {
+  const paysAll = (state.payments || []).filter((p) => p.type !== "Refund" && p.type !== "Deposit return");
+  const expsAll = state.expenses || [];
+
+  const sumPaysBefore = (before) => {
+    if (!before) return 0;
+    return paysAll
+      .filter((p) => payDay(p) && payDay(p) < before)
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+  };
+  const sumExpBefore = (before) => {
+    if (!before) return 0;
+    return expsAll
+      .filter((e) => String(e.date || "").slice(0, 10) && String(e.date).slice(0, 10) < before)
+      .reduce((s, e) => s + Number(e.amount || 0), 0);
+  };
+
+  const opening = sumPaysBefore(from) - sumExpBefore(from);
+  const pays = paysAll.filter((p) => inPeriodDay(payDay(p), from, to));
+  const expenses = expsAll.filter((e) => inPeriodDay(e.date, from, to));
+
+  const rails = { cash: 0, upi: 0, card: 0, bank: 0, credit: 0, other: 0 };
+  let room = 0;
+  let hall = 0;
+  let food = 0;
+  let otherIncome = 0;
+  let advance = 0;
+
+  for (const p of pays) {
+    const amt = Number(p.amount) || 0;
+    const rail = railOf(p.method);
+    rails[rail] = (rails[rail] || 0) + amt;
+    if (p.type === "Advance") advance += amt;
+
+    const { lines } = bookingFolio(state, p.bookingId);
+    const cats = {};
+    for (const l of lines || []) {
+      const cat = String(l.category || "other");
+      cats[cat] = (cats[cat] || 0) + Number(l.amount || 0);
+    }
+    const gross = Object.values(cats).reduce((s, v) => s + v, 0) || 1;
+    const roomShare = (cats.room || 0) / gross;
+    const foodShare = ((cats.food || 0) + (cats.tea || 0) + (cats.catering || 0) + (cats.laundry || 0)) / gross;
+    const hallShare = (cats.hall || 0) / gross;
+    const used = roomShare + foodShare + hallShare;
+    room += amt * roomShare;
+    hall += amt * hallShare;
+    food += amt * foodShare;
+    otherIncome += amt * Math.max(0, 1 - used);
+  }
+
+  const incomeTotal = pays.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const expenseByCat = {};
+  for (const e of expenses) {
+    const key = e.category || "other";
+    expenseByCat[key] = (expenseByCat[key] || 0) + Number(e.amount || 0);
+  }
+  const expenseTotal = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const net = incomeTotal - expenseTotal;
+  const closing = opening + net;
+
+  const creditPending = (state.bookings || [])
+    .filter((b) => b.status !== "Cancelled")
+    .map((b) => bookingFolio(state, b.id).totals)
+    .reduce((s, t) => s + Math.max(0, t.balance || 0), 0);
+
+  // Simple management balance sheet (cash basis + credit)
+  const cashInHand = rails.cash || 0;
+  const digitalInHand = (rails.upi || 0) + (rails.card || 0) + (rails.bank || 0);
+  const balanceSheet = {
+    collectionsCash: cashInHand,
+    collectionsDigital: digitalInHand,
+    totalCollections: incomeTotal,
+    expensesPaid: expenseTotal,
+    netCashMovement: net,
+    creditReceivable: creditPending,
+    closingCashPosition: opening + net,
+    note: "Credit / receivable = unpaid customer balances (not cash yet).",
+  };
+
+  return {
+    from,
+    to,
+    opening,
+    closing,
+    incomeTotal,
+    expenseTotal,
+    net,
+    room: Math.round(room),
+    hall: Math.round(hall),
+    food: Math.round(food),
+    otherIncome: Math.round(otherIncome),
+    advance: Math.round(advance),
+    rails,
+    creditPending,
+    balanceSheet,
+    expenses,
+    expenseByCat,
+    paymentCount: pays.length,
+  };
+}
+
+export function outstandingCustomers(state) {
+  const byGuest = new Map();
+  for (const b of state.bookings || []) {
+    if (b.status === "Cancelled") continue;
+    const { totals } = bookingFolio(state, b.id);
+    if (!(totals.balance > 0)) continue;
+    const guest = state.guests.find((g) => g.id === b.guestId);
+    const key = b.guestId || b.id;
+    if (!byGuest.has(key)) {
+      byGuest.set(key, {
+        guestId: b.guestId,
+        name: guest?.name || "Guest",
+        phone: guest?.phone || "",
+        bill: 0,
+        paid: 0,
+        balance: 0,
+        bookings: [],
+      });
+    }
+    const row = byGuest.get(key);
+    row.bill += totals.total || 0;
+    row.paid += totals.paid || 0;
+    row.balance += Math.max(0, totals.balance || 0);
+    row.bookings.push({ id: b.id, number: b.number, balance: Math.max(0, totals.balance || 0) });
+  }
+  return [...byGuest.values()].sort((a, b) => b.balance - a.balance);
+}
+
+/** Period GST register — split With GST vs Without GST. */
+export function gstReport(state, from, to) {
+  const rows = [];
+  for (const b of state.bookings || []) {
+    if (b.status === "Cancelled") continue;
+    const day = String(b.eventDate || "").slice(0, 10);
+    if (from && day < from) continue;
+    if (to && day > to) continue;
+    const { folio, totals } = bookingFolio(state, b.id);
+    const guest = state.guests.find((g) => g.id === b.guestId);
+    const mode = folio?.gstMode === "without" || totals.gstMode === "without" ? "without" : "with";
+    rows.push({
+      id: b.id,
+      number: b.number,
+      date: b.eventDate,
+      name: guest?.name || "Guest",
+      phone: guest?.phone || "",
+      gstin: guest?.gstin || "",
+      gstMode: mode,
+      taxable: totals.taxable || Math.max(0, (totals.subtotal || 0) - (totals.discount || 0)),
+      taxRate: totals.taxRate || 0,
+      tax: totals.tax || 0,
+      cgst: totals.cgst || 0,
+      sgst: totals.sgst || 0,
+      total: totals.total || 0,
+      paid: totals.paid || 0,
+      balance: Math.max(0, totals.balance || 0),
+    });
+  }
+  const withGst = rows.filter((r) => r.gstMode === "with");
+  const withoutGst = rows.filter((r) => r.gstMode === "without");
+  const sum = (list, key) => list.reduce((s, r) => s + Number(r[key] || 0), 0);
+  return {
+    rows,
+    withGst,
+    withoutGst,
+    with: {
+      count: withGst.length,
+      taxable: sum(withGst, "taxable"),
+      tax: sum(withGst, "tax"),
+      cgst: sum(withGst, "cgst"),
+      sgst: sum(withGst, "sgst"),
+      total: sum(withGst, "total"),
+    },
+    without: {
+      count: withoutGst.length,
+      taxable: sum(withoutGst, "taxable"),
+      tax: 0,
+      total: sum(withoutGst, "total"),
+    },
+  };
+}
+
+/** Day-wise room + hall occupancy for a date range. */
+export function occupancyRangeReport(state, from, to) {
+  if (!from || !to || from > to) return { days: [], avgRoomOcc: 0, avgHallOcc: 0, roomNights: 0, hallDays: 0 };
+  const days = [];
+  let cursor = from;
+  let roomNights = 0;
+  let hallDays = 0;
+  let dayCount = 0;
+  while (cursor <= to) {
+    const stats = occupancyStats(state, cursor);
+    days.push({ date: cursor, ...stats });
+    roomNights += stats.occupied;
+    hallDays += stats.hallBooked;
+    dayCount += 1;
+    cursor = addDays(cursor, 1);
+    if (dayCount > 400) break;
+  }
+  const avgRoomOcc = dayCount ? Math.round(days.reduce((s, d) => s + d.occPct, 0) / dayCount) : 0;
+  const avgHallOcc = dayCount ? Math.round(days.reduce((s, d) => s + d.hallPct, 0) / dayCount) : 0;
+  return { days, avgRoomOcc, avgHallOcc, roomNights, hallDays, dayCount };
 }
 
 export function lineKind(line) {

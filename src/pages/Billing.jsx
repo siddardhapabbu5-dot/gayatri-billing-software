@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { bookingFolio, collectionsReport, lineKind } from "../engine";
+import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
 import { TERM_SECTIONS, sectionLines, termSetsOf } from "../policies";
 import { PageHead, Pill } from "../ui";
@@ -29,10 +30,12 @@ function stayFor(state, booking) {
     from = String(halls[0].start || halls[0].date || booking.eventDate).slice(0, 10);
     to = String(halls[0].end || halls[0].date || booking.eventDate).slice(0, 10);
   }
+  const kind = rooms.length && halls.length ? "mixed" : rooms.length ? "room" : "function";
   return {
     roomLabel: roomNos.length ? roomNos.join(", ") : hallNames[0] || "—",
     from,
     to,
+    kind,
   };
 }
 
@@ -69,20 +72,43 @@ function partyMatch(state, booking, pays, q) {
   return hay.includes(needle);
 }
 
-export default function Billing({ state, focusId, onPay, onDiscount, onIssue, onClose, onBack, onDocs, backLabel }) {
+export default function Billing({ state, focusId, onPay, onDiscount, onCharge, onGstMode, onCancelRoom, onIssue, onClose, onBack, onDocs, backLabel }) {
   const [open, setOpen] = useState(focusId || null);
   const [partyQuery, setPartyQuery] = useState("");
+  const [balanceFilter, setBalanceFilter] = useState("all");
+  const [kindFilter, setKindFilter] = useState("all");
+  const [modeFilter, setModeFilter] = useState("all");
   const booking = state.bookings.find((b) => b.id === open);
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
 
+  const rows = useMemo(
+    () =>
+      state.bookings
+        .filter((b) => b.status !== "Cancelled")
+        .map((b) => ({ b, ...bookingFolio(state, b.id), stay: stayFor(state, b) }))
+        .filter(({ b, pays, totals, stay }) => {
+          if (!partyMatch(state, b, pays, partyQuery)) return false;
+          if (balanceFilter === "due" && !(totals.balance > 0)) return false;
+          if (balanceFilter === "settled" && totals.balance > 0) return false;
+          if (kindFilter === "hall" && stay.kind === "room") return false;
+          if (kindFilter === "room" && stay.kind === "function") return false;
+          if (modeFilter !== "all") {
+            const modes = pays.map((p) => p.method).filter(Boolean);
+            if (!modes.includes(modeFilter)) return false;
+          }
+          return true;
+        }),
+    [state, partyQuery, balanceFilter, kindFilter, modeFilter]
+  );
+
   if (booking) {
     const { folio, lines, pays, totals } = bookingFolio(state, booking.id);
     const guest = state.guests.find((g) => g.id === booking.guestId);
-    const docs = state.invoices.filter((i) => i.bookingId === booking.id);
-    const halls = state.hallReservations.filter((r) => r.bookingId === booking.id);
-    const rooms = state.roomReservations.filter((r) => r.bookingId === booking.id);
+    const docs = (state.invoices || []).filter((i) => i.bookingId === booking.id);
+    const halls = (state.hallReservations || []).filter((r) => r.bookingId === booking.id);
+    const rooms = (state.roomReservations || []).filter((r) => r.bookingId === booking.id);
 
     return (
       <>
@@ -114,11 +140,23 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
               <strong>{booking.number}</strong>
               <div className="muted">Use this number to find the party later</div>
               <div><Pill status={booking.status} /></div>
-              <div className="muted">{state.property.taxName} {state.property.taxPercent}%</div>
+              <div className="muted">{state.property.taxName} {totals.gstMode === "without" ? "· Without GST" : `${totals.taxRate}%`}</div>
               <div className="muted">{state.property.currency} · {state.property.timezone}</div>
             </div>
           </div>
           <div className="orn" />
+          <div className="no-print" style={{ marginBottom: 12 }}>
+            <label style={{ maxWidth: 280 }}>
+              Bill type
+              <select
+                value={folio?.gstMode === "without" ? "without" : "with"}
+                onChange={(e) => folio && onGstMode?.(folio.id, e.target.value)}
+              >
+                <option value="with">With GST ({state.property.taxPercent}%)</option>
+                <option value="without">Without GST</option>
+              </select>
+            </label>
+          </div>
           <div className="g2">
             <div>
               <div className="muted">Bill to</div>
@@ -130,11 +168,34 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
             <div>
               {halls.map((h) => {
                 const hall = state.halls.find((x) => x.id === h.hallId);
-                return <div key={h.id}>{hall?.name} · {h.slotType} · {h.start.replace("T", " ")} → {h.end.replace("T", " ")}</div>;
+                const start = String(h.start || h.date || "").replace("T", " ");
+                const end = String(h.end || h.date || "").replace("T", " ");
+                return <div key={h.id}>{hall?.name} · {h.slotType} · {start} → {end}</div>;
               })}
               {rooms.map((r) => {
                 const room = state.rooms.find((x) => x.id === r.roomId);
-                return <div key={r.id}>Room {room?.number} · {r.checkIn} to {r.checkOut}</div>;
+                return (
+                  <div key={r.id} className="row" style={{ justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                    <div>Room {room?.number} · {r.checkIn} to {r.checkOut} · {r.status}</div>
+                    {r.status !== "Cancelled" && onCancelRoom && (
+                      <button
+                        type="button"
+                        className="btn ghost small danger no-print"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Cancel room ${room?.number} on this booking?\n\nHall booking (if any) stays. Bill is updated. No refund will be posted.`
+                            )
+                          ) {
+                            onCancelRoom(r.id);
+                          }
+                        }}
+                      >
+                        Cancel room · no refund
+                      </button>
+                    )}
+                  </div>
+                );
               })}
             </div>
           </div>
@@ -167,7 +228,16 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
               <tr><td colSpan={3}>Room stay subtotal</td><td>{m(lines.filter((l) => lineKind(l) === "room").reduce((s, l) => s + Number(l.amount || 0), 0))}</td></tr>
               <tr><td colSpan={3}>Subtotal</td><td>{m(totals.subtotal)}</td></tr>
               <tr><td colSpan={3}>Discount</td><td>{m(totals.discount)}</td></tr>
-              <tr><td colSpan={3}>{state.property.taxName} {totals.tax ? state.property.taxPercent : 0}%</td><td>{m(totals.tax)}</td></tr>
+              {totals.gstMode === "without" ? (
+                <tr><td colSpan={3}>GST</td><td>Without GST · {m(0)}</td></tr>
+              ) : (
+                <>
+                  <tr><td colSpan={3}>Taxable value</td><td>{m(totals.taxable)}</td></tr>
+                  <tr><td colSpan={3}>CGST ({(totals.taxRate / 2).toFixed(1)}%)</td><td>{m(totals.cgst)}</td></tr>
+                  <tr><td colSpan={3}>SGST ({(totals.taxRate / 2).toFixed(1)}%)</td><td>{m(totals.sgst)}</td></tr>
+                  <tr><td colSpan={3}>{state.property.taxName} {totals.taxRate}%</td><td>{m(totals.tax)}</td></tr>
+                </>
+              )}
               <tr><td colSpan={3}><strong>Total</strong></td><td><strong>{m(totals.total)}</strong></td></tr>
               <tr><td colSpan={3}>Advance paid</td><td>{m(pays.filter((p) => p.type === "Advance").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
               <tr><td colSpan={3}>Final payment</td><td>{m(pays.filter((p) => p.type === "Final").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
@@ -230,19 +300,62 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
         <div className={`due-box no-print ${totals.balance > 0 ? "is-due" : "is-paid"}`}>
           {totals.balance > 0 ? (
             <div>
-              <div className="muted">Remaining amount (balance)</div>
-              <strong>{m(totals.balance)}</strong>
+              <div className="muted">Payment status · Remaining amount (balance)</div>
+              <strong>{paymentStatus(totals)} · {m(totals.balance)}</strong>
               <p className="muted" style={{ margin: "4px 0 0" }}>
                 Total {m(totals.total)} − advance and payments {m(totals.paid)}. Use Payments → Save settlement when the guest pays the rest.
               </p>
             </div>
           ) : (
             <div>
-              <div className="muted">Remaining amount</div>
-              <strong>{m(0)}</strong>
+              <div className="muted">Payment status</div>
+              <strong>{paymentStatus(totals)} · {m(0)}</strong>
               <p className="muted" style={{ margin: "4px 0 0" }}>Settled. Nothing left to collect.</p>
             </div>
           )}
+        </div>
+        <div className="panel no-print" style={{ marginTop: 12 }}>
+          <h3>Add extra charges</h3>
+          <p className="muted" style={{ margin: "0 0 8px" }}>
+            Food, tea/coffee, laundry, extra bed, decoration and other services.
+          </p>
+          <form
+            className="fields two"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!folio || !onCharge) return;
+              const fd = new FormData(e.target);
+              const category = String(fd.get("category") || "other");
+              const qty = Number(fd.get("qty") || 1);
+              const unitPrice = Number(fd.get("unitPrice") || 0);
+              const description = String(fd.get("description") || "").trim() || chargeLabel(category);
+              if (!unitPrice) return;
+              onCharge(folio.id, { category, qty, unitPrice, description });
+              e.target.reset();
+            }}
+          >
+            <label>
+              Charge type
+              <select name="category" defaultValue="food">
+                {CHARGE_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Description
+              <input name="description" placeholder="Optional note" />
+            </label>
+            <label>
+              Qty
+              <input name="qty" type="number" min="1" defaultValue={1} />
+            </label>
+            <label>
+              Rate
+              <input name="unitPrice" type="number" min="0" step="1" placeholder="₹" required />
+            </label>
+            <button className="btn small" type="submit">Add to bill</button>
+          </form>
         </div>
         <div className="g2 no-print" style={{ marginTop: 12 }}>
           <div className="panel">
@@ -354,14 +467,6 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
     );
   }
 
-  const rows = useMemo(
-    () =>
-      state.bookings
-        .filter((b) => b.status !== "Cancelled")
-        .map((b) => ({ b, ...bookingFolio(state, b.id), stay: stayFor(state, b) }))
-        .filter(({ b, pays }) => partyMatch(state, b, pays, partyQuery)),
-    [state, partyQuery]
-  );
   return (
     <>
       <PageHead title="Payment & Invoice" sub="Search by party booking no. (BK-…), guest name, phone or UPI/ref. Open a row for advance or final payment.">
@@ -409,23 +514,48 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
           Download Excel
         </button>
       </PageHead>
-      <div className="panel no-print" style={{ marginBottom: 12 }}>
-        <label style={{ display: "block", margin: 0 }}>
-          Find party
-          <input
-            type="search"
-            value={partyQuery}
-            onChange={(e) => setPartyQuery(e.target.value)}
-            placeholder="BK-2026-00001 · name · phone · UPI ref"
-            autoComplete="off"
-          />
-        </label>
-        <p className="muted" style={{ margin: "6px 0 0" }}>
-          Party booking no. (BK-…) is the main work reference — same number for advance, final payment and report close.
-          {partyQuery ? ` Showing ${rows.length} match(es).` : ""}
+      <div className="panel no-print bill-filters" style={{ marginBottom: 12 }}>
+        <div className="fields bill-filter-grid">
+          <label style={{ gridColumn: "1 / -1" }}>
+            Find party
+            <input
+              type="search"
+              value={partyQuery}
+              onChange={(e) => setPartyQuery(e.target.value)}
+              placeholder="BK-2026-00001 · name · phone · UPI ref"
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            Balance
+            <select value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)}>
+              <option value="all">All parties</option>
+              <option value="due">Balance due</option>
+              <option value="settled">Fully settled</option>
+            </select>
+          </label>
+          <label>
+            Service
+            <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+              <option value="all">Hall + rooms</option>
+              <option value="hall">Hall only</option>
+              <option value="room">Room stay only</option>
+            </select>
+          </label>
+          <label>
+            Payment mode
+            <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)}>
+              <option value="all">Any mode</option>
+              {MODES.map((mode) => (
+                <option key={mode} value={mode}>{mode}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="muted" style={{ margin: "10px 0 0" }}>
+          Click a row to open advance / final payment. Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
         </p>
-      </div>
-      <div className="panel">
+      </div>      <div className="panel">
         <table>
           <thead>
             <tr>
@@ -439,13 +569,15 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
               <th>Advance</th>
               <th>Last paid</th>
               <th>Balance</th>
+              <th>Status</th>
+              <th>GST</th>
               <th>Settlement</th>
             </tr>
           </thead>
           <tbody>
             {!rows.length && (
               <tr>
-                <td colSpan={11} className="muted">
+                <td colSpan={13} className="muted">
                   {partyQuery ? "No party matches that booking no. / name / phone / ref." : "No active bills."}
                 </td>
               </tr>
@@ -470,6 +602,8 @@ export default function Billing({ state, focusId, onPay, onDiscount, onIssue, on
                   <td>{m(advance)}</td>
                   <td>{lastPay ? formatDateTime(lastPay.at) : "—"}</td>
                   <td>{m(Math.max(0, totals.balance))}</td>
+                  <td>{paymentStatus(totals)}</td>
+                  <td>{totals.gstMode === "without" ? "Without GST" : "With GST"}</td>
                   <td>{settlement || ""}</td>
                 </tr>
               );

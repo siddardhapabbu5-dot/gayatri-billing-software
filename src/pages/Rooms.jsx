@@ -4,6 +4,13 @@ import { housekeepingOf, occupancyOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
 const OCC = ["Available", "Reserved", "Occupied", "Out of order", "Maintenance"];
+const OCC_LABEL = {
+  Available: "Available",
+  Reserved: "Booked",
+  Occupied: "Occupied",
+  "Out of order": "Out of order",
+  Maintenance: "Maintenance",
+};
 const HK = ["Clean", "Dirty", "Cleaning", "Inspected"];
 
 const emptyType = { name: "", baseRate: 0, extraBed: 0, childRate: 0, maxGuests: 4, extraBeds: 2, composition: "" };
@@ -93,7 +100,7 @@ export default function Rooms({
             <div className="kpis room-board-kpis">
               {OCC.slice(0, 4).map((s) => (
                 <div className="kpi" key={s}>
-                  <div className="k">{s}</div>
+                  <div className="k">{OCC_LABEL[s] || s}</div>
                   <div className="v">{state.rooms.filter((r) => occupancyOf(r) === s).length}</div>
                 </div>
               ))}
@@ -235,7 +242,7 @@ export default function Rooms({
                       Occupancy
                       <select value={occupancyOf(selected)} onChange={(e) => onStatus(selected.id, e.target.value)}>
                         {OCC.map((s) => (
-                          <option key={s}>{s}</option>
+                          <option key={s} value={s}>{OCC_LABEL[s] || s}</option>
                         ))}
                       </select>
                     </label>
@@ -268,7 +275,7 @@ export default function Rooms({
                       Status
                       <select value={room.status} onChange={(e) => setRoom({ ...room, status: e.target.value })}>
                         {OCC.map((s) => (
-                          <option key={s}>{s}</option>
+                          <option key={s} value={s}>{OCC_LABEL[s] || s}</option>
                         ))}
                       </select>
                     </label>
@@ -452,7 +459,7 @@ export default function Rooms({
                 Status
                 <select value={room.status} onChange={(e) => setRoom({ ...room, status: e.target.value })}>
                   {OCC.map((s) => (
-                    <option key={s}>{s}</option>
+                    <option key={s} value={s}>{OCC_LABEL[s] || s}</option>
                   ))}
                 </select>
               </label>

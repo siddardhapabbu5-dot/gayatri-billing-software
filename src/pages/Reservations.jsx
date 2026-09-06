@@ -58,6 +58,7 @@ function emptyDraft(property, date) {
     rooms: [],
     services: [],
     discount: 0,
+    gstMode: "with",
     advance: 0,
     paymentMode: "UPI",
     paymentDate: todayISO(),
@@ -171,7 +172,8 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
     ...(Number(draft.advance) > 0 ? [{ amount: Number(draft.advance) || 0, type: "Advance" }] : []),
     ...(Number(draft.finalPayment) > 0 ? [{ amount: Number(draft.finalPayment) || 0, type: "Final" }] : []),
   ];
-  const totals = folioTotals({ discount: draft.discount }, lines, previewPays, state.property.taxPercent);
+  const taxRate = draft.gstMode === "without" ? 0 : state.property.taxPercent;
+  const totals = folioTotals({ discount: draft.discount, gstMode: draft.gstMode }, lines, previewPays, taxRate);
   const pol = policiesOf(state.property);
   const cur = state.property.currency;
   const loc = state.property.locale;
@@ -223,17 +225,12 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
   }
 
   function setEventDate(date) {
-    setDraft((d) => {
-      const checkOut = d.checkOut <= date ? addDays(date, 1) : d.checkOut;
-      return {
-        ...d,
-        eventDate: date,
-        checkIn: date,
-        checkOut,
-        halls: d.halls.map((h) => applyHallSlotWindow(h, date)),
-        rooms: d.rooms.map((r) => ({ ...r, checkIn: date, checkOut: r.checkOut <= date ? addDays(date, 1) : r.checkOut })),
-      };
-    });
+    // Hall event date can differ from room check-in / check-out.
+    setDraft((d) => ({
+      ...d,
+      eventDate: date,
+      halls: d.halls.map((h) => applyHallSlotWindow(h, date)),
+    }));
   }
 
   function toggleRoom(id) {
@@ -420,7 +417,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
           </div>
           <div className="panel">
             <h3>Halls</h3>
-            <p className="muted">Convention halls. Half-day or full-day.</p>
+            <p className="muted">Convention halls. Half-day or full-day. Hall date can be different from room stay dates.</p>
             <div className="hall-tariff-grid">
               {state.halls.filter((h) => h.active !== false).map((h) => {
                 const selected = draft.halls.some((x) => x.hallId === h.id);
@@ -482,6 +479,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
           <div className="panel">
             <h3>Room stay</h3>
             <p className="muted">
+              Room stay dates are separate from the hall event date — set check-in / check-out below.
               Occupied or Reserved only if a guest is already booked for these dates. Then click a free room.
               Check-in / check-out: {roomCheckInOutText(pol)}.
             </p>
@@ -560,7 +558,13 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
               <h3>Commercials</h3>
               <div className="fields two">
                 <label>Discount<input type="number" value={draft.discount} onChange={(e) => setDraft({ ...draft, discount: Number(e.target.value) || 0 })} /></label>
-                <div />
+                <label>
+                  GST
+                  <select value={draft.gstMode || "with"} onChange={(e) => setDraft({ ...draft, gstMode: e.target.value })}>
+                    <option value="with">With GST ({state.property.taxPercent}%)</option>
+                    <option value="without">Without GST</option>
+                  </select>
+                </label>
                 <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>
                   Policy advance {pol.advancePercent}% is {money(suggestedAdvance(totals.total, state.property), cur, loc)}. Security deposit {money(pol.securityDeposit, cur, loc)} is collected separately from room revenue.
                 </p>
@@ -662,7 +666,16 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                   )}
                   <tr><td>Subtotal</td><td>{money(totals.subtotal, cur, loc)}</td></tr>
                   <tr><td>Discount</td><td>{money(totals.discount, cur, loc)}</td></tr>
-                  <tr><td>{state.property.taxName} {state.property.taxPercent}%</td><td>{money(totals.tax, cur, loc)}</td></tr>
+                  {draft.gstMode === "without" ? (
+                    <tr><td>GST</td><td>Without GST · {money(0, cur, loc)}</td></tr>
+                  ) : (
+                    <>
+                      <tr><td>Taxable</td><td>{money(totals.taxable, cur, loc)}</td></tr>
+                      <tr><td>CGST ({(state.property.taxPercent / 2).toFixed(1)}%)</td><td>{money(totals.cgst, cur, loc)}</td></tr>
+                      <tr><td>SGST ({(state.property.taxPercent / 2).toFixed(1)}%)</td><td>{money(totals.sgst, cur, loc)}</td></tr>
+                      <tr><td>{state.property.taxName} {state.property.taxPercent}%</td><td>{money(totals.tax, cur, loc)}</td></tr>
+                    </>
+                  )}
                   <tr><td><strong>Total</strong></td><td><strong>{money(totals.total, cur, loc)}</strong></td></tr>
                   <tr><td>Advance paid</td><td>{money(Number(draft.advance) || 0, cur, loc)}</td></tr>
                   <tr><td>Final payment</td><td>{money(Number(draft.finalPayment) || 0, cur, loc)}</td></tr>

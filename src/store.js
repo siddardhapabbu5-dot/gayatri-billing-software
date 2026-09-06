@@ -1,4 +1,4 @@
-import { KEY, seqNo, uid, dayToISO } from "./lib";
+import { KEY, seqNo, uid, dayToISO, todayISO, addDays } from "./lib";
 import { createSeed, defaultRetreatType, defaultRooms, defaultRoomTypes, DEFAULT_ABOUT, DEFAULT_BANQUET, DEFAULT_EVENT_TYPES, DEFAULT_TERMS } from "./seed";
 import { DEFAULT_POLICIES, DEFAULT_TERM_SECTIONS, DEFAULT_TERM_SECTIONS_HI, DEFAULT_TERM_SECTIONS_TE, housekeepingOf, occupancyOf, termSetsOf } from "./policies";
 import { bookingFolio, folioTotals, hallClash, publicAvailability, roomClash } from "./engine";
@@ -172,6 +172,17 @@ function load() {
     const raw = localStorage.getItem(KEY);
     const parsed = raw ? JSON.parse(raw) : createSeed();
     if (!Array.isArray(parsed.documents)) parsed.documents = [];
+    if (!Array.isArray(parsed.expenses)) parsed.expenses = [];
+    parsed.folios = (parsed.folios || []).map((f) => ({
+      ...f,
+      gstMode: f.gstMode === "without" ? "without" : "with",
+      taxPercent:
+        f.gstMode === "without"
+          ? 0
+          : f.taxPercent != null
+            ? Number(f.taxPercent)
+            : parsed.property?.taxPercent ?? 18,
+    }));
     parsed.services = [];
     parsed.pricingRules = [];
     if (parsed.property) {
@@ -860,7 +871,14 @@ export function createReservation(draft) {
     );
   });
 
-  const folio = { id: uid("fo"), bookingId: booking.id, discount: Number(draft.discount) || 0, taxPercent: state.property.taxPercent, status: "Open" };
+  const folio = {
+    id: uid("fo"),
+    bookingId: booking.id,
+    discount: Number(draft.discount) || 0,
+    taxPercent: draft.gstMode === "without" ? 0 : state.property.taxPercent,
+    gstMode: draft.gstMode === "without" ? "without" : "with",
+    status: "Open",
+  };
   const lines = (draft.lines || []).map((l) => ({ ...l, id: l.id || uid("ln"), folioId: folio.id }));
 
   state.bookings.unshift(booking);
@@ -1017,6 +1035,77 @@ export function setFolioDiscount(folioId, discount) {
   return persist(state);
 }
 
+export function setFolioGstMode(folioId, gstMode) {
+  const state = load();
+  const folio = state.folios.find((f) => f.id === folioId);
+  if (!folio) return { error: "Folio not found" };
+  const mode = gstMode === "without" ? "without" : "with";
+  folio.gstMode = mode;
+  folio.taxPercent = mode === "without" ? 0 : state.property.taxPercent;
+  if (folio.status === "Settled") folio.status = "Open";
+  audit(state, "GST mode updated", folio.bookingId, mode === "with" ? "With GST" : "Without GST");
+  return persist(state);
+}
+
+export function addFolioCharge(folioId, payload) {
+  const state = load();
+  const folio = state.folios.find((f) => f.id === folioId);
+  if (!folio) return { error: "Folio not found" };
+  const qty = Math.max(1, Number(payload.qty) || 1);
+  const unitPrice = Number(payload.unitPrice) || 0;
+  const category = payload.category || "other";
+  const description = String(payload.description || category).trim() || category;
+  const line = {
+    id: uid("line"),
+    folioId,
+    category,
+    description,
+    qty,
+    unitPrice,
+    amount: Math.round(qty * unitPrice),
+  };
+  state.folioLines.push(line);
+  if (folio.status === "Settled") folio.status = "Open";
+  audit(state, "Charge added", folio.bookingId, `${description} · ${line.amount}`);
+  return persist(state);
+}
+
+export function removeFolioCharge(lineId) {
+  const state = load();
+  const line = (state.folioLines || []).find((l) => l.id === lineId);
+  state.folioLines = (state.folioLines || []).filter((l) => l.id !== lineId);
+  if (line) audit(state, "Charge removed", line.folioId, line.description || line.category);
+  return persist(state);
+}
+
+export function addExpense(payload) {
+  const state = load();
+  if (!Array.isArray(state.expenses)) state.expenses = [];
+  const row = {
+    id: uid("exp"),
+    date: String(payload.date || "").slice(0, 10) || todayISO(),
+    department: payload.department || "Common",
+    category: payload.category || "other",
+    amount: Number(payload.amount) || 0,
+    method: payload.method || "Cash",
+    description: String(payload.description || "").trim(),
+    at: new Date().toISOString(),
+    createdBy: state.session?.userId || "",
+  };
+  if (row.amount <= 0) return { error: "Enter an amount greater than zero" };
+  state.expenses.unshift(row);
+  audit(state, "Expense recorded", row.category, `${row.department} · ${row.amount}`);
+  return persist(state);
+}
+
+export function removeExpense(id) {
+  const state = load();
+  const row = (state.expenses || []).find((e) => e.id === id);
+  state.expenses = (state.expenses || []).filter((e) => e.id !== id);
+  if (row) audit(state, "Expense removed", row.category, String(row.amount));
+  return persist(state);
+}
+
 export function cancelBooking(bookingId, refund) {
   const state = load();
   const bk = state.bookings.find((b) => b.id === bookingId);
@@ -1054,6 +1143,53 @@ export function cancelBooking(bookingId, refund) {
   }
   audit(state, "Booking cancelled", bk.number, refund ? `Refund ${refund}` : "No refund");
   pruneEvents(state);
+  return persist(state);
+}
+
+/** Cancel one room stay on a booking. Keeps hall booking and bill. No refund by default. */
+export function cancelRoomStay(resId, { refund = 0 } = {}) {
+  const state = load();
+  const res = (state.roomReservations || []).find((r) => r.id === resId);
+  if (!res || res.status === "Cancelled") return { error: "Room stay not found" };
+  const room = state.rooms.find((r) => r.id === res.roomId);
+  res.status = "Cancelled";
+  if (!liveStaysForRoom(state, res.roomId, res.bookingId)) {
+    state.rooms = state.rooms.map((r) =>
+      r.id === res.roomId && ["Occupied", "Reserved"].includes(r.status)
+        ? { ...r, status: "Available", hkStatus: "Dirty" }
+        : r
+    );
+  }
+  const folio = state.folios.find((f) => f.bookingId === res.bookingId);
+  if (folio) {
+    const roomNo = room?.number || "";
+    state.folioLines = (state.folioLines || []).filter((l) => {
+      if (l.folioId !== folio.id) return true;
+      if (l.category !== "room") return true;
+      if (roomNo && String(l.description || "").includes(`Room ${roomNo}`)) return false;
+      return true;
+    });
+    if (folio.status === "Settled") folio.status = "Open";
+    if (refund > 0) {
+      state.payments.unshift({
+        id: uid("pay"),
+        folioId: folio.id,
+        bookingId: res.bookingId,
+        amount: Number(refund),
+        method: "Bank transfer",
+        type: "Refund",
+        at: new Date().toISOString(),
+        ref: `Room ${roomNo} cancelled`,
+      });
+    }
+  }
+  const bk = state.bookings.find((b) => b.id === res.bookingId);
+  audit(
+    state,
+    "Room stay cancelled",
+    bk?.number || res.bookingId,
+    `Room ${room?.number || ""} · ${refund > 0 ? `Refund ${refund}` : "No refund"}`
+  );
   return persist(state);
 }
 
@@ -1372,3 +1508,203 @@ export function verifyDocument(id, verified = true) {
 }
 
 export { folioTotals };
+
+/**
+ * Loads a full sample day for management training:
+ * hall-only, room-only, mixed (hall + rooms on different days),
+ * all payment modes, room cancel without refund, expenses, credit balances.
+ */
+export function loadManagementSample() {
+  const today = todayISO();
+  const tomorrow = addDays(today, 1);
+  const dayAfter = addDays(today, 2);
+
+  // Start from clean transactional data, keep property/halls/rooms
+  clearAllBookingsSync();
+  let state = load();
+  const halls = (state.halls || []).filter((h) => h.active !== false);
+  const rooms = state.rooms || [];
+  const hall1 = halls[0];
+  const hall2 = halls[1] || halls[0];
+  const roomA = rooms[0];
+  const roomB = rooms[1] || rooms[0];
+  const roomC = rooms[2] || rooms[0];
+  if (!hall1 || !roomA) {
+    return { error: "Add at least one hall and one room in Master data first." };
+  }
+
+  function hallHold(hallId, date, slotType = "full-day") {
+    const start = slotType === "half-day" ? `${date}T18:00` : `${date}T06:00`;
+    const end = slotType === "half-day" ? `${addDays(date, 1)}T00:00` : `${addDays(date, 1)}T06:00`;
+    return { hallId, date, slotType, start, end };
+  }
+
+  // 1) Hall only · With GST · Advance Cash · CREDIT (balance due)
+  createReservation({
+    guest: { name: "Sample Hall Party", phone: "9000000001", email: "", address: "Palagummi", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "XXXX" } },
+    type: "Reception",
+    source: "Direct",
+    eventDate: today,
+    checkIn: today,
+    checkOut: tomorrow,
+    guestsExpected: 400,
+    halls: [hallHold(hall1.id, today, "full-day")],
+    rooms: [],
+    discount: 0,
+    gstMode: "with",
+    advance: 100000,
+    paymentMode: "Cash",
+    paymentDate: today,
+    paymentRef: "SAMPLE-CASH-ADV",
+    finalPayment: 0,
+    notes: "Sample: hall only · Cash advance · balance is credit",
+    agreeHall: true,
+    agreeRoom: false,
+  });
+
+  // 2) Room only · With GST · Advance UPI · then Card settlement · PAID
+  const roomOnly = createReservation({
+    guest: { name: "Sample Room Guest", phone: "9000000002", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "YYYY" } },
+    type: "Room only",
+    source: "Walk-in",
+    eventDate: today,
+    checkIn: today,
+    checkOut: tomorrow,
+    guestsExpected: 2,
+    halls: [],
+    rooms: [{ roomId: roomA.id, checkIn: today, checkOut: tomorrow, adults: 2, children: 0, extraBed: 0 }],
+    discount: 0,
+    gstMode: "with",
+    advance: 1000,
+    paymentMode: "UPI",
+    paymentDate: today,
+    paymentRef: "UPI/SAMPLE/001",
+    finalPayment: 0,
+    notes: "Sample: room only · UPI advance + Card settlement",
+    agreeHall: false,
+    agreeRoom: true,
+  });
+  {
+    const st = load();
+    const folio = st.folios.find((f) => f.bookingId === roomOnly.booking?.id);
+    const { totals } = bookingFolio(st, roomOnly.booking?.id);
+    if (folio && totals.balance > 0) {
+      addPayment(folio.id, { amount: totals.balance, method: "Card", type: "Final", date: today, ref: "CARD-SAMPLE" });
+    }
+  }
+
+  // 3) Mixed · Hall TODAY, rooms TOMORROW (different days) · Bank advance · partial
+  const mixed = createReservation({
+    guest: { name: "Sample Mixed Family", phone: "9000000003", email: "", address: "Razole", gstin: "36AAAAA0000A1Z5", nationality: "India", idProof: { type: "Aadhaar", number: "ZZZZ" } },
+    type: "Marriages",
+    source: "Phone",
+    eventDate: today,
+    checkIn: tomorrow,
+    checkOut: dayAfter,
+    guestsExpected: 800,
+    halls: [hallHold(hall2.id, today, "full-day")],
+    rooms: [
+      { roomId: roomB.id, checkIn: tomorrow, checkOut: dayAfter, adults: 2, children: 1, extraBed: 1 },
+      { roomId: roomC.id, checkIn: tomorrow, checkOut: dayAfter, adults: 2, children: 0, extraBed: 0 },
+    ],
+    discount: 10000,
+    gstMode: "with",
+    advance: 200000,
+    paymentMode: "Bank transfer",
+    paymentDate: today,
+    paymentRef: "NEFT-SAMPLE",
+    finalPayment: 0,
+    notes: "Sample: hall today + rooms different days · Bank advance · credit balance",
+    agreeHall: true,
+    agreeRoom: true,
+  });
+
+  if (mixed?.error) return { error: mixed.error };
+
+  // 4) Cancel one room on mixed booking — NO refund; bill stays for hall + remaining room
+  state = load();
+  const mixedRooms = (state.roomReservations || []).filter(
+    (r) => r.bookingId === mixed.booking?.id && r.status !== "Cancelled"
+  );
+  if (mixedRooms[0]) {
+    cancelRoomStay(mixedRooms[0].id, { refund: 0 });
+  }
+
+  // 5) Without GST · hall half-day · Net banking · settle full
+  const freeHall = halls.find((h) => h.id !== hall1.id && h.id !== hall2.id) || hall2;
+  const noGst = createReservation({
+    guest: { name: "Sample No-GST Client", phone: "9000000004", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "NNNN" } },
+    type: "Conference",
+    source: "Direct",
+    eventDate: today,
+    checkIn: today,
+    checkOut: tomorrow,
+    guestsExpected: 120,
+    halls: [hallHold(freeHall.id, today, "half-day")],
+    rooms: [],
+    discount: 0,
+    gstMode: "without",
+    advance: 50000,
+    paymentMode: "Cash",
+    paymentDate: today,
+    finalPayment: 0,
+    notes: "Sample: Without GST · Cash advance + Net banking settlement",
+    agreeHall: true,
+    agreeRoom: false,
+  });
+  if (noGst?.error) return { error: noGst.error };
+  {
+    const st = load();
+    const folio = st.folios.find((f) => f.bookingId === noGst.booking?.id);
+    const { totals } = bookingFolio(st, noGst.booking?.id);
+    if (folio && totals.balance > 0) {
+      addPayment(folio.id, { amount: totals.balance, method: "Net banking", type: "Final", date: today, ref: "NB-SAMPLE" });
+    }
+  }
+
+  // Extra charges + settlement payment on first open folio if needed
+  state = load();
+  const openFolio = (state.folios || []).find((f) => f.status === "Open");
+  if (openFolio) {
+    addFolioCharge(openFolio.id, { category: "food", description: "Sample catering charge", qty: 1, unitPrice: 15000 });
+    addFolioCharge(openFolio.id, { category: "tea", description: "Tea / coffee service", qty: 1, unitPrice: 2500 });
+  }
+
+  // Daily expenses
+  addExpense({ date: today, department: "Hotel", category: "diesel", amount: 5000, method: "Cash", description: "Generator diesel — sample" });
+  addExpense({ date: today, department: "Function Hall", category: "tea", amount: 2500, method: "UPI", description: "Tea & refreshments — sample" });
+  addExpense({ date: today, department: "Hotel", category: "cleaning", amount: 3000, method: "Cash", description: "Cleaning materials — sample" });
+  addExpense({ date: today, department: "Admin", category: "salaries", amount: 8000, method: "Bank transfer", description: "Day wages — sample" });
+  addExpense({ date: today, department: "Common", category: "other", amount: 1500, method: "UPI", description: "Misc — sample" });
+
+  audit(load(), "Sample day loaded", today, "Hall/room/payments/expenses/credit demo");
+  return load();
+}
+
+/** Sync clear used by sample loader (no IndexedDB wait). */
+function clearAllBookingsSync() {
+  const state = load();
+  state.guests = [];
+  state.bookings = [];
+  state.hallReservations = [];
+  state.roomReservations = [];
+  state.folios = [];
+  state.folioLines = [];
+  state.payments = [];
+  state.invoices = [];
+  state.events = [];
+  state.cateringOrders = [];
+  state.purchaseOrders = [];
+  state.notifications = [];
+  state.enquiries = [];
+  state.documents = [];
+  state.agreements = [];
+  state.expenses = [];
+  state.rooms = (state.rooms || []).map((r) => ({
+    ...r,
+    status: "Available",
+    hkStatus: "Clean",
+  }));
+  state.audit = [];
+  persist(state);
+}

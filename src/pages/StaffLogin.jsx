@@ -33,16 +33,16 @@ export default function StaffLogin({ onSuccess, onBack }) {
   }
 
   return (
-    <div className="shell" style={{ placeItems: "center", minHeight: "100vh", display: "grid" }}>
-      <div className="panel" style={{ width: "min(420px, 92vw)", padding: 28 }}>
-        <img src="/site/images/logo-gold.png" alt="" style={{ height: 48, marginBottom: 12 }} />
-        <h1 style={{ margin: "0 0 4px", fontSize: "1.4rem" }}>Staff desk</h1>
-        <p className="muted" style={{ marginTop: 0 }}>
+    <div className="staff-login">
+      <div className="staff-login-card panel">
+        <img className="staff-login-logo" src="/site/images/logo-gold.png" alt="Gayatri" />
+        <h1>Staff desk</h1>
+        <p className="muted staff-login-sub">
           Sign in with your Gayatri role account
           {apiUp === false ? " · API offline" : apiUp ? " · API online" : ""}
         </p>
-        <form onSubmit={submit}>
-          <label style={{ display: "block", marginBottom: 10 }}>
+        <form className="staff-login-form" onSubmit={submit}>
+          <label>
             Email
             <input
               type="email"
@@ -50,10 +50,9 @@ export default function StaffLogin({ onSuccess, onBack }) {
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%" }}
             />
           </label>
-          <label style={{ display: "block", marginBottom: 10 }}>
+          <label>
             Password
             <input
               type="password"
@@ -61,13 +60,10 @@ export default function StaffLogin({ onSuccess, onBack }) {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%" }}
             />
           </label>
-          {error && (
-            <p style={{ color: "#b42318", fontSize: 14, margin: "8px 0" }}>{error}</p>
-          )}
-          <div className="row" style={{ gap: 8, marginTop: 14 }}>
+          {error && <p className="staff-login-error">{error}</p>}
+          <div className="row staff-login-actions">
             <button className="btn" type="submit" disabled={busy}>
               {busy ? "Signing in…" : "Sign in"}
             </button>
@@ -78,9 +74,26 @@ export default function StaffLogin({ onSuccess, onBack }) {
             )}
           </div>
         </form>
-        <p className="muted" style={{ fontSize: 12, marginTop: 18, lineHeight: 1.45 }}>
-          Demo: owner@… / Owner@123 · desk@… / Manager@123 · hk@… / Hk@123
-        </p>
+        <div className="staff-login-hint muted">
+          <div className="staff-login-hint-title">Demo accounts</div>
+          <ul>
+            <li>
+              <span>Owner</span>
+              <code>owner@gayatrifunctionhall.com</code>
+              <code>Owner@123</code>
+            </li>
+            <li>
+              <span>Manager</span>
+              <code>desk@gayatrifunctionhall.com</code>
+              <code>Manager@123</code>
+            </li>
+            <li>
+              <span>Housekeeping</span>
+              <code>hk@gayatrifunctionhall.com</code>
+              <code>Hk@123</code>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   );
