@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
+import { getToken } from "../api/client";
 import { addDays, formatDateDMY, money, nightsBetween, telHref, todayISO, waMe } from "../lib";
 import { buildFolioLinesFromDraft, folioTotals, hallDayStatus, lineKind, originLabel, roomClash } from "../engine";
+import { collectViaGateway } from "../payments/gateway";
 import { housekeepingOf, occupancyOf, policiesOf, roomCheckInOutText, suggestedAdvance } from "../policies";
 import { requiredFromDraft } from "../docTypes";
 import { DEFAULT_EVENT_TYPES } from "../seed";
@@ -166,6 +168,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
   const [draft, setDraft] = useState(() => draftFromGuest(state.property, presetGuest, startDate));
   const [error, setError] = useState("");
   const [peekRoom, setPeekRoom] = useState(null);
+  const [gwBusy, setGwBusy] = useState(false);
   const eventOptions = useMemo(() => eventTypeOptions(state.property), [state.property.eventTypes]);
   const lines = useMemo(() => buildFolioLinesFromDraft(state, { ...draft, services: draft.services }), [state, draft]);
   const previewPays = [
@@ -584,10 +587,57 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                     {["Cash", "UPI", "Card", "Net banking", "Bank transfer", "International card"].map((m) => <option key={m}>{m}</option>)}
                   </select>
                 </label>
-                <label>
+                  <label>
                   Advance ref / note
                   <input value={draft.paymentRef || ""} onChange={(e) => setDraft({ ...draft, paymentRef: e.target.value })} placeholder="UPI ref / receipt no." />
                 </label>
+                {(state.property?.paymentGateway?.enabled !== false) && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <button
+                      className="btn ghost small"
+                      type="button"
+                      disabled={gwBusy || !(Number(draft.advance) > 0)}
+                      onClick={async () => {
+                        const amount = Number(draft.advance) || 0;
+                        if (!amount) {
+                          setError("Enter advance amount first, then collect via gateway.");
+                          return;
+                        }
+                        setGwBusy(true);
+                        setError("");
+                        try {
+                          const result = await collectViaGateway({
+                            amountInr: amount,
+                            bookingNumber: `ADV-${(draft.guest?.phone || draft.guest?.name || "guest").toString().replace(/\W+/g, "").slice(0, 12)}`,
+                            guestName: draft.guest?.name,
+                            guestPhone: draft.guest?.phone,
+                            guestEmail: draft.guest?.email,
+                            description: "Advance · new reservation",
+                            property: state.property,
+                            authToken: getToken(),
+                            preferMethod: draft.paymentMode === "Cash" ? "UPI" : draft.paymentMode,
+                          });
+                          setDraft((d) => ({
+                            ...d,
+                            advance: String(result.amount),
+                            paymentMode: result.method,
+                            paymentRef: result.ref,
+                            paymentDate: d.paymentDate || todayISO(),
+                          }));
+                        } catch (err) {
+                          if (!err?.cancelled) setError(err.message || "Gateway payment failed");
+                        } finally {
+                          setGwBusy(false);
+                        }
+                      }}
+                    >
+                      {gwBusy ? "Opening gateway…" : "Collect advance via gateway"}
+                    </button>
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      Fills mode + ref after success. Then Confirm reservation.
+                    </span>
+                  </div>
+                )}
 
                 <h4 style={{ gridColumn: "1 / -1", margin: "12px 0 0" }}>Final payment</h4>
                 <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>

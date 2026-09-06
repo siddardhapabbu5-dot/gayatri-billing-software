@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { getToken } from "../api/client";
 import { bookingFolio, collectionsReport, lineKind } from "../engine";
 import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
+import { collectViaGateway } from "../payments/gateway";
 import { TERM_SECTIONS, sectionLines, termSetsOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
@@ -78,10 +80,13 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
   const [balanceFilter, setBalanceFilter] = useState("all");
   const [kindFilter, setKindFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
+  const [gwBusy, setGwBusy] = useState(false);
+  const [gwNote, setGwNote] = useState("");
   const booking = state.bookings.find((b) => b.id === open);
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
+  const gatewayOn = state.property?.paymentGateway?.enabled !== false;
 
   const rows = useMemo(
     () =>
@@ -409,7 +414,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 </label>
                 <label>
                   Payment mode
-                  <select name="method" defaultValue="Cash">
+                  <select name="method" defaultValue="UPI">
                     {MODES.map((mode) => (
                       <option key={mode}>{mode}</option>
                     ))}
@@ -425,6 +430,55 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                   </select>
                 </label>
                 <button className="btn small" type="submit">Save settlement</button>
+                {gatewayOn && (
+                  <button
+                    className="btn small"
+                    type="button"
+                    disabled={gwBusy || !(totals.balance > 0)}
+                    onClick={async (e) => {
+                      const form = e.currentTarget.form;
+                      const fd = new FormData(form);
+                      const amount = Number(fd.get("amount")) || Math.max(0, Math.round(totals.balance));
+                      const method = String(fd.get("method") || "UPI");
+                      const date = String(fd.get("date") || todayISO());
+                      const type = String(fd.get("type") || "Payment");
+                      if (!amount) {
+                        setGwNote("Enter an amount to collect");
+                        return;
+                      }
+                      setGwBusy(true);
+                      setGwNote("");
+                      try {
+                        const result = await collectViaGateway({
+                          amountInr: amount,
+                          bookingNumber: booking.number,
+                          guestName: guest?.name,
+                          guestPhone: guest?.phone,
+                          guestEmail: guest?.email,
+                          description: `${type} · ${booking.number}`,
+                          property: state.property,
+                          authToken: getToken(),
+                          preferMethod: method === "Cash" ? "UPI" : method,
+                        });
+                        onPay(folio.id, {
+                          amount: result.amount,
+                          method: result.method,
+                          type,
+                          date,
+                          ref: result.ref,
+                        });
+                        setGwNote(`Gateway OK · ${result.provider} · ${result.ref}`);
+                        form.reset();
+                      } catch (err) {
+                        if (!err?.cancelled) setGwNote(err.message || "Gateway payment failed");
+                      } finally {
+                        setGwBusy(false);
+                      }
+                    }}
+                  >
+                    {gwBusy ? "Opening gateway…" : "Pay via gateway"}
+                  </button>
+                )}
                 <button
                   className="btn ghost small"
                   type="button"
@@ -445,6 +499,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 >
                   Refund
                 </button>
+                {gwNote && <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>{gwNote}</p>}
               </form>
             )}
           </div>

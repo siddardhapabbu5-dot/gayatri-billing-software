@@ -30,7 +30,7 @@ export default function Portal({ state, onEnquire, onBack }) {
           </button>
         )}
       </div>
-      <PageHead title="Check date · hall · rooms" sub="Online enquiry posts into the same VHMS. Payment gateway and WhatsApp confirmation connect in Phase 4." />
+      <PageHead title="Check date · hall · rooms" sub="Online enquiry posts into the same VHMS. Desk payment gateway is ready in Billing / Reservations; public checkout can connect next." />
       <div className="g3" style={{ marginBottom: 16 }}>
         {state.halls.map((h) => (
           <div key={h.id} className="panel">

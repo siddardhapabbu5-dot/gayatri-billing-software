@@ -26,6 +26,10 @@ app:
     expiration-ms: 86400000
   cors:
     allowed-origins: http://localhost:5177,http://127.0.0.1:5177
+  razorpay:
+    enabled: false
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
 
 logging:
   level:

@@ -4,7 +4,7 @@ import { DEFAULT_POLICIES, TERM_LANGS, TERM_SECTIONS, policiesOf, termSetsOf } f
 import { PageHead } from "../ui";
 
 const INTEGRATIONS = [
-  { name: "Payment gateway", note: "UPI, cards, net banking, international cards — connect in Phase 4." },
+  { name: "Payment gateway", note: "Ready — Settings → Payment gateway. Mock for desk demos; Razorpay for UPI / Card / NetBanking." },
   { name: "WhatsApp / SMS / Call", note: "Website bookings open WhatsApp to the desk number. Staff can also WhatsApp or call the guest from Reservations." },
   { name: "Accounting", note: "Tally / QuickBooks / Xero export via invoice documents." },
   { name: "Channel manager", note: "OTA / room mapping — Phase 5." },
@@ -14,6 +14,7 @@ const INTEGRATIONS = [
 
 const TABS = [
   ["property", "Property"],
+  ["gateway", "Payment gateway"],
   ["terms", "Terms & Conditions"],
   ["policies", "Booking policies"],
   ["agreements", "Guest agreements"],
@@ -47,7 +48,7 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
 
   return (
     <>
-      <PageHead title="Settings" sub="Property, terms, booking policies, guest agreements, users and audit." />
+      <PageHead title="Settings" sub="Property, payment gateway, terms, booking policies, guest agreements, users and audit." />
       {note && <p className="pill ok" style={{ marginBottom: 10 }}>{note}</p>}
       <div className="chips" style={{ marginBottom: 12 }}>
         {TABS.map(([id, label]) => (
@@ -56,6 +57,74 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
           </button>
         ))}
       </div>
+
+      {tab === "gateway" && (
+        <div className="panel">
+          <h3>Payment gateway</h3>
+          <p className="muted">
+            Desk can collect via UPI / Card / NetBanking from Billing. Mock mode needs no bank keys.
+            Razorpay mode creates orders on the Spring API and opens Razorpay Checkout.
+          </p>
+          <div className="fields two" style={{ marginTop: 10 }}>
+            <label className="check">
+              Enable gateway on Billing
+              <input
+                type="checkbox"
+                checked={p.paymentGateway?.enabled !== false}
+                onChange={(e) =>
+                  onProperty({
+                    paymentGateway: {
+                      ...(p.paymentGateway || { mode: "mock", keyId: "" }),
+                      enabled: e.target.checked,
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              Mode
+              <select
+                value={p.paymentGateway?.mode === "razorpay" ? "razorpay" : "mock"}
+                onChange={(e) =>
+                  onProperty({
+                    paymentGateway: {
+                      ...(p.paymentGateway || { enabled: true, keyId: "" }),
+                      mode: e.target.value,
+                    },
+                  })
+                }
+              >
+                <option value="mock">Mock (demo — no keys)</option>
+                <option value="razorpay">Razorpay (test / live)</option>
+              </select>
+            </label>
+            <label>
+              Razorpay Key ID (public)
+              <input
+                defaultValue={p.paymentGateway?.keyId || ""}
+                placeholder="rzp_test_…"
+                onBlur={(e) =>
+                  onProperty({
+                    paymentGateway: {
+                      ...(p.paymentGateway || { enabled: true, mode: "razorpay" }),
+                      keyId: e.target.value.trim(),
+                    },
+                  })
+                }
+              />
+            </label>
+          </div>
+          <p className="muted" style={{ marginTop: 12 }}>
+            For Razorpay: set backend env <code>RAZORPAY_KEY_ID</code>, <code>RAZORPAY_KEY_SECRET</code>,
+            and <code>app.razorpay.enabled=true</code>, restart the API, paste the same Key ID here, then staff-login
+            so order/verify calls send JWT. Key secret stays on the server only.
+          </p>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Flow: Reservations (advance) or Billing (settlement) → Pay via gateway → mock confirm or Razorpay Checkout
+            → payment posted on folio with gateway ref. Website guest checkout is not wired yet.
+          </p>
+        </div>
+      )}
 
       {tab === "property" && (
         <div className="g2">

@@ -160,14 +160,24 @@ a { color: inherit; }
 .brand p { margin: 8px 0 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-2); }
 .brand small { display: block; margin-top: 8px; color: #9bb0b8; font-size: 11px; line-height: 1.4; }
 .nav-group { margin-top: 16px; }
-.nav-group span { display: block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f969e; padding: 0 8px 6px; }
+.nav-group span { display: block; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #7f969e; padding: 0 10px 8px; }
 .nav button {
   width: 100%; text-align: left; background: transparent; border: 0; color: #c5d4da;
-  padding: 7px 8px; border-radius: 3px; font-size: 13px;
+  padding: 11px 12px; border-radius: 4px; font-size: 15px; font-weight: 500; line-height: 1.25;
 }
 .nav button:hover, .nav button.on { background: var(--nav-2); color: #fff; }
-.nav-foot { margin-top: auto; padding-top: 16px; font-size: 11px; color: #8aa0a8; }
-.nav-foot select { width: 100%; background: var(--nav-2); border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 6px; margin-top: 6px; }
+.nav-foot { margin-top: auto; padding-top: 16px; font-size: 12px; color: #8aa0a8; }
+.nav-foot select { width: 100%; background: var(--nav-2); border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 8px; margin-top: 6px; font-size: 13px; }
+
+@media (min-width: 1100px) {
+  .nav button {
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  .brand h1 { font-size: 22px; }
+  .tabs button { padding: 10px 16px; font-size: 14px; }
+  .chip { padding: 9px 14px; font-size: 13px; }
+}
 
 .workspace { min-width: 0; }
 .topbar {

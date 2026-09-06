@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { publicAvailability } from "../engine";
 import { TERM_LANGS, TERM_SECTIONS, sectionLines, termLocaleOf } from "../policies";
-import { addDays, capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
+import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
 import RetreatOffer from "./RetreatOffer.jsx";
 import "../home.css";
 
@@ -103,6 +103,23 @@ function isGalleryVideo(item) {
   return item?.kind === "video" || /\.(mp4|mov|webm|m4v)$/i.test(item?.src || "");
 }
 
+/** The Hall tab — still photos from Gallery (no mp4), auto-play stacked flow */
+const HALL_SLIDES = (() => {
+  const photos = [];
+  const seen = new Set();
+  for (const item of GALLERY) {
+    const src = isGalleryVideo(item) ? item.poster : item.src;
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    photos.push({
+      src,
+      alt: item.alt || item.label || "Gayatri Convention",
+      label: item.label || "",
+    });
+  }
+  return photos;
+})();
+
 const emptyForm = {
   name: "",
   email: "",
@@ -124,7 +141,8 @@ function loadDraft() {
     const saved = JSON.parse(raw);
     const eventDate = saved.eventDate && String(saved.eventDate) >= todayISO() ? saved.eventDate : todayISO();
     const venue = saved.venue && saved.venue !== "Any available" ? saved.venue : "";
-    return { ...base, ...saved, eventDate, venue };
+    const phone = String(saved.phone || "").replace(/\D/g, "").slice(0, 10);
+    return { ...base, ...saved, eventDate, venue, phone };
   } catch {
     return base;
   }
@@ -146,6 +164,26 @@ function clearDraft() {
   }
 }
 
+function phoneDigits(value) {
+  return String(value || "").replace(/\D/g, "").slice(-10);
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function bookFormReady(form, agreedTerms, dateBlocked) {
+  const nameOk = String(form.name || "").trim().length >= 2;
+  const phoneOk = phoneDigits(form.phone).length === 10;
+  const emailOk = isValidEmail(form.email);
+  const typeOk = Boolean(String(form.eventType || "").trim());
+  const dateOk = Boolean(form.eventDate) && String(form.eventDate) >= todayISO();
+  const guestsN = Number(form.guests);
+  const guestsOk = Number.isFinite(guestsN) && guestsN >= 30 && guestsN <= 1500;
+  const venueOk = Boolean(String(form.venue || "").trim());
+  return nameOk && phoneOk && emailOk && typeOk && dateOk && guestsOk && venueOk && agreedTerms && !dateBlocked;
+}
+
 export default function Home({ state, onEnquire, onStaff }) {
   const p = state.property;
   const deckRef = useRef(null);
@@ -153,6 +191,7 @@ export default function Home({ state, onEnquire, onStaff }) {
   const wheelLock = useRef(false);
   const [page, setPage] = useState(0);
   const [filmFrame, setFilmFrame] = useState(0);
+  const [hallFrame, setHallFrame] = useState(0);
   const [form, setForm] = useState(loadDraft);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -160,9 +199,14 @@ export default function Home({ state, onEnquire, onStaff }) {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [termLang, setTermLang] = useState("en");
   const [termLangOpen, setTermLangOpen] = useState(false);
+  const [termFocusId, setTermFocusId] = useState(null);
   const termLangDropRef = useRef(null);
+  const galleryPreviewTimers = useRef({});
+  const galleryVideoRefs = useRef({});
   const [lightbox, setLightbox] = useState(null);
-  const [availView, setAvailView] = useState("month");
+  const [galleryFocus, setGalleryFocus] = useState(0);
+  const [galleryAutoScroll, setGalleryAutoScroll] = useState(true);
+  const [galleryArmed, setGalleryArmed] = useState({});
   const [availMonth, setAvailMonth] = useState(() => todayISO().slice(0, 7));
   pageRef.current = page;
 
@@ -205,19 +249,16 @@ export default function Home({ state, onEnquire, onStaff }) {
     [state, form.venue, form.eventDate]
   );
 
-  const availStrip = useMemo(() => {
-    return Array.from({ length: 14 }, (_, i) => {
-      const iso = addDays(todayISO(), i);
-      const a = publicAvailability(state, form.venue, iso);
-      const d = new Date(`${iso}T12:00:00`);
-      return {
-        iso,
-        booked: a.blocked,
-        wd: d.toLocaleDateString("en-IN", { weekday: "short" }),
-        day: d.getDate(),
-      };
-    });
-  }, [state, form.venue]);
+  const canSendBooking = useMemo(
+    () => bookFormReady(form, agreedTerms, dateAvail.blocked),
+    [form, agreedTerms, dateAvail.blocked]
+  );
+
+  const phoneOk = phoneDigits(form.phone).length === 10;
+  const phoneHint =
+    form.phone && !phoneOk
+      ? `Enter a 10-digit mobile number (${phoneDigits(form.phone).length}/10)`
+      : "";
 
   const availMonthCells = useMemo(() => {
     const [y, m] = availMonth.split("-").map(Number);
@@ -263,10 +304,36 @@ export default function Home({ state, onEnquire, onStaff }) {
   }, []);
 
   useEffect(() => {
-    if (FILM.length < 2) return undefined;
+    if (PAGES[page]?.id !== "home" || FILM.length < 2) return undefined;
     const timer = window.setInterval(() => setFilmFrame((i) => (i + 1) % FILM.length), 5200);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    if (PAGES[page]?.id !== "about" || HALL_SLIDES.length < 2 || lightbox) return undefined;
+    const timer = window.setInterval(
+      () => setHallFrame((i) => (i + 1) % HALL_SLIDES.length),
+      4600
+    );
+    return () => window.clearInterval(timer);
+  }, [page, lightbox]);
+
+  function lightboxAlbum(item) {
+    return item?.source === "hall" ? HALL_SLIDES : GALLERY;
+  }
+
+  function stepLightbox(dir) {
+    setLightbox((current) => {
+      if (!current) return current;
+      const album = lightboxAlbum(current);
+      if (!album.length) return current;
+      const i = (current.index + dir + album.length) % album.length;
+      const next = album[i];
+      return current.source === "hall"
+        ? { ...next, index: i, source: "hall", kind: "image" }
+        : { ...next, index: i };
+    });
+  }
 
   useEffect(() => {
     document.title = p.name || "Gayatri | Convention";
@@ -286,6 +353,13 @@ export default function Home({ state, onEnquire, onStaff }) {
       left: index * deck.clientWidth,
       behavior: reduceMotion ? "auto" : "smooth",
     });
+    const section = document.getElementById(id);
+    if (section instanceof HTMLElement) {
+      section.scrollTop = 0;
+      section.querySelectorAll(".terms-scroll, .terms-side").forEach((pane) => {
+        pane.scrollTop = 0;
+      });
+    }
     const hash = `#${id}`;
     if (window.location.hash !== hash) window.history.replaceState(null, "", hash);
   }
@@ -332,24 +406,43 @@ export default function Home({ state, onEnquire, onStaff }) {
   }, []);
 
   useEffect(() => {
+    function scrollableParent(el) {
+      let node = el;
+      while (node && node !== document.body) {
+        if (node instanceof HTMLElement) {
+          const style = window.getComputedStyle(node);
+          const canY =
+            /(auto|scroll|overlay)/.test(style.overflowY) ||
+            /(auto|scroll|overlay)/.test(style.overflow);
+          if (canY && node.scrollHeight > node.clientHeight + 4) return node;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    }
+
     const onWheel = (e) => {
       if (lightbox) return;
-      const sheet = e.target?.closest?.(".terms-scroll");
-      if (sheet) {
-        const { scrollTop, scrollHeight, clientHeight } = sheet;
-        const dy = e.deltaY + e.deltaX;
-        if (scrollHeight > clientHeight + 4) {
-          if (dy > 0 && scrollTop + clientHeight < scrollHeight - 2) return;
-          if (dy < 0 && scrollTop > 2) return;
-        }
+      // Typing in fields — never steal the wheel
+      if (e.target?.closest?.("input, textarea, select")) return;
+
+      const dy = e.deltaY + e.deltaX;
+      if (Math.abs(dy) < 24) return;
+
+      const pane = scrollableParent(e.target);
+      if (pane) {
+        const { scrollTop, scrollHeight, clientHeight } = pane;
+        const atTop = scrollTop <= 2;
+        const atBottom = scrollTop + clientHeight >= scrollHeight - 2;
+        // Mid-scroll: keep vertical scroll; at edges: auto-advance tabs
+        if (dy > 0 && !atBottom) return;
+        if (dy < 0 && !atTop) return;
       }
-      if (e.target?.closest?.("input, textarea, select, .booking-form")) return;
+
       e.preventDefault();
       if (wheelLock.current) return;
-      const delta = e.deltaY + e.deltaX;
-      if (Math.abs(delta) < 24) return;
       wheelLock.current = true;
-      goBy(delta > 0 ? 1 : -1);
+      goBy(dy > 0 ? 1 : -1);
       window.setTimeout(() => {
         wheelLock.current = false;
       }, 650);
@@ -362,13 +455,11 @@ export default function Home({ state, onEnquire, onStaff }) {
       if (lightbox) {
         if (e.key === "ArrowRight" || e.key === "PageDown") {
           e.preventDefault();
-          const i = (lightbox.index + 1) % GALLERY.length;
-          setLightbox({ ...GALLERY[i], index: i });
+          stepLightbox(1);
         }
         if (e.key === "ArrowLeft" || e.key === "PageUp") {
           e.preventDefault();
-          const i = (lightbox.index - 1 + GALLERY.length) % GALLERY.length;
-          setLightbox({ ...GALLERY[i], index: i });
+          stepLightbox(-1);
         }
         return;
       }
@@ -400,8 +491,84 @@ export default function Home({ state, onEnquire, onStaff }) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  function stopGalleryPreview(index) {
+    const timer = galleryPreviewTimers.current[index];
+    if (timer) {
+      window.clearTimeout(timer);
+      delete galleryPreviewTimers.current[index];
+    }
+    const video = galleryVideoRefs.current[index];
+    if (video) {
+      video.pause();
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function armGalleryMedia(index) {
+    setGalleryArmed((prev) => (prev[index] ? prev : { ...prev, [index]: true }));
+  }
+
+  function playGalleryPreview(index, seconds = 4) {
+    if (reduceMotion) return;
+    armGalleryMedia(index);
+    window.requestAnimationFrame(() => {
+      const video = galleryVideoRefs.current[index];
+      if (!video) return;
+      stopGalleryPreview(index);
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      const play = video.play();
+      if (play?.catch) play.catch(() => {});
+      galleryPreviewTimers.current[index] = window.setTimeout(() => {
+        stopGalleryPreview(index);
+      }, Math.round(seconds * 1000));
+    });
+  }
+
   useEffect(() => {
-    if (PAGES[page]?.id !== "terms") return;
+    const onGallery = PAGES[page]?.id === "gallery";
+    if (!onGallery) {
+      Object.keys(galleryPreviewTimers.current).forEach((k) => stopGalleryPreview(Number(k)));
+      setGalleryArmed({});
+      return undefined;
+    }
+    armGalleryMedia(galleryFocus);
+    if (!galleryAutoScroll || reduceMotion || lightbox) return undefined;
+    const timer = window.setInterval(() => {
+      setGalleryFocus((i) => {
+        const next = (i + 1) % GALLERY.length;
+        stopGalleryPreview(i);
+        armGalleryMedia(next);
+        if (isGalleryVideo(GALLERY[next])) playGalleryPreview(next, 3.5);
+        const tile = document.querySelector(`.gallery-item[data-gallery-index="${next}"]`);
+        tile?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        return next;
+      });
+    }, 4500);
+    return () => window.clearInterval(timer);
+  }, [page, galleryAutoScroll, reduceMotion, lightbox]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    Object.keys(galleryPreviewTimers.current).forEach((k) => stopGalleryPreview(Number(k)));
+  }, [lightbox]);
+
+  useEffect(() => () => {
+    Object.keys(galleryPreviewTimers.current).forEach((k) => stopGalleryPreview(Number(k)));
+  }, []);
+
+  useEffect(() => {
+    if (PAGES[page]?.id !== "terms") {
+      setTermFocusId(null);
+      return;
+    }
     const sheet = document.querySelector("#terms .terms-scroll");
     if (sheet) sheet.scrollTop = 0;
   }, [page, termLang]);
@@ -409,6 +576,15 @@ export default function Home({ state, onEnquire, onStaff }) {
   useEffect(() => {
     setTermLangOpen(false);
   }, [page]);
+
+  useEffect(() => {
+    if (!termFocusId) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setTermFocusId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [termFocusId]);
 
   useEffect(() => {
     if (!termLangOpen) return undefined;
@@ -435,27 +611,33 @@ export default function Home({ state, onEnquire, onStaff }) {
     goTo(id);
   }
 
-  function scrollToTermSection(id) {
-    const sheet = document.querySelector("#terms .terms-scroll");
-    const el = document.querySelector(`#terms-${id}`);
-    if (!sheet || !el) return;
-    const top = el.getBoundingClientRect().top - sheet.getBoundingClientRect().top + sheet.scrollTop - 10;
-    sheet.scrollTo({ top, behavior: "smooth" });
+  function openTermSection(id) {
+    setTermFocusId(id);
   }
+
+  const termFocusSec = termFocusId ? TERM_SECTIONS.find((s) => s.id === termFocusId) : null;
+  const termFocusLines = termFocusSec ? sectionLines(termLoc.sections[termFocusSec.id], p) : [];
+  const termFocusIndex = termFocusSec ? TERM_SECTIONS.findIndex((s) => s.id === termFocusSec.id) : -1;
 
   const currentId = PAGES[page]?.id || "home";
   const lightPage = !DARK_PAGES.has(currentId);
+  const loadHome = currentId === "home";
+  const loadAbout = currentId === "about";
+  const loadVenues = currentId === "venues";
+  const loadStay = currentId === "stay" || currentId === "stay-space";
+  const loadGallery = currentId === "gallery";
+  const loadVisit = currentId === "contact";
 
   return (
     <div className={`lux-root${lightPage ? " is-light" : ""}${currentId === "booking" ? " is-book" : ""}`}>
       <header className={`site-header${lightPage ? " scrolled" : ""}`} id="header">
-        <a className="logo" href="#home" onClick={(e) => onPageNav(e, "home")}>
+        <div className="logo" aria-label={`${p.brandName || "Gayatri"} · ${p.place || ""}`}>
           <img className="logo-mark" src={`${IMG}/logo-mark.png`} alt="" />
           <span>
             <strong>{p.brandName || "Gayatri"}</strong>
             <em>{currentId.startsWith("stay") ? "The Royal Family Retreat" : (p.place || "")}</em>
           </span>
-        </a>
+        </div>
         <nav className="site-nav" aria-label="Site">
           {PAGES.filter((item) => !item.hideNav).map((item) => (
             <a
@@ -483,17 +665,22 @@ export default function Home({ state, onEnquire, onStaff }) {
           <div className="hero-film" aria-hidden="true">
             <div className="hero-aurora"></div>
             <div className="hero-rays"></div>
-            {FILM.map((frame, i) => (
-              <img
-                key={frame.src}
-                className={`film-slide${i === filmFrame ? " is-on" : ""}`}
-                src={frame.src}
-                alt=""
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            ))}
+            {FILM.map((frame, i) => {
+              const n = FILM.length;
+              const near = loadHome && (i === filmFrame || i === (filmFrame + n - 1) % n);
+              return (
+                <img
+                  key={frame.src}
+                  className={`film-slide${i === filmFrame ? " is-on" : ""}`}
+                  src={near ? frame.src : undefined}
+                  alt=""
+                  loading={near ? "eager" : "lazy"}
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+              );
+            })}
             <div className="hero-film-shade"></div>
           </div>
           <div className="petals" aria-hidden="true">
@@ -522,7 +709,10 @@ export default function Home({ state, onEnquire, onStaff }) {
               <p>Luxury banquets</p>
               <p>Resorts</p>
             </div>
-            <p className="hero-place">{p.place}</p>
+            <p className="hero-place">
+              <span className="hero-place-ico" aria-hidden="true">📍</span>
+              <span className="hero-place-text">{p.place}</span>
+            </p>
           </div>
         </section>
 
@@ -532,58 +722,131 @@ export default function Home({ state, onEnquire, onStaff }) {
             <p className="intro-copy">
               {p.about}
             </p>
-            <div className="intro-photos">
-              <img className="photo-back" src={`${IMG}/gallery-5.jpg`} alt="Hall dining setup" />
-              <img className="photo-front" src={`${IMG}/gallery-1.jpg`} alt="Delegates at the venue" />
+            <div
+              className="intro-photos hall-flow hall-atelier"
+              aria-roledescription="carousel"
+              aria-label="Hall photos from gallery"
+            >
+              <div className="hall-glow" aria-hidden="true" />
+              {HALL_SLIDES.map((slide, i) => {
+                const n = HALL_SLIDES.length;
+                const front = i === hallFrame;
+                const back = i === (hallFrame + 1) % n;
+                const outgoing = i === (hallFrame + n - 1) % n;
+                const active = loadAbout && (front || back || outgoing);
+                const openable = front || back;
+                return (
+                  <figure
+                    key={slide.src}
+                    className={[
+                      "hall-slide",
+                      front ? "is-front" : "",
+                      back ? "is-back" : "",
+                      outgoing ? "is-out" : "",
+                      openable ? "is-openable" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    role={openable ? "button" : undefined}
+                    tabIndex={openable ? 0 : undefined}
+                    aria-label={openable ? `View larger: ${slide.alt}` : undefined}
+                    onClick={() => {
+                      if (!openable) return;
+                      setHallFrame(i);
+                      setLightbox({ ...slide, index: i, source: "hall", kind: "image" });
+                    }}
+                    onKeyDown={(e) => {
+                      if (!openable) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setHallFrame(i);
+                        setLightbox({ ...slide, index: i, source: "hall", kind: "image" });
+                      }
+                    }}
+                  >
+                    {active ? (
+                      <img src={slide.src} alt={slide.alt} draggable={false} />
+                    ) : null}
+                  </figure>
+                );
+              })}
             </div>
           </div>
         </section>
 
         <section className="locations reveal" id="venues">
-          <p className="crumb">Home / Halls</p>
           <h2 className="page-title">Convention halls</h2>
           <p className="page-sub">Venues</p>
           <div className="venue-grid">
             {halls.map((h) => (
               <article key={h.id} className="venue-card">
-                <img src={h.photo} alt={h.name} />
-                <p className="venue-jp">{h.jp}</p>
-                <h3>{h.name}</h3>
-                <p className="venue-copy">{h.copy}</p>
-                <p className="capacity">
-                  Capacity <span>|</span> {capacityText(h)}
-                </p>
-                {(() => {
-                  const cur = p.currency || "INR";
-                  const loc = p.locale || "en-IN";
-                  const slots = [
-                    ["Half day", h.rates?.halfDay],
-                    ["Full day", h.rates?.fullDay],
-                  ].filter(([, amount]) => Number(amount) > 0);
-                  if (!slots.length) return null;
-                  return (
-                    <ul className="venue-packages">
-                      {slots.map(([label, amount]) => (
-                        <li key={label}>
-                          <span>{label}</span>
-                          <strong>{money(amount, cur, loc)}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  );
-                })()}
-                {(() => {
-                  const todayHold = publicAvailability(state, h.name, todayISO());
-                  const w = todayHold.rows[0]?.windows[0];
-                  return todayHold.blocked ? (
-                    <p className="venue-hold">Booked today {w ? `· ${w.windowLabel || `${w.startLabel} – ${w.endLabel}`}` : ""}</p>
+                <div className="venue-media">
+                  {loadVenues ? (
+                    <img src={h.photo} alt={h.name} loading="lazy" />
                   ) : (
-                    <p className="venue-hold is-free">Free today</p>
-                  );
-                })()}
-                <button type="button" className="text-link" onClick={() => goBooking({ venue: h.name })}>
-                  Reserve this hall
-                </button>
+                    <div className="media-slot venue-media-slot" aria-hidden="true" />
+                  )}
+                </div>
+                <div className="venue-body">
+                  <div className="venue-head">
+                    <p className="venue-jp">{h.jp}</p>
+                    <h3>{h.name}</h3>
+                    <p className="venue-copy">{h.copy}</p>
+                  </div>
+                  <div className="venue-meta">
+                    <p className="capacity" title="Seating capacity">
+                      <span className="capacity-ico" aria-hidden="true">🪑</span>
+                      <span className="capacity-text">
+                        Capacity <span className="capacity-sep">|</span> {capacityText(h)}
+                      </span>
+                    </p>
+                    {(() => {
+                      const cur = p.currency || "INR";
+                      const loc = p.locale || "en-IN";
+                      const slots = [
+                        ["Half day", h.rates?.halfDay],
+                        ["Full day", h.rates?.fullDay],
+                      ].filter(([, amount]) => Number(amount) > 0);
+                      return (
+                        <ul className="venue-packages" aria-hidden={!slots.length}>
+                          {slots.map(([label, amount]) => (
+                            <li key={label}>
+                              <span className="venue-pkg-label">{label}</span>
+                              <span className="venue-pkg-dash" aria-hidden="true" />
+                              <strong className="venue-pkg-price">{money(amount, cur, loc)}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
+                    {(() => {
+                      const todayHold = publicAvailability(state, h.name, todayISO());
+                      const w = todayHold.rows[0]?.windows[0];
+                      return todayHold.blocked ? (
+                        <p className="venue-hold is-booked" role="status">
+                          <span className="venue-hold-label">Booked today</span>
+                          {w ? (
+                            <span className="venue-hold-note">
+                              {w.windowLabel || `${w.startLabel} – ${w.endLabel}`}
+                            </span>
+                          ) : null}
+                        </p>
+                      ) : (
+                        <p className="venue-hold is-free" role="status">
+                          <span className="venue-hold-label">Free today</span>
+                          <span className="venue-hold-note">Available to reserve — tap Book now</span>
+                        </p>
+                      );
+                    })()}
+                    <button
+                      type="button"
+                      className="btn btn-gold venue-book-btn"
+                      onClick={() => goBooking({ venue: h.name })}
+                    >
+                      Book now
+                    </button>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
@@ -592,6 +855,7 @@ export default function Home({ state, onEnquire, onStaff }) {
         <section className="stay-page stay-hero-page reveal" id="stay">
           <RetreatOffer
             part="hero"
+            loadMedia={loadStay}
             onBook={() =>
               goBooking({
                 eventType: "Family retreat",
@@ -603,38 +867,84 @@ export default function Home({ state, onEnquire, onStaff }) {
         </section>
 
         <section className="stay-page stay-story-page reveal" id="stay-space">
-          <RetreatOffer part="space" />
+          <RetreatOffer part="space" loadMedia={loadStay} />
         </section>
 
         <section className="gallery reveal" id="gallery">
           <p className="kicker">Gallery</p>
           <h2 className="gallery-title">Seen from the sky, felt in the hall</h2>
-          <p className="gallery-lead">Night lights, full ceremonies, and the grove around Palagummi. Tap a photo or video to open it.</p>
+          <p className="gallery-lead">
+            Hover a video clip for a short preview. Tap to open full screen. Scroll down to move to the next tab.
+          </p>
+          <div className="gallery-toolbar">
+            <button
+              type="button"
+              className={`gallery-auto-btn${galleryAutoScroll ? " is-on" : ""}`}
+              onClick={() => setGalleryAutoScroll((on) => !on)}
+              aria-pressed={galleryAutoScroll}
+            >
+              {galleryAutoScroll ? "⏸ Auto-scroll on" : "▶ Auto-scroll off"}
+            </button>
+          </div>
           <div className="gallery-mosaic">
             {GALLERY.map((item, index) => (
               <button
                 key={item.src}
                 type="button"
-                className={`gallery-item${item.span ? ` is-${item.span}` : ""}${isGalleryVideo(item) ? " is-video" : ""}`}
+                data-gallery-index={index}
+                className={`gallery-item${item.span ? ` is-${item.span}` : ""}${isGalleryVideo(item) ? " is-video" : ""}${
+                  galleryFocus === index ? " is-focus" : ""
+                }`}
                 style={{ "--i": index }}
                 onClick={() => setLightbox({ ...item, index })}
+                onMouseEnter={() => {
+                  setGalleryFocus(index);
+                  if (isGalleryVideo(item)) {
+                    armGalleryMedia(index);
+                    playGalleryPreview(index, 4);
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (isGalleryVideo(item)) stopGalleryPreview(index);
+                }}
+                onFocus={() => {
+                  setGalleryFocus(index);
+                  if (isGalleryVideo(item)) {
+                    armGalleryMedia(index);
+                    playGalleryPreview(index, 4);
+                  }
+                }}
+                onBlur={() => {
+                  if (isGalleryVideo(item)) stopGalleryPreview(index);
+                }}
               >
                 {isGalleryVideo(item) ? (
-                  <video
-                    src={item.src}
-                    poster={item.poster || undefined}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    aria-label={item.alt}
-                  />
-                ) : (
+                  loadGallery ? (
+                    <video
+                      ref={(el) => {
+                        if (el) galleryVideoRefs.current[index] = el;
+                        else delete galleryVideoRefs.current[index];
+                      }}
+                      src={galleryArmed[index] ? item.src : undefined}
+                      poster={item.poster || undefined}
+                      muted
+                      playsInline
+                      loop
+                      preload={galleryArmed[index] ? "auto" : "none"}
+                      aria-label={item.alt}
+                    />
+                  ) : (
+                    <div className="media-slot" aria-hidden="true" />
+                  )
+                ) : loadGallery ? (
                   <img src={item.src} alt={item.alt} loading="lazy" />
+                ) : (
+                  <div className="media-slot" aria-hidden="true" />
                 )}
-                <span className="gallery-caption">
-                  {isGalleryVideo(item) ? <em className="gallery-play">Play</em> : null}
-                  {item.label}
-                </span>
+                {isGalleryVideo(item) ? (
+                  <span className="gallery-emoji-play" aria-hidden="true">🎬</span>
+                ) : null}
+                <span className="gallery-caption">{item.label}</span>
               </button>
             ))}
           </div>
@@ -679,13 +989,34 @@ export default function Home({ state, onEnquire, onStaff }) {
               noValidate
               onSubmit={(e) => {
                 e.preventDefault();
-                const phoneOk = /^[0-9+\-\s]{10,15}$/.test(form.phone.trim());
+                const digits = phoneDigits(form.phone);
                 if (!form.venue) {
                   setError("Please select a hall.");
                   return;
                 }
-                if (!form.name.trim() || !form.email.trim() || !form.eventType || !form.eventDate || !form.guests || !phoneOk) {
-                  setError(phoneOk ? "Please complete the required fields." : "Enter a valid 10-digit phone number.");
+                if (!form.name.trim() || form.name.trim().length < 2) {
+                  setError("Please enter your full name.");
+                  return;
+                }
+                if (digits.length !== 10) {
+                  setError("Enter a valid 10-digit mobile number.");
+                  return;
+                }
+                if (!isValidEmail(form.email)) {
+                  setError("Enter a valid email address.");
+                  return;
+                }
+                if (!form.eventType) {
+                  setError("Please choose an event type.");
+                  return;
+                }
+                const guestsN = Number(form.guests);
+                if (!Number.isFinite(guestsN) || guestsN < 30 || guestsN > 1500) {
+                  setError("Guests must be between 30 and 1,500.");
+                  return;
+                }
+                if (!form.eventDate || form.eventDate < todayISO()) {
+                  setError("Please choose a valid event date.");
                   return;
                 }
                 if (dateAvail.blocked) {
@@ -700,7 +1031,7 @@ export default function Home({ state, onEnquire, onStaff }) {
                 const wishes = form.notes.trim();
                 const payload = {
                   name: form.name.trim(),
-                  phone: form.phone.trim(),
+                  phone: digits,
                   email: form.email.trim(),
                   date: form.eventDate,
                   hall: form.venue,
@@ -716,7 +1047,7 @@ export default function Home({ state, onEnquire, onStaff }) {
                   return;
                 }
                 if (!out?.booking?.number) return;
-                const desk = state.property.notifyPhone || state.property.phone || "+91 98496 00555";
+                const desk = state.property.notifyPhone || "+91 72043 01779";
                 const text = enquiryAlertText({ ...payload, number: out.booking.number });
                 const wa = waMe(desk, text);
                 const sent = { number: out.booking.number, wa, sms: smsHref(desk, text), tel: telHref(desk), desk };
@@ -749,13 +1080,21 @@ export default function Home({ state, onEnquire, onStaff }) {
                   id="phone"
                   name="phone"
                   type="tel"
-                  inputMode="tel"
+                  inputMode="numeric"
                   autoComplete="tel"
                   placeholder="10-digit number"
                   required
+                  maxLength={10}
+                  pattern="[0-9]{10}"
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  aria-invalid={form.phone ? !phoneOk : undefined}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/\D/g, "").slice(0, 10);
+                    setForm({ ...form, phone: next });
+                    if (error) setError("");
+                  }}
                 />
+                {phoneHint ? <span className="field-hint is-warn">{phoneHint}</span> : null}
               </div>
               <div className="field">
                 <label htmlFor="email">Email *</label>
@@ -826,26 +1165,33 @@ export default function Home({ state, onEnquire, onStaff }) {
                 />
               </div>
 
-              <label className="hall-picks-label">Hall *</label>
-              <div className="hall-picks">
-                {halls.map((h) => {
-                  const hold = publicAvailability(state, h.name, form.eventDate);
-                  return (
-                    <button
-                      key={h.id}
-                      type="button"
-                      title={h.name}
-                      className={`hall-pick${form.venue === h.name ? " is-on" : ""}${hold.blocked ? " is-held" : ""}`}
-                      onClick={() => {
-                        setError("");
-                        setForm((f) => ({ ...f, venue: h.name }));
-                      }}
-                    >
-                      <strong>{h.name.split(" ")[0]}</strong>
-                      <em>{hold.blocked ? "Booked" : "Free"}</em>
-                    </button>
-                  );
-                })}
+              <div className="field">
+                <label htmlFor="venue">Hall *</label>
+                <select
+                  id="venue"
+                  name="venue"
+                  required
+                  value={form.venue}
+                  onChange={(e) => {
+                    setError("");
+                    setForm({ ...form, venue: e.target.value });
+                  }}
+                >
+                  <option value="">Choose hall</option>
+                  {halls.map((h) => {
+                    const hold = publicAvailability(state, h.name, form.eventDate);
+                    const short =
+                      /imperial/i.test(h.name) ? "Imperial"
+                      : /garden/i.test(h.name) ? "Garden"
+                      : /heritage/i.test(h.name) ? "Heritage"
+                      : h.name;
+                    return (
+                      <option key={h.id} value={h.name} disabled={hold.blocked}>
+                        {short}{hold.blocked ? " — booked" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
               <div className="avail-board">
@@ -867,26 +1213,9 @@ export default function Home({ state, onEnquire, onStaff }) {
                           ? `${form.venue} — free`
                           : "Select a hall to check availability"}
                   </p>
-                  <div className="avail-view-toggle" role="group" aria-label="Calendar view">
-                    <button
-                      type="button"
-                      className={availView === "month" ? "is-on" : ""}
-                      onClick={() => setAvailView("month")}
-                    >
-                      Month
-                    </button>
-                    <button
-                      type="button"
-                      className={availView === "strip" ? "is-on" : ""}
-                      onClick={() => setAvailView("strip")}
-                    >
-                      14 days
-                    </button>
-                  </div>
                 </div>
 
-                {availView === "month" ? (
-                  <div className="avail-month">
+                <div className="avail-month">
                     <div className="avail-month-nav">
                       <button type="button" className="avail-month-shift" onClick={() => shiftAvailMonth(-1)} aria-label="Previous month">
                         ‹
@@ -926,28 +1255,13 @@ export default function Home({ state, onEnquire, onStaff }) {
                       )}
                     </div>
                   </div>
-                ) : (
-                  <div className="avail-days" role="list">
-                    {availStrip.map((d) => (
-                      <button
-                        key={d.iso}
-                        type="button"
-                        role="listitem"
-                        aria-label={`${d.iso} ${d.booked ? "booked" : "free"}`}
-                        className={`avail-day${d.booked ? " is-booked" : ""}${d.iso === form.eventDate ? " is-on" : ""}`}
-                        onClick={() => {
-                          setError("");
-                          setForm((f) => ({ ...f, eventDate: d.iso }));
-                        }}
-                      >
-                        <span>{d.wd}</span>
-                        <strong>{d.day}</strong>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
               {error ? <p className="form-error">{error}</p> : null}
+              {!canSendBooking && !error ? (
+                <p className="form-hint">
+                  Complete name, 10-digit mobile, email, event type, guests, date, hall, and Terms to send.
+                </p>
+              ) : null}
               <label className="book-agree">
                 <input
                   type="checkbox"
@@ -959,12 +1273,19 @@ export default function Home({ state, onEnquire, onStaff }) {
                 />
                 <span>
                   I have read and agree to the{" "}
-                  <a href="#terms" onClick={(e) => onPageNav(e, "terms")}>Terms & Conditions</a>
-                  {" "}(English · తెలుగు · हिन्दी).
+                  <a href="#terms" onClick={(e) => onPageNav(e, "terms")}>Terms & Conditions</a>.
                 </span>
               </label>
-              <button className="btn btn-gold full" type="submit" disabled={dateAvail.blocked || !form.venue}>
-                {dateAvail.blocked ? "Choose a free date" : "Send booking request"}
+              <button
+                className="btn btn-gold full"
+                type="submit"
+                disabled={!canSendBooking}
+              >
+                {dateAvail.blocked
+                  ? "Choose a free date"
+                  : canSendBooking
+                    ? "Send booking request"
+                    : "Fill required fields"}
               </button>
             </form>
           )}
@@ -972,8 +1293,10 @@ export default function Home({ state, onEnquire, onStaff }) {
         </section>
 
         <section className="contact reveal" id="contact">
-          <p className="kicker">Visit</p>
-          <h2>{p.name}</h2>
+          <p className="kicker visit-thanks">🙏 With thanks</p>
+          <h2>Visit our convention hall again</h2>
+          <p className="page-sub">We look forward to welcoming you back to {p.name || "Gayatri Convention"}.</p>
+          <h3 className="visit-place-name">{p.name}</h3>
           <address>
             {(p.address || []).map(
               (line) => (
@@ -991,13 +1314,17 @@ export default function Home({ state, onEnquire, onStaff }) {
             <a href={`mailto:${p.email}`}>{p.email}</a>
           </p>
           <div className="map-wrap">
-            <iframe
-              title="Gayatri Water and Beverages, Palagummi on Google Maps"
-              src={mapSrc}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              allowFullScreen
-            />
+            {loadVisit ? (
+              <iframe
+                title="Gayatri Water and Beverages, Palagummi on Google Maps"
+                src={mapSrc}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              />
+            ) : (
+              <div className="media-slot map-slot" aria-hidden="true" />
+            )}
           </div>
           <div className="contact-actions">
             <a
@@ -1065,8 +1392,8 @@ export default function Home({ state, onEnquire, onStaff }) {
                       <button
                         key={sec.id}
                         type="button"
-                        className="terms-toc-item"
-                        onClick={() => scrollToTermSection(sec.id)}
+                        className={`terms-toc-item${termFocusId === sec.id ? " is-on" : ""}`}
+                        onClick={() => openTermSection(sec.id)}
                       >
                         <span className="terms-toc-num">{String(i + 1).padStart(2, "0")}</span>
                         <span className="terms-toc-label">{termLoc.labels[sec.id] || sec.label}</span>
@@ -1076,26 +1403,50 @@ export default function Home({ state, onEnquire, onStaff }) {
                 </nav>
               </aside>
               <div className="terms-scroll">
-                <div className={`terms-articles lang-${termLang}`}>
-                  {TERM_SECTIONS.map((sec, i) => {
-                    const lines = sectionLines(termLoc.sections[sec.id], p);
-                    if (!lines.length) return null;
-                    return (
-                      <article key={sec.id} id={`terms-${sec.id}`} className="terms-article">
-                        <div className="terms-article-num">{String(i + 1).padStart(2, "0")}</div>
-                        <div className="terms-article-body">
-                          <h3>{termLoc.labels[sec.id] || sec.label}</h3>
-                          <ul className="terms-list">
-                            {lines.map((line) => (
-                              <li key={line}>{line}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </article>
-                    );
-                  })}
-                  <p className={`terms-foot lang-${termLang}`}>{termLoc.ui.disclaimer}</p>
-                </div>
+                {termFocusSec ? (
+                  <div className={`terms-focus lang-${termLang}`} role="dialog" aria-modal="true" aria-labelledby="terms-focus-title">
+                    <button
+                      type="button"
+                      className="terms-focus-close"
+                      aria-label="Close section"
+                      onClick={() => setTermFocusId(null)}
+                    >
+                      ×
+                    </button>
+                    <div className="terms-focus-card">
+                      <div className="terms-focus-num">{String(termFocusIndex + 1).padStart(2, "0")}</div>
+                      <h3 id="terms-focus-title">{termLoc.labels[termFocusSec.id] || termFocusSec.label}</h3>
+                      <ul className="terms-list">
+                        {termFocusLines.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`terms-articles lang-${termLang}`}>
+                    <p className="terms-pick-hint">Select a section on the left to read it in full.</p>
+                    {TERM_SECTIONS.map((sec, i) => {
+                      const lines = sectionLines(termLoc.sections[sec.id], p);
+                      if (!lines.length) return null;
+                      return (
+                        <button
+                          key={sec.id}
+                          type="button"
+                          className="terms-article terms-article-btn"
+                          onClick={() => openTermSection(sec.id)}
+                        >
+                          <div className="terms-article-num">{String(i + 1).padStart(2, "0")}</div>
+                          <div className="terms-article-body">
+                            <h3>{termLoc.labels[sec.id] || sec.label}</h3>
+                            <p className="terms-article-preview">{lines[0]}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    <p className={`terms-foot lang-${termLang}`}>{termLoc.ui.disclaimer}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1113,17 +1464,6 @@ export default function Home({ state, onEnquire, onStaff }) {
               Enter staff desk
             </button>
           </div>
-          <footer className="site-footer">
-            <a className="logo" href="#home" onClick={(e) => onPageNav(e, "home")}>
-              <strong>{p.brandName || "Gayatri"}</strong>
-              <em>{p.place}</em>
-            </a>
-            <p>
-              © {new Date().getFullYear()} {p.name}
-              {" · "}
-              <a href="#terms" onClick={(e) => onPageNav(e, "terms")}>Terms</a>
-            </p>
-          </footer>
         </section>
       </main>
 
@@ -1147,14 +1487,13 @@ export default function Home({ state, onEnquire, onStaff }) {
               aria-label="Previous photo"
               onClick={(e) => {
                 e.stopPropagation();
-                const i = (lightbox.index - 1 + GALLERY.length) % GALLERY.length;
-                setLightbox({ ...GALLERY[i], index: i });
+                stepLightbox(-1);
               }}
             >
               ‹
             </button>
             <figure className="lightbox-frame" onClick={(e) => e.stopPropagation()}>
-              {isGalleryVideo(lightbox) ? (
+              {isGalleryVideo(lightbox) && lightbox.source !== "hall" ? (
                 <video key={lightbox.src} src={lightbox.src} poster={lightbox.poster || undefined} controls autoPlay playsInline />
               ) : (
                 <img src={lightbox.src} alt={lightbox.alt} />
@@ -1167,8 +1506,7 @@ export default function Home({ state, onEnquire, onStaff }) {
               aria-label="Next photo"
               onClick={(e) => {
                 e.stopPropagation();
-                const i = (lightbox.index + 1) % GALLERY.length;
-                setLightbox({ ...GALLERY[i], index: i });
+                stepLightbox(1);
               }}
             >
               ›
@@ -1194,9 +1532,16 @@ export default function Home({ state, onEnquire, onStaff }) {
       >
         ›
       </button>
-      <a className="to-top" href="#home" aria-label="Go to home" onClick={(e) => onPageNav(e, "home")}>
-        ⌃<span>Home</span>
-      </a>
+      {page > 0 ? (
+        <a
+          className="to-top is-on"
+          href="#home"
+          aria-label="Back to home"
+          onClick={(e) => onPageNav(e, "home")}
+        >
+          ⌃<span>Home</span>
+        </a>
+      ) : null}
       <div className="toast" hidden={!toast}>
         {toast}
       </div>

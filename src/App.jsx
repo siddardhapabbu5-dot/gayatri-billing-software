@@ -164,6 +164,7 @@ export default function App() {
     setAuthUser(null);
     setStaffGate(false);
     setPage("home");
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
   }
 
   function go(id, extra = {}) {
@@ -257,6 +258,7 @@ export default function App() {
         onBack={() => {
           setStaffGate(false);
           setPage("home");
+          window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
         }}
         onSuccess={(u) => {
           setAuthUser(u);
@@ -286,7 +288,10 @@ export default function App() {
   if (!authUser) {
     return (
       <StaffLogin
-        onBack={() => setPage("home")}
+        onBack={() => {
+          setPage("home");
+          window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
+        }}
         onSuccess={(u) => {
           setAuthUser(u);
           setState(applyAuthUser(u));

@@ -51,6 +51,27 @@ function patchTermBrandingText(text) {
 function normalizePropertyLive(p) {
   if (!p) return false;
   let dirty = false;
+  if (!p.paymentGateway || typeof p.paymentGateway !== "object") {
+    p.paymentGateway = { enabled: true, mode: "mock", keyId: "" };
+    dirty = true;
+  } else {
+    if (p.paymentGateway.enabled == null) {
+      p.paymentGateway.enabled = true;
+      dirty = true;
+    }
+    if (!p.paymentGateway.mode) {
+      p.paymentGateway.mode = "mock";
+      dirty = true;
+    }
+    if (p.paymentGateway.keyId == null) {
+      p.paymentGateway.keyId = "";
+      dirty = true;
+    }
+  }
+  if (!p.notifyPhone || /98496\s*00555/.test(String(p.notifyPhone))) {
+    p.notifyPhone = "+91 72043 01779";
+    dirty = true;
+  }
   if (/Gayatri Convention Hall/i.test(p.name || "")) {
     p.name = "Gayatri Convention";
     dirty = true;
@@ -190,7 +211,9 @@ function load() {
       const beforeBanquet = p.banquetIntro || "";
       const beforeTerms = p.terms || "";
       if (p.notifyWhatsApp == null) p.notifyWhatsApp = true;
-      if (!p.notifyPhone) p.notifyPhone = p.phone || "+91 98496 00555";
+      if (!p.notifyPhone || /98496\s*00555/.test(String(p.notifyPhone))) {
+        p.notifyPhone = "+91 72043 01779";
+      }
       if (!p.brandName) p.brandName = "Gayatri";
       if (!p.place) p.place = "Palagummi · Konaseema";
       if (!p.about) p.about = DEFAULT_ABOUT;
@@ -569,6 +592,15 @@ export function updateProperty(patch) {
   }
   if (patch.policies) {
     state.property.policies = { ...DEFAULT_POLICIES, ...(state.property.policies || {}), ...patch.policies };
+  }
+  if (patch.paymentGateway) {
+    state.property.paymentGateway = {
+      enabled: true,
+      mode: "mock",
+      keyId: "",
+      ...(state.property.paymentGateway || {}),
+      ...patch.paymentGateway,
+    };
   }
   audit(state, "Property updated", state.property.name, Object.keys(patch).join(", "));
   return persist(state);

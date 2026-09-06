@@ -20,12 +20,21 @@ const PERKS = [
   },
 ];
 
-function Hero({ onBook }) {
+function Hero({ onBook, loadMedia = true }) {
   return (
     <div className="retreat-hero">
       <div className="retreat-photos">
-        <img src={`${IMG}/retreat-family-lobby.png`} alt="Family enjoying the lobby together" />
-        <img src={`${IMG}/retreat-family-dining.png`} alt="Family sharing a meal in the dining hall" />
+        {loadMedia ? (
+          <>
+            <img src={`${IMG}/retreat-family-lobby.png`} alt="Family enjoying the lobby together" loading="lazy" />
+            <img src={`${IMG}/retreat-family-dining.png`} alt="Family sharing a meal in the dining hall" loading="lazy" />
+          </>
+        ) : (
+          <>
+            <div className="media-slot" aria-hidden="true" />
+            <div className="media-slot" aria-hidden="true" />
+          </>
+        )}
       </div>
       <div className="retreat-hero-copy">
         <p className="retreat-kicker">Exclusive family stay</p>
@@ -131,10 +140,10 @@ function Close({ onBook }) {
   );
 }
 
-export default function RetreatOffer({ onBook, part = "all" }) {
+export default function RetreatOffer({ onBook, part = "all", loadMedia = true }) {
   return (
     <article className={`retreat retreat-${part}`}>
-      {(part === "all" || part === "hero") && <Hero onBook={onBook} />}
+      {(part === "all" || part === "hero") && <Hero onBook={onBook} loadMedia={loadMedia} />}
       {(part === "all" || part === "space") && <Space />}
       {(part === "all" || part === "close") && <Close onBook={part === "all" ? undefined : onBook} />}
     </article>

@@ -69,7 +69,7 @@ export default function StaffLogin({ onSuccess, onBack }) {
             </button>
             {onBack && (
               <button className="btn ghost" type="button" onClick={onBack}>
-                Public site
+                Home
               </button>
             )}
           </div>
