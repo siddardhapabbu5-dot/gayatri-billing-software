@@ -15,10 +15,13 @@ import Master from "./pages/Master.jsx";
 import Documents from "./pages/Documents.jsx";
 import Home from "./pages/Home.jsx";
 import Assistant from "./pages/Assistant.jsx";
+import StaffLogin from "./pages/StaffLogin.jsx";
 import { ROLES } from "./seed";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
 import { money } from "./lib";
+import { KEY } from "./lib";
+import { clearAuth, getAuthUser, getToken } from "./api/client";
 import {
   addCatering,
   addEnquiry,
@@ -47,12 +50,29 @@ import {
   setRoomHousekeeping,
   setRoomStatus,
   setTaskStatus,
-  setUser,
   transferRoom,
   updateHall,
   updateProperty,
   verifyDocument,
 } from "./store";
+
+function applyAuthUser(authUser) {
+  const state = getState();
+  const existing = state.users.find((u) => u.email?.toLowerCase() === authUser.email?.toLowerCase());
+  const id = existing?.id || authUser.id;
+  if (!existing) {
+    state.users = [
+      ...state.users,
+      { id, name: authUser.name, role: authUser.role, email: authUser.email },
+    ];
+  } else {
+    existing.name = authUser.name;
+    existing.role = authUser.role;
+  }
+  state.session = { ...state.session, userId: id, auth: true };
+  localStorage.setItem(KEY, JSON.stringify(state));
+  return getState();
+}
 
 const GROUPS = [
   {
@@ -105,6 +125,8 @@ export default function App() {
   const [focusGuestId, setFocusGuestId] = useState("");
   const [bookingId, setBookingId] = useState(null);
   const [navStack, setNavStack] = useState([]);
+  const [authUser, setAuthUser] = useState(() => (getToken() ? getAuthUser() : null));
+  const [staffGate, setStaffGate] = useState(false);
 
   useEffect(() => {
     if (page === "home" || page === "portal" || page === "master" || page === "events") {
@@ -112,8 +134,29 @@ export default function App() {
     }
   }, [page]);
 
+  useEffect(() => {
+    if (authUser) setState(applyAuthUser(authUser));
+  }, [authUser]);
+
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
-  const role = user.role;
+  const role = authUser?.role || user.role;
+
+  function enterStaff() {
+    if (getToken() && getAuthUser()) {
+      setAuthUser(getAuthUser());
+      setStaffGate(false);
+      setPage("desk");
+      return;
+    }
+    setStaffGate(true);
+  }
+
+  function logoutStaff() {
+    clearAuth();
+    setAuthUser(null);
+    setStaffGate(false);
+    setPage("home");
+  }
 
   function go(id, extra = {}) {
     const drilling = Boolean(extra.bookingId) && (id === "billing" || id === "documents");
@@ -199,16 +242,46 @@ export default function App() {
     assistant: "Assistant",
   };
 
+  if (staffGate && !authUser) {
+    return (
+      <StaffLogin
+        onBack={() => {
+          setStaffGate(false);
+          setPage("home");
+        }}
+        onSuccess={(u) => {
+          setAuthUser(u);
+          setStaffGate(false);
+          setState(applyAuthUser(u));
+          setPage("desk");
+        }}
+      />
+    );
+  }
+
   if (page === "home" || page === "portal") {
     return (
       <Home
         key="public-home"
         state={state}
-        onStaff={() => setPage("desk")}
+        onStaff={enterStaff}
         onEnquire={(form) => {
           const out = addEnquiry(form);
           if (out.state) setState(out.state);
           return out;
+        }}
+      />
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <StaffLogin
+        onBack={() => setPage("home")}
+        onSuccess={(u) => {
+          setAuthUser(u);
+          setState(applyAuthUser(u));
+          setPage("desk");
         }}
       />
     );
@@ -234,20 +307,15 @@ export default function App() {
           </div>
         ))}
         <div className="nav-foot">
-          Signed in
-          <select
-            value={user.id}
-            onChange={(e) => {
-              setState(setUser(e.target.value));
-              setPage("desk");
-            }}
-          >
-            {state.users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} · {u.role}
-              </option>
-            ))}
-          </select>
+          <div style={{ marginBottom: 6 }}>
+            {authUser.name}
+            <div className="muted" style={{ fontSize: 12 }}>
+              {authUser.roleLabel || authUser.role}
+            </div>
+          </div>
+          <button className="btn ghost small" type="button" onClick={logoutStaff} style={{ width: "100%" }}>
+            Sign out
+          </button>
         </div>
       </aside>
       <div className="workspace">

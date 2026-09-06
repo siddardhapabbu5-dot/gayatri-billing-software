@@ -8,3 +8,7 @@ dist
 
 # Large drone MP4s (~160MB) — keep locally; too heavy for normal GitHub push
 public/site/images/gallery/videos/*.mp4
+
+# Spring Boot
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar

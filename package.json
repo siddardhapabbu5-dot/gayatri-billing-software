@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --port 5177",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend": "cd backend && mvn spring-boot:run",
+    "db": "cd backend && docker compose up -d"
   },
   "dependencies": {
     "react": "^18.3.1",
