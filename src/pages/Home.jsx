@@ -106,24 +106,35 @@ function isGalleryVideo(item) {
 const GALLERY_PHOTOS = GALLERY.filter((item) => !isGalleryVideo(item));
 const GALLERY_VIDEOS = GALLERY.filter((item) => isGalleryVideo(item));
 
-/** Still frames for The Hall page — unique Gallery photos + video posters (no mp4). */
+/** Still frames for The Hall page — Gallery photos + hall/venue stills (12 frames, no mp4). */
 const HALL_GALLERY_SLIDES = (() => {
   const seen = new Set();
   const slides = [];
-  const push = (item, kind, src) => {
+  const push = (src, label, alt = label) => {
     if (!src || seen.has(src)) return;
     seen.add(src);
-    slides.push({
-      id: `${kind}-${src}`,
-      src,
-      alt: item.alt,
-      label: item.label,
-      kind,
-    });
+    slides.push({ id: src, src, alt, label });
   };
-  GALLERY_PHOTOS.forEach((item) => push(item, "photo", item.src));
-  GALLERY_VIDEOS.forEach((item) => push(item, "video-still", item.poster));
-  return slides;
+
+  GALLERY_PHOTOS.forEach((item) => push(item.src, item.label, item.alt));
+  GALLERY_VIDEOS.forEach((item) => {
+    if (item.poster) push(item.poster, item.label, item.alt);
+  });
+
+  [
+    [`${IMG}/gallery/wedding-bouquet-glow.jpg`, "Golden hour bouquet"],
+    [`${IMG}/venue-imperial.jpg`, "Imperial Ballroom"],
+    [`${IMG}/venue-garden.jpg`, "Garden Pavilion"],
+    [`${IMG}/venue-courtyard.jpg`, "Heritage Courtyard"],
+    [`${IMG}/film/mandap.jpg`, "Hall interior"],
+    [`${IMG}/film/agni.jpg`, "Stage and light"],
+    [`${IMG}/gallery-1.jpg`, "Guests in the hall"],
+    [`${IMG}/gallery-5.jpg`, "Dining setup"],
+    [`${IMG}/hero.jpg`, "Evening programme"],
+    [`${IMG}/about.jpg`, "The convention grounds"],
+  ].forEach(([src, label]) => push(src, label));
+
+  return slides.slice(0, 12);
 })();
 
 /** Loads src only when the tile is on-screen inside the Gallery tab. */
@@ -258,7 +269,7 @@ export default function Home({ state, onEnquire, onStaff }) {
   const [galleryMode, setGalleryMode] = useState("photos"); // photos | videos
   const [availMonth, setAvailMonth] = useState(() => todayISO().slice(0, 7));
   const [hallFilm, setHallFilm] = useState(0);
-  const [hallPaused, setHallPaused] = useState(false);
+  const hallImgRef = useRef(null);
   const [termFocus, setTermFocus] = useState(null);
   pageRef.current = page;
   const currentId = PAGES[page]?.id || "home";
@@ -379,17 +390,67 @@ export default function Home({ state, onEnquire, onStaff }) {
 
   useEffect(() => {
     if (currentId !== "about") return undefined;
-    if (hallPaused) return undefined;
     if (HALL_GALLERY_SLIDES.length < 2) return undefined;
     const timer = window.setInterval(() => {
       setHallFilm((i) => (i + 1) % HALL_GALLERY_SLIDES.length);
-    }, 3200);
+    }, 9500);
     return () => window.clearInterval(timer);
-  }, [currentId, hallPaused]);
+  }, [currentId]);
 
   useEffect(() => {
     if (currentId === "about") setHallFilm(0);
   }, [currentId]);
+
+  /* PowerPoint-style Grow/Shrink — starts after soft crossfade */
+  useEffect(() => {
+    if (currentId !== "about" || !loadAboutMedia) return undefined;
+
+    let anim = null;
+    let delayTimer = 0;
+    let tries = 0;
+
+    const start = () => {
+      const img = hallImgRef.current;
+      if (!img) {
+        if (tries++ < 12) window.requestAnimationFrame(start);
+        return;
+      }
+      if (typeof img.animate !== "function") {
+        img.classList.add("is-growing");
+        return;
+      }
+      img.classList.remove("is-growing");
+      img.getAnimations().forEach((a) => a.cancel());
+      // Gentle settle, then Grow/Shrink loop
+      anim = img.animate(
+        [
+          { transform: "scale(1.02)", opacity: 1 },
+          { transform: "scale(1.28)", opacity: 1 },
+          { transform: "scale(1.02)", opacity: 1 },
+        ],
+        {
+          duration: 5500,
+          easing: "ease-in-out",
+          iterations: Infinity,
+          delay: 1500,
+        }
+      );
+    };
+
+    delayTimer = window.setTimeout(() => {
+      window.requestAnimationFrame(start);
+    }, 200);
+
+    return () => {
+      window.clearTimeout(delayTimer);
+      if (anim) anim.cancel();
+      const img = hallImgRef.current;
+      if (img) {
+        img.getAnimations?.().forEach((a) => a.cancel());
+        img.classList.remove("is-growing");
+      }
+    };
+  }, [currentId, hallFilm, loadAboutMedia]);
 
   useEffect(() => {
     document.title = p.name || "Gayatri | Convention";
@@ -729,48 +790,31 @@ export default function Home({ state, onEnquire, onStaff }) {
             <p className="intro-copy">
               {p.about}
             </p>
-            <div
-              className="intro-photos hall-autoscroll"
-              aria-label="Hall gallery photos"
-              onMouseEnter={() => setHallPaused(true)}
-              onMouseLeave={() => setHallPaused(false)}
-              onFocusCapture={() => setHallPaused(true)}
-              onBlurCapture={() => setHallPaused(false)}
-            >
+            <div className="intro-photos hall-autoscroll" aria-label="Hall gallery photos">
               {loadAboutMedia ? (
                 <>
                   {HALL_GALLERY_SLIDES.map((slide, i) => {
                     const active = i === hallFilm;
                     const prev = i === (hallFilm - 1 + HALL_GALLERY_SLIDES.length) % HALL_GALLERY_SLIDES.length;
                     return (
-                      <img
+                      <figure
                         key={slide.id}
                         className={`hall-slide${active ? " is-on" : ""}${prev ? " is-prev" : ""}`}
-                        src={slide.src}
-                        alt={slide.alt}
-                        loading={active || prev ? "eager" : "lazy"}
-                        decoding="async"
-                      />
+                        aria-hidden={!active}
+                      >
+                        <img
+                          ref={active ? hallImgRef : null}
+                          className="hall-slide-img"
+                          src={slide.src}
+                          alt={slide.alt}
+                          loading={active || prev ? "eager" : "lazy"}
+                          decoding="async"
+                        />
+                      </figure>
                     );
                   })}
                   <div className="hall-slide-caption">
                     <strong>{HALL_GALLERY_SLIDES[hallFilm]?.label}</strong>
-                    <span>
-                      {hallFilm + 1} / {HALL_GALLERY_SLIDES.length}
-                    </span>
-                  </div>
-                  <div className="hall-slide-dots" role="tablist" aria-label="Hall photos">
-                    {HALL_GALLERY_SLIDES.map((slide, i) => (
-                      <button
-                        key={slide.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={i === hallFilm}
-                        className={i === hallFilm ? "is-on" : ""}
-                        aria-label={slide.label}
-                        onClick={() => setHallFilm(i)}
-                      />
-                    ))}
                   </div>
                 </>
               ) : (

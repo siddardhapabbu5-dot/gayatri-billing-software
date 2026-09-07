@@ -1025,31 +1025,68 @@ html.lux-page .intro-photos.hall-autoscroll {
 html.lux-page .hall-slide {
   position: absolute;
   inset: 0;
+  margin: 0;
+  padding: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  overflow: hidden;
   opacity: 0;
-  transform: translateX(10%) scale(1.06);
-  transition: opacity 0.75s ease, transform 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: none;
+  transition: opacity 1.6s ease-in-out;
   pointer-events: none;
-  will-change: opacity, transform;
+  z-index: 0;
 }
 
 html.lux-page .hall-slide.is-prev {
   opacity: 0;
-  transform: translateX(-8%) scale(1.03);
+  z-index: 1;
 }
 
 html.lux-page .hall-slide.is-on {
   opacity: 1;
-  transform: translateX(0) scale(1);
-  z-index: 1;
-  animation: hallKen 3s ease-out forwards;
+  z-index: 2;
+  pointer-events: auto;
 }
 
-@keyframes hallKen {
-  from { transform: translateX(0) scale(1); }
-  to { transform: translateX(0) scale(1.08); }
+html.lux-page .hall-slide-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.02);
+  transform-origin: center center;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  opacity: 1;
+}
+
+/* Soft enter: image eases in slightly after the slide fade */
+html.lux-page .hall-slide.is-on .hall-slide-img {
+  animation: hallImgSoftIn 1.4s ease-out both;
+}
+
+@keyframes hallImgSoftIn {
+  from {
+    opacity: 0.35;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+/* CSS fallback Grow/Shrink — starts after soft enter */
+html.lux-page .hall-slide-img.is-growing {
+  animation:
+    hallImgSoftIn 1.4s ease-out both,
+    pptGrowShrink 5.5s ease-in-out 1.4s infinite;
+}
+
+@keyframes pptGrowShrink {
+  0% { transform: scale(1.02); }
+  50% { transform: scale(1.28); }
+  100% { transform: scale(1.02); }
 }
 
 html.lux-page .hall-slide-caption {
@@ -1057,15 +1094,20 @@ html.lux-page .hall-slide-caption {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 2;
+  z-index: 3;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.8rem;
   padding: 1.5rem 1rem 0.9rem;
   background: linear-gradient(180deg, transparent, rgba(12, 10, 8, 0.7));
   color: #f3e6c4;
   font-family: Jost, sans-serif;
   pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+
+html.lux-page .hall-slide-dots {
+  display: none !important;
 }
 
 html.lux-page .hall-slide-caption strong {
@@ -1108,9 +1150,7 @@ html.lux-page .hall-slide-dots button.is-on {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.lux-page .hall-slide.is-on {
-    animation: none;
-  }
+  /* Intentionally keep Grow/Shrink — requested PowerPoint-style Hall motion */
 }
 
 html.lux-page .gallery-play {
