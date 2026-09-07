@@ -1,14 +1,12 @@
 import { useMemo, useState } from "react";
-import { getToken } from "../api/client";
 import { bookingFolio, collectionsReport, lineKind } from "../engine";
 import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
-import { collectViaGateway } from "../payments/gateway";
 import { TERM_SECTIONS, sectionLines, termSetsOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
 const DOCS = ["Quotation", "Proforma invoice", "Tax invoice", "Advance receipt", "Payment receipt", "Credit note", "Debit note", "Refund receipt", "Final invoice"];
-const MODES = ["Cash", "UPI", "Card", "Net banking", "Bank transfer"];
+const MODES = ["Cash", "UPI", "Card", "Bank transfer"];
 
 function payKind(p) {
   if (p.type === "Advance") return "Advance";
@@ -80,13 +78,10 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
   const [balanceFilter, setBalanceFilter] = useState("all");
   const [kindFilter, setKindFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
-  const [gwBusy, setGwBusy] = useState(false);
-  const [gwNote, setGwNote] = useState("");
   const booking = state.bookings.find((b) => b.id === open);
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
-  const gatewayOn = state.property?.paymentGateway?.enabled !== false;
 
   const rows = useMemo(
     () =>
@@ -181,22 +176,14 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 const room = state.rooms.find((x) => x.id === r.roomId);
                 return (
                   <div key={r.id} className="row" style={{ justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-                    <div>Room {room?.number} · {r.checkIn} to {r.checkOut} · {r.status}</div>
-                    {r.status !== "Cancelled" && onCancelRoom && (
+                    <div>Room {room?.number} · {r.checkIn} to {r.checkOut}</div>
+                    {onCancelRoom && (
                       <button
                         type="button"
-                        className="btn ghost small danger no-print"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Cancel room ${room?.number} on this booking?\n\nHall booking (if any) stays. Bill is updated. No refund will be posted.`
-                            )
-                          ) {
-                            onCancelRoom(r.id);
-                          }
-                        }}
+                        className="btn danger small no-print"
+                        onClick={() => onCancelRoom(r.id)}
                       >
-                        Cancel room · no refund
+                        Cancel room (no refund)
                       </button>
                     )}
                   </div>
@@ -414,7 +401,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 </label>
                 <label>
                   Payment mode
-                  <select name="method" defaultValue="UPI">
+                  <select name="method" defaultValue="Cash">
                     {MODES.map((mode) => (
                       <option key={mode}>{mode}</option>
                     ))}
@@ -430,55 +417,6 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                   </select>
                 </label>
                 <button className="btn small" type="submit">Save settlement</button>
-                {gatewayOn && (
-                  <button
-                    className="btn small"
-                    type="button"
-                    disabled={gwBusy || !(totals.balance > 0)}
-                    onClick={async (e) => {
-                      const form = e.currentTarget.form;
-                      const fd = new FormData(form);
-                      const amount = Number(fd.get("amount")) || Math.max(0, Math.round(totals.balance));
-                      const method = String(fd.get("method") || "UPI");
-                      const date = String(fd.get("date") || todayISO());
-                      const type = String(fd.get("type") || "Payment");
-                      if (!amount) {
-                        setGwNote("Enter an amount to collect");
-                        return;
-                      }
-                      setGwBusy(true);
-                      setGwNote("");
-                      try {
-                        const result = await collectViaGateway({
-                          amountInr: amount,
-                          bookingNumber: booking.number,
-                          guestName: guest?.name,
-                          guestPhone: guest?.phone,
-                          guestEmail: guest?.email,
-                          description: `${type} · ${booking.number}`,
-                          property: state.property,
-                          authToken: getToken(),
-                          preferMethod: method === "Cash" ? "UPI" : method,
-                        });
-                        onPay(folio.id, {
-                          amount: result.amount,
-                          method: result.method,
-                          type,
-                          date,
-                          ref: result.ref,
-                        });
-                        setGwNote(`Gateway OK · ${result.provider} · ${result.ref}`);
-                        form.reset();
-                      } catch (err) {
-                        if (!err?.cancelled) setGwNote(err.message || "Gateway payment failed");
-                      } finally {
-                        setGwBusy(false);
-                      }
-                    }}
-                  >
-                    {gwBusy ? "Opening gateway…" : "Pay via gateway"}
-                  </button>
-                )}
                 <button
                   className="btn ghost small"
                   type="button"
@@ -499,7 +437,6 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 >
                   Refund
                 </button>
-                {gwNote && <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>{gwNote}</p>}
               </form>
             )}
           </div>

@@ -1,7 +1,7 @@
 import { KEY, seqNo, uid, dayToISO, todayISO, addDays } from "./lib";
 import { createSeed, defaultRetreatType, defaultRooms, defaultRoomTypes, DEFAULT_ABOUT, DEFAULT_BANQUET, DEFAULT_EVENT_TYPES, DEFAULT_TERMS } from "./seed";
 import { DEFAULT_POLICIES, DEFAULT_TERM_SECTIONS, DEFAULT_TERM_SECTIONS_HI, DEFAULT_TERM_SECTIONS_TE, housekeepingOf, occupancyOf, termSetsOf } from "./policies";
-import { bookingFolio, folioTotals, hallClash, publicAvailability, roomClash } from "./engine";
+import { bookingFolio, buildFolioLinesFromDraft, folioTotals, hallClash, publicAvailability, roomClash } from "./engine";
 import { specById } from "./docTypes";
 import { clearBlobs, deleteBlob, putBlob } from "./fileStore";
 
@@ -51,27 +51,6 @@ function patchTermBrandingText(text) {
 function normalizePropertyLive(p) {
   if (!p) return false;
   let dirty = false;
-  if (!p.paymentGateway || typeof p.paymentGateway !== "object") {
-    p.paymentGateway = { enabled: true, mode: "mock", keyId: "" };
-    dirty = true;
-  } else {
-    if (p.paymentGateway.enabled == null) {
-      p.paymentGateway.enabled = true;
-      dirty = true;
-    }
-    if (!p.paymentGateway.mode) {
-      p.paymentGateway.mode = "mock";
-      dirty = true;
-    }
-    if (p.paymentGateway.keyId == null) {
-      p.paymentGateway.keyId = "";
-      dirty = true;
-    }
-  }
-  if (!p.notifyPhone || /98496\s*00555/.test(String(p.notifyPhone))) {
-    p.notifyPhone = "+91 72043 01779";
-    dirty = true;
-  }
   if (/Gayatri Convention Hall/i.test(p.name || "")) {
     p.name = "Gayatri Convention";
     dirty = true;
@@ -211,9 +190,8 @@ function load() {
       const beforeBanquet = p.banquetIntro || "";
       const beforeTerms = p.terms || "";
       if (p.notifyWhatsApp == null) p.notifyWhatsApp = true;
-      if (!p.notifyPhone || /98496\s*00555/.test(String(p.notifyPhone))) {
-        p.notifyPhone = "+91 72043 01779";
-      }
+      p.notifyPhone = "+91 72043 01779";
+      if (!p.phone || /98496\s*00555/.test(String(p.phone))) p.phone = "+91 72043 01779";
       if (!p.brandName) p.brandName = "Gayatri";
       if (!p.place) p.place = "Palagummi · Konaseema";
       if (!p.about) p.about = DEFAULT_ABOUT;
@@ -592,15 +570,6 @@ export function updateProperty(patch) {
   }
   if (patch.policies) {
     state.property.policies = { ...DEFAULT_POLICIES, ...(state.property.policies || {}), ...patch.policies };
-  }
-  if (patch.paymentGateway) {
-    state.property.paymentGateway = {
-      enabled: true,
-      mode: "mock",
-      keyId: "",
-      ...(state.property.paymentGateway || {}),
-      ...patch.paymentGateway,
-    };
   }
   audit(state, "Property updated", state.property.name, Object.keys(patch).join(", "));
   return persist(state);
@@ -1178,50 +1147,33 @@ export function cancelBooking(bookingId, refund) {
   return persist(state);
 }
 
-/** Cancel one room stay on a booking. Keeps hall booking and bill. No refund by default. */
-export function cancelRoomStay(resId, { refund = 0 } = {}) {
+/** Cancel room stay only — keep hall booking & payments; no refund. Remove room charges from bill. */
+export function cancelRoomStay(resId) {
   const state = load();
   const res = (state.roomReservations || []).find((r) => r.id === resId);
   if (!res || res.status === "Cancelled") return { error: "Room stay not found" };
+  const bookingId = res.bookingId;
   const room = state.rooms.find((r) => r.id === res.roomId);
   res.status = "Cancelled";
-  if (!liveStaysForRoom(state, res.roomId, res.bookingId)) {
+  res.cancelledAt = new Date().toISOString();
+  if (!liveStaysForRoom(state, res.roomId, bookingId)) {
     state.rooms = state.rooms.map((r) =>
-      r.id === res.roomId && ["Occupied", "Reserved"].includes(r.status)
-        ? { ...r, status: "Available", hkStatus: "Dirty" }
-        : r
+      r.id === res.roomId && ["Occupied", "Reserved"].includes(r.status) ? { ...r, status: "Available" } : r
     );
   }
-  const folio = state.folios.find((f) => f.bookingId === res.bookingId);
+  const folio = state.folios.find((f) => f.bookingId === bookingId);
   if (folio) {
     const roomNo = room?.number || "";
     state.folioLines = (state.folioLines || []).filter((l) => {
       if (l.folioId !== folio.id) return true;
       if (l.category !== "room") return true;
-      if (roomNo && String(l.description || "").includes(`Room ${roomNo}`)) return false;
-      return true;
+      if (!roomNo) return false;
+      return !String(l.description || "").includes(roomNo);
     });
     if (folio.status === "Settled") folio.status = "Open";
-    if (refund > 0) {
-      state.payments.unshift({
-        id: uid("pay"),
-        folioId: folio.id,
-        bookingId: res.bookingId,
-        amount: Number(refund),
-        method: "Bank transfer",
-        type: "Refund",
-        at: new Date().toISOString(),
-        ref: `Room ${roomNo} cancelled`,
-      });
-    }
   }
-  const bk = state.bookings.find((b) => b.id === res.bookingId);
-  audit(
-    state,
-    "Room stay cancelled",
-    bk?.number || res.bookingId,
-    `Room ${room?.number || ""} · ${refund > 0 ? `Refund ${refund}` : "No refund"}`
-  );
+  const bk = state.bookings.find((b) => b.id === bookingId);
+  audit(state, "Room stay cancelled", bk?.number || bookingId, `Room ${room?.number || res.roomId} · no refund`);
   return persist(state);
 }
 
@@ -1539,204 +1491,227 @@ export function verifyDocument(id, verified = true) {
   return persist(state);
 }
 
-export { folioTotals };
-
 /**
- * Loads a full sample day for management training:
- * hall-only, room-only, mixed (hall + rooms on different days),
- * all payment modes, room cancel without refund, expenses, credit balances.
+ * Builds a management sample day: hall≠room dates, all payment rails,
+ * room cancel without refund, expenses, and credit (outstanding) balance.
  */
-export function loadManagementSample() {
+export function loadSampleManagementDay() {
+  const state = load();
   const today = todayISO();
-  const tomorrow = addDays(today, 1);
-  const dayAfter = addDays(today, 2);
+  const hallDay = addDays(today, 3);
+  const roomIn = addDays(today, 5);
+  const roomOut = addDays(today, 7);
+  const hall = state.halls.find((h) => h.active !== false) || state.halls[0];
+  const freeRooms = (state.rooms || []).filter((r) => occupancyOf(r) === "Available");
+  const roomA = freeRooms[0];
+  const roomB = freeRooms[1];
+  if (!hall || !roomA) return { error: "Need at least one hall and one available room." };
 
-  // Start from clean transactional data, keep property/halls/rooms
-  clearAllBookingsSync();
-  let state = load();
-  const halls = (state.halls || []).filter((h) => h.active !== false);
-  const rooms = state.rooms || [];
-  const hall1 = halls[0];
-  const hall2 = halls[1] || halls[0];
-  const roomA = rooms[0];
-  const roomB = rooms[1] || rooms[0];
-  const roomC = rooms[2] || rooms[0];
-  if (!hall1 || !roomA) {
-    return { error: "Add at least one hall and one room in Master data first." };
+  function pushBooking({ guest, type, gstMode, halls, rooms, advance, advanceMode, finalPay, finalMode, extras }) {
+    const draft = {
+      guest,
+      type,
+      source: "Direct",
+      eventDate: halls[0]?.date || today,
+      checkIn: rooms[0]?.checkIn || today,
+      checkOut: rooms[0]?.checkOut || addDays(today, 1),
+      guestsExpected: 200,
+      halls,
+      rooms,
+      services: [],
+      discount: 0,
+      gstMode: gstMode || "with",
+      advance: advance || 0,
+      paymentMode: advanceMode || "Cash",
+      paymentDate: today,
+      paymentRef: advanceMode === "UPI" ? `UPI-${Date.now().toString(36)}` : "",
+      finalPayment: finalPay || 0,
+      finalPaymentMode: finalMode || "Cash",
+      finalPaymentDate: today,
+      finalPaymentRef: "",
+      notes: "Sample management booking",
+      agreeHall: true,
+      agreeRoom: true,
+      lines: buildFolioLinesFromDraft(state, {
+        halls,
+        rooms,
+        services: [],
+        eventDate: halls[0]?.date || today,
+      }),
+    };
+    for (const x of extras || []) {
+      draft.lines.push({
+        id: uid("ln"),
+        category: x.category,
+        description: x.description,
+        qty: x.qty || 1,
+        unitPrice: x.unitPrice,
+        amount: (x.qty || 1) * x.unitPrice,
+      });
+    }
+    const out = createReservation(draft);
+    if (out.error) return out;
+    Object.assign(state, load());
+    return out;
   }
 
-  function hallHold(hallId, date, slotType = "full-day") {
-    const start = slotType === "half-day" ? `${date}T18:00` : `${date}T06:00`;
-    const end = slotType === "half-day" ? `${addDays(date, 1)}T00:00` : `${addDays(date, 1)}T06:00`;
-    return { hallId, date, slotType, start, end };
-  }
-
-  // 1) Hall only · With GST · Advance Cash · CREDIT (balance due)
-  createReservation({
-    guest: { name: "Sample Hall Party", phone: "9000000001", email: "", address: "Palagummi", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "XXXX" } },
+  // 1) Hall on day A + rooms on different days — Advance UPI + Final Cash (partial credit left)
+  const mixed = pushBooking({
+    guest: { name: "Sample Mixed Party", phone: "9000000001", email: "", address: "Razole", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "XXXX" } },
     type: "Reception",
-    source: "Direct",
-    eventDate: today,
-    checkIn: today,
-    checkOut: tomorrow,
-    guestsExpected: 400,
-    halls: [hallHold(hall1.id, today, "full-day")],
-    rooms: [],
-    discount: 0,
     gstMode: "with",
-    advance: 100000,
-    paymentMode: "Cash",
-    paymentDate: today,
-    paymentRef: "SAMPLE-CASH-ADV",
-    finalPayment: 0,
-    notes: "Sample: hall only · Cash advance · balance is credit",
-    agreeHall: true,
-    agreeRoom: false,
-  });
-
-  // 2) Room only · With GST · Advance UPI · then Card settlement · PAID
-  const roomOnly = createReservation({
-    guest: { name: "Sample Room Guest", phone: "9000000002", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "YYYY" } },
-    type: "Room only",
-    source: "Walk-in",
-    eventDate: today,
-    checkIn: today,
-    checkOut: tomorrow,
-    guestsExpected: 2,
-    halls: [],
-    rooms: [{ roomId: roomA.id, checkIn: today, checkOut: tomorrow, adults: 2, children: 0, extraBed: 0 }],
-    discount: 0,
-    gstMode: "with",
-    advance: 1000,
-    paymentMode: "UPI",
-    paymentDate: today,
-    paymentRef: "UPI/SAMPLE/001",
-    finalPayment: 0,
-    notes: "Sample: room only · UPI advance + Card settlement",
-    agreeHall: false,
-    agreeRoom: true,
-  });
-  {
-    const st = load();
-    const folio = st.folios.find((f) => f.bookingId === roomOnly.booking?.id);
-    const { totals } = bookingFolio(st, roomOnly.booking?.id);
-    if (folio && totals.balance > 0) {
-      addPayment(folio.id, { amount: totals.balance, method: "Card", type: "Final", date: today, ref: "CARD-SAMPLE" });
-    }
-  }
-
-  // 3) Mixed · Hall TODAY, rooms TOMORROW (different days) · Bank advance · partial
-  const mixed = createReservation({
-    guest: { name: "Sample Mixed Family", phone: "9000000003", email: "", address: "Razole", gstin: "36AAAAA0000A1Z5", nationality: "India", idProof: { type: "Aadhaar", number: "ZZZZ" } },
-    type: "Marriages",
-    source: "Phone",
-    eventDate: today,
-    checkIn: tomorrow,
-    checkOut: dayAfter,
-    guestsExpected: 800,
-    halls: [hallHold(hall2.id, today, "full-day")],
-    rooms: [
-      { roomId: roomB.id, checkIn: tomorrow, checkOut: dayAfter, adults: 2, children: 1, extraBed: 1 },
-      { roomId: roomC.id, checkIn: tomorrow, checkOut: dayAfter, adults: 2, children: 0, extraBed: 0 },
-    ],
-    discount: 10000,
-    gstMode: "with",
-    advance: 200000,
-    paymentMode: "Bank transfer",
-    paymentDate: today,
-    paymentRef: "NEFT-SAMPLE",
-    finalPayment: 0,
-    notes: "Sample: hall today + rooms different days · Bank advance · credit balance",
-    agreeHall: true,
-    agreeRoom: true,
-  });
-
-  if (mixed?.error) return { error: mixed.error };
-
-  // 4) Cancel one room on mixed booking — NO refund; bill stays for hall + remaining room
-  state = load();
-  const mixedRooms = (state.roomReservations || []).filter(
-    (r) => r.bookingId === mixed.booking?.id && r.status !== "Cancelled"
-  );
-  if (mixedRooms[0]) {
-    cancelRoomStay(mixedRooms[0].id, { refund: 0 });
-  }
-
-  // 5) Without GST · hall half-day · Net banking · settle full
-  const freeHall = halls.find((h) => h.id !== hall1.id && h.id !== hall2.id) || hall2;
-  const noGst = createReservation({
-    guest: { name: "Sample No-GST Client", phone: "9000000004", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "NNNN" } },
-    type: "Conference",
-    source: "Direct",
-    eventDate: today,
-    checkIn: today,
-    checkOut: tomorrow,
-    guestsExpected: 120,
-    halls: [hallHold(freeHall.id, today, "half-day")],
-    rooms: [],
-    discount: 0,
-    gstMode: "without",
+    halls: [{
+      hallId: hall.id,
+      date: hallDay,
+      slotType: "full-day",
+      start: `${hallDay}T06:00`,
+      end: `${addDays(hallDay, 1)}T06:00`,
+    }],
+    rooms: [{ roomId: roomA.id, checkIn: roomIn, checkOut: roomOut, adults: 2, children: 0, extraBed: 1 }],
     advance: 50000,
-    paymentMode: "Cash",
-    paymentDate: today,
-    finalPayment: 0,
-    notes: "Sample: Without GST · Cash advance + Net banking settlement",
-    agreeHall: true,
-    agreeRoom: false,
+    advanceMode: "UPI",
+    finalPay: 25000,
+    finalMode: "Cash",
+    extras: [
+      { category: "food", description: "Food / catering", unitPrice: 15000 },
+      { category: "decoration", description: "Decoration", unitPrice: 8000 },
+    ],
   });
-  if (noGst?.error) return { error: noGst.error };
-  {
-    const st = load();
-    const folio = st.folios.find((f) => f.bookingId === noGst.booking?.id);
-    const { totals } = bookingFolio(st, noGst.booking?.id);
-    if (folio && totals.balance > 0) {
-      addPayment(folio.id, { amount: totals.balance, method: "Net banking", type: "Final", date: today, ref: "NB-SAMPLE" });
+  if (mixed?.error) return mixed;
+
+  // 2) Hall only — Advance Cash, With GST
+  pushBooking({
+    guest: { name: "Sample Hall Only", phone: "9000000002", email: "", address: "", gstin: "37AAAAA0000A1Z5", nationality: "India", idProof: { type: "PAN", number: "AAAAA0000A" } },
+    type: "Conference",
+    gstMode: "with",
+    halls: [{
+      hallId: hall.id,
+      date: addDays(today, 10),
+      slotType: "half-day",
+      start: `${addDays(today, 10)}T18:00`,
+      end: `${addDays(today, 11)}T00:00`,
+    }],
+    rooms: [],
+    advance: 100000,
+    advanceMode: "Cash",
+  });
+
+  // 3) Room only — Card settlement (fully paid), Without GST
+  if (roomB) {
+    const roomOnly = pushBooking({
+      guest: { name: "Sample Room Stay", phone: "9000000003", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "YYYY" } },
+      type: "Room only",
+      gstMode: "without",
+      halls: [],
+      rooms: [{ roomId: roomB.id, checkIn: today, checkOut: addDays(today, 2), adults: 2, children: 0, extraBed: 0 }],
+      advance: 0,
+      finalPay: 0,
+    });
+    if (!roomOnly?.error && roomOnly?.booking) {
+      const st2 = load();
+      const { folio, totals } = bookingFolio(st2, roomOnly.booking.id);
+      if (folio && totals.total > 0) {
+        st2.payments.unshift({
+          id: uid("pay"),
+          folioId: folio.id,
+          bookingId: roomOnly.booking.id,
+          amount: totals.total,
+          method: "Card",
+          type: "Final",
+          at: dayToISO(today),
+          ref: "Sample card settle",
+        });
+        folio.status = "Settled";
+        persist(st2);
+      }
     }
   }
 
-  // Extra charges + settlement payment on first open folio if needed
-  state = load();
-  const openFolio = (state.folios || []).find((f) => f.status === "Open");
-  if (openFolio) {
-    addFolioCharge(openFolio.id, { category: "food", description: "Sample catering charge", qty: 1, unitPrice: 15000 });
-    addFolioCharge(openFolio.id, { category: "tea", description: "Tea / coffee service", qty: 1, unitPrice: 2500 });
+  // 4) Hall + room then cancel room with NO refund — hall bill remains
+  const cancelDemo = pushBooking({
+    guest: { name: "Sample Cancel Room", phone: "9000000004", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "ZZZZ" } },
+    type: "Seminar",
+    gstMode: "with",
+    halls: [{
+      hallId: hall.id,
+      date: addDays(today, 12),
+      slotType: "full-day",
+      start: `${addDays(today, 12)}T06:00`,
+      end: `${addDays(today, 13)}T06:00`,
+    }],
+    rooms: freeRooms[2]
+      ? [{ roomId: freeRooms[2].id, checkIn: addDays(today, 12), checkOut: addDays(today, 13), adults: 2, children: 0, extraBed: 0 }]
+      : [],
+    advance: 75000,
+    advanceMode: "Bank transfer",
+  });
+  if (!cancelDemo?.error) {
+    const st3 = load();
+    const bk = st3.bookings.find((b) => st3.guests.find((g) => g.id === b.guestId && g.phone === "9000000004"));
+    const stay = (st3.roomReservations || []).find((r) => r.bookingId === bk?.id && r.status !== "Cancelled");
+    if (stay) {
+      cancelRoomStay(stay.id);
+    }
   }
+
+  // 5) Credit / outstanding — bank advance small, balance due
+  pushBooking({
+    guest: { name: "Sample Credit Party", phone: "9000000005", email: "", address: "Konaseema", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "CCCC" } },
+    type: "Corporate meeting",
+    gstMode: "with",
+    halls: [{
+      hallId: hall.id,
+      date: addDays(today, 15),
+      slotType: "full-day",
+      start: `${addDays(today, 15)}T06:00`,
+      end: `${addDays(today, 16)}T06:00`,
+    }],
+    rooms: [],
+    advance: 20000,
+    advanceMode: "UPI",
+  });
+
+  // Also book one hall for TODAY so Dashboard “halls booked” updates immediately
+  pushBooking({
+    guest: { name: "Sample Today Hall", phone: "9000000006", email: "", address: "", gstin: "", nationality: "India", idProof: { type: "Aadhaar", number: "TTTT" } },
+    type: "Conference",
+    gstMode: "with",
+    halls: [{
+      hallId: hall.id,
+      date: today,
+      slotType: "half-day",
+      start: `${today}T18:00`,
+      end: `${addDays(today, 1)}T00:00`,
+    }],
+    rooms: [],
+    advance: 30000,
+    advanceMode: "Cash",
+  });
 
   // Daily expenses
-  addExpense({ date: today, department: "Hotel", category: "diesel", amount: 5000, method: "Cash", description: "Generator diesel — sample" });
-  addExpense({ date: today, department: "Function Hall", category: "tea", amount: 2500, method: "UPI", description: "Tea & refreshments — sample" });
-  addExpense({ date: today, department: "Hotel", category: "cleaning", amount: 3000, method: "Cash", description: "Cleaning materials — sample" });
-  addExpense({ date: today, department: "Admin", category: "salaries", amount: 8000, method: "Bank transfer", description: "Day wages — sample" });
-  addExpense({ date: today, department: "Common", category: "other", amount: 1500, method: "UPI", description: "Misc — sample" });
-
-  audit(load(), "Sample day loaded", today, "Hall/room/payments/expenses/credit demo");
-  return load();
+  const st = load();
+  if (!Array.isArray(st.expenses)) st.expenses = [];
+  const samples = [
+    { department: "Hotel", category: "diesel", amount: 5000, method: "Cash", description: "Generator diesel" },
+    { department: "Function Hall", category: "tea", amount: 2500, method: "UPI", description: "Tea & refreshments" },
+    { department: "Common", category: "cleaning", amount: 3000, method: "Cash", description: "Cleaning materials" },
+    { department: "Admin", category: "salaries", amount: 15000, method: "Bank transfer", description: "Daily wages" },
+  ];
+  for (const e of samples) {
+    st.expenses.unshift({
+      id: uid("exp"),
+      date: today,
+      department: e.department,
+      category: e.category,
+      amount: e.amount,
+      method: e.method,
+      description: e.description,
+      at: new Date().toISOString(),
+      createdBy: st.session?.userId || "",
+    });
+  }
+  audit(st, "Sample day loaded", today, "Hall≠room dates · payments · cancel room · expenses · credit");
+  return persist(st);
 }
 
-/** Sync clear used by sample loader (no IndexedDB wait). */
-function clearAllBookingsSync() {
-  const state = load();
-  state.guests = [];
-  state.bookings = [];
-  state.hallReservations = [];
-  state.roomReservations = [];
-  state.folios = [];
-  state.folioLines = [];
-  state.payments = [];
-  state.invoices = [];
-  state.events = [];
-  state.cateringOrders = [];
-  state.purchaseOrders = [];
-  state.notifications = [];
-  state.enquiries = [];
-  state.documents = [];
-  state.agreements = [];
-  state.expenses = [];
-  state.rooms = (state.rooms || []).map((r) => ({
-    ...r,
-    status: "Available",
-    hkStatus: "Clean",
-  }));
-  state.audit = [];
-  persist(state);
-}
+export { folioTotals };

@@ -82,14 +82,14 @@ export default function Dashboard({ state, go, onClearBookings, onLoadSample }) 
   return (
     <>
       <PageHead title="Dashboard" sub={`${state.property.name} · ${formatDate(today)}`}>
-        {onClearBookings && state.bookings.length > 0 && (
-          <button className="btn ghost danger" type="button" onClick={onClearBookings}>
-            Clean start
-          </button>
-        )}
         {onLoadSample && (
           <button className="btn ghost" type="button" onClick={onLoadSample}>
             Load sample day
+          </button>
+        )}
+        {onClearBookings && state.bookings.length > 0 && (
+          <button className="btn ghost danger" type="button" onClick={onClearBookings}>
+            Clean start
           </button>
         )}
         <button className="btn ghost" onClick={() => go("expenses")}>

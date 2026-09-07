@@ -5,7 +5,6 @@ import Venues from "./pages/Venues.jsx";
 import Rooms from "./pages/Rooms.jsx";
 import Reservations from "./pages/Reservations.jsx";
 import Guests from "./pages/Guests.jsx";
-import Events from "./pages/Events.jsx";
 import Catering from "./pages/Catering.jsx";
 import Vendors from "./pages/Vendors.jsx";
 import Billing from "./pages/Billing.jsx";
@@ -39,7 +38,7 @@ import {
   createReservation,
   getState,
   issueDocument,
-  loadManagementSample,
+  loadSampleManagementDay,
   removeDocument,
   removeGuest,
   resetDemo,
@@ -53,7 +52,6 @@ import {
   setFolioGstMode,
   setRoomHousekeeping,
   setRoomStatus,
-  setTaskStatus,
   transferRoom,
   updateHall,
   updateProperty,
@@ -98,7 +96,6 @@ const GROUPS = [
     items: [
       { id: "guests", label: "Guests / CRM", perm: "guests" },
       { id: "documents", label: "Documents", perm: "documents" },
-      { id: "events", label: "Events", perm: "events" },
       { id: "vendors", label: "Vendors", perm: "vendors" },
     ],
   },
@@ -137,7 +134,9 @@ export default function App() {
   const [staffGate, setStaffGate] = useState(false);
 
   useEffect(() => {
-    if (page === "home" || page === "portal" || page === "master" || page === "events") {
+    // Always reload desk data from localStorage when opening staff pages
+    // so Dashboard / Reports / Billing pick up expenses, payments and samples.
+    if (page !== "home" && page !== "portal") {
       setState(getState());
     }
   }, [page]);
@@ -164,7 +163,6 @@ export default function App() {
     setAuthUser(null);
     setStaffGate(false);
     setPage("home");
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
   }
 
   function go(id, extra = {}) {
@@ -240,7 +238,6 @@ export default function App() {
     reserve: "Reservations",
     documents: "Documents",
     guests: "CRM",
-    events: "Events",
     catering: "Catering",
     vendors: "Vendors",
     billing: "Payment & Invoice",
@@ -258,7 +255,6 @@ export default function App() {
         onBack={() => {
           setStaffGate(false);
           setPage("home");
-          window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
         }}
         onSuccess={(u) => {
           setAuthUser(u);
@@ -288,10 +284,7 @@ export default function App() {
   if (!authUser) {
     return (
       <StaffLogin
-        onBack={() => {
-          setPage("home");
-          window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
-        }}
+        onBack={() => setPage("home")}
         onSuccess={(u) => {
           setAuthUser(u);
           setState(applyAuthUser(u));
@@ -327,8 +320,8 @@ export default function App() {
               {authUser.roleLabel || authUser.role}
             </div>
           </div>
-          <button className="btn ghost small nav-signout" type="button" onClick={logoutStaff} style={{ width: "100%" }}>
-            Log out
+          <button className="btn ghost small" type="button" onClick={logoutStaff} style={{ width: "100%" }}>
+            Sign out
           </button>
         </div>
       </aside>
@@ -340,41 +333,37 @@ export default function App() {
             </div>
             <h2>{titles[page]}</h2>
           </div>
-          <div className="row topbar-actions">
-            <span className="muted topbar-user" title={authUser.email}>
-              {authUser.name}
-            </span>
-            <button className="btn ghost small" type="button" onClick={() => go("home")}>
+          <div className="row">
+            <span className="muted">{state.notifications[0]?.title}</span>
+            <button className="btn ghost small" onClick={() => go("home")}>
               Public site
-            </button>
-            <button className="btn ghost small topbar-logout" type="button" onClick={logoutStaff}>
-              Log out
             </button>
           </div>
         </header>
         <div className="content">
           {page === "desk" && (
             <Dashboard
+              key={`desk-${(state.payments || []).length}-${(state.expenses || []).length}-${(state.bookings || []).length}`}
               state={state}
               go={go}
               onClearBookings={handleClearAllBookings}
               onLoadSample={() => {
                 if (
                   !window.confirm(
-                    "Load sample management day?\n\nThis clears current bookings/payments/expenses and creates sample hall + room bookings (different days), all payment types, room cancel without refund, daily expenses, and credit balances."
+                    "Load sample management day?\n\nAdds sample hall/room bookings (different dates), Cash/UPI/Card/Bank payments, room cancel without refund, expenses, and credit balances."
                   )
                 ) {
                   return;
                 }
-                const out = loadManagementSample();
+                const out = loadSampleManagementDay();
                 if (out?.error) {
                   window.alert(out.error);
                   return;
                 }
-                setState(out);
-                setBookingId(null);
-                setPage("desk");
-                window.alert("Sample day loaded. Open Reports → Income & expense (Today) for the management day report.");
+                setState(getState());
+                window.alert(
+                  "Sample day loaded.\n\nDashboard Today KPIs, expenses and collections are updated.\nOpen Reports → Income & expense (Today) for the full day report + credit."
+                );
               }}
             />
           )}
@@ -491,7 +480,6 @@ export default function App() {
               onVerify={(id, v) => setState(verifyDocument(id, v))}
             />
           )}
-          {page === "events" && <Events state={state} onTask={(e, t, s) => setState(setTaskStatus(e, t, s))} />}
           {page === "catering" && <Catering state={state} onAdd={(o) => setState(addCatering(o))} />}
           {page === "vendors" && (
             <Vendors
@@ -516,19 +504,22 @@ export default function App() {
                 setState(out);
                 return out;
               }}
-              onCancelRoom={(resId) => {
-                const out = cancelRoomStay(resId, { refund: 0 });
-                if (out?.error) {
-                  window.alert(out.error);
-                  return;
-                }
-                setState(out);
-              }}
               onCharge={(id, payload) => {
                 const out = addFolioCharge(id, payload);
                 if (out?.error) return out;
                 setState(out);
                 return out;
+              }}
+              onCancelRoom={(resId) => {
+                if (!window.confirm("Cancel this room stay only?\n\nHall booking and payments stay. Room charges drop from the bill. No refund is posted.")) {
+                  return;
+                }
+                const out = cancelRoomStay(resId);
+                if (out?.error) {
+                  window.alert(out.error);
+                  return;
+                }
+                setState(out);
               }}
               onIssue={(id, t) => {
                 const out = issueDocument(id, t);

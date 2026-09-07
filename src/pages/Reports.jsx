@@ -623,38 +623,35 @@ export default function Reports({ state, go }) {
                 <Kpi key={k} k={k} v={m(v)} s={rangeLabel} tone="a" />
               ))}
             </div>
+            <p className="muted" style={{ marginTop: 8 }}>
+              Room occupancy today {occ.occPct}% · Halls booked today {occ.hallBooked}/{state.halls.length}.
+              Use Expense entry to post diesel, tea, salaries and other costs.
+            </p>
           </div>
           <div className="panel" style={{ marginTop: 12 }}>
-            <h3>Credit & balance sheet (management)</h3>
+            <h3>Credit & balance sheet (day)</h3>
             <p className="muted" style={{ marginTop: 0 }}>
-              Cash movement for the period, plus credit (customer balances still receivable).
+              Credit = customer outstanding (money still to collect). Closing cash = Opening + Income − Expenses.
             </p>
-            <table>
-              <tbody>
-                <tr><td>Opening balance</td><td>{m(book.opening)}</td></tr>
-                <tr><td>Cash collections</td><td>{m(book.balanceSheet?.collectionsCash || book.rails.cash)}</td></tr>
-                <tr><td>UPI + Card + Bank collections</td><td>{m(book.balanceSheet?.collectionsDigital || 0)}</td></tr>
-                <tr><td>Total income (collections)</td><td>{m(book.incomeTotal)}</td></tr>
-                <tr><td>Total expenses paid</td><td>{m(book.expenseTotal)}</td></tr>
-                <tr><td><strong>Net cash (Income − Expenses)</strong></td><td><strong>{m(book.net)}</strong></td></tr>
-                <tr><td><strong>Closing cash position</strong></td><td><strong>{m(book.closing)}</strong></td></tr>
-                <tr>
-                  <td><strong>Credit / receivable (balance due)</strong></td>
-                  <td><strong>{m(book.creditPending)}</strong></td>
-                </tr>
-              </tbody>
-            </table>
-            <p className="muted" style={{ marginTop: 8 }}>
-              Credit is money customers still owe (Outstanding report). It is not cash in hand until collected.
-              Room occupancy today {occ.occPct}% · Halls booked today {occ.hallBooked}/{state.halls.length}.
-            </p>
-            <div className="row" style={{ marginTop: 8, gap: 8 }}>
-              <button type="button" className="btn ghost small" onClick={() => setReportTab("outstanding")}>
-                Open outstanding
-              </button>
-              <button type="button" className="btn ghost small" onClick={() => go?.("expenses")}>
-                Expense entry
-              </button>
+            <div className="g2">
+              <table>
+                <tbody>
+                  <tr><td>Opening balance</td><td>{m(book.balanceSheet.opening)}</td></tr>
+                  <tr><td>+ Cash collections</td><td>{m(book.balanceSheet.collections.cash)}</td></tr>
+                  <tr><td>+ UPI collections</td><td>{m(book.balanceSheet.collections.upi)}</td></tr>
+                  <tr><td>+ Card collections</td><td>{m(book.balanceSheet.collections.card)}</td></tr>
+                  <tr><td>+ Bank collections</td><td>{m(book.balanceSheet.collections.bank)}</td></tr>
+                  <tr><td>− Expenses</td><td>{m(book.balanceSheet.expenses)}</td></tr>
+                  <tr><td><strong>Closing cash</strong></td><td><strong>{m(book.balanceSheet.closingCash)}</strong></td></tr>
+                </tbody>
+              </table>
+              <table>
+                <tbody>
+                  <tr><td>Credit / receivables (all open bills)</td><td>{m(book.balanceSheet.creditReceivable)}</td></tr>
+                  <tr><td>Advances in this period</td><td>{m(book.advance)}</td></tr>
+                  <tr><td><strong>Closing cash + credit</strong></td><td><strong>{m(book.balanceSheet.netWorthProxy)}</strong></td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </>

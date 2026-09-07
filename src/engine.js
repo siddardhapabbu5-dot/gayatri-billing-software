@@ -329,20 +329,6 @@ export function cashbookReport(state, from, to) {
     .map((b) => bookingFolio(state, b.id).totals)
     .reduce((s, t) => s + Math.max(0, t.balance || 0), 0);
 
-  // Simple management balance sheet (cash basis + credit)
-  const cashInHand = rails.cash || 0;
-  const digitalInHand = (rails.upi || 0) + (rails.card || 0) + (rails.bank || 0);
-  const balanceSheet = {
-    collectionsCash: cashInHand,
-    collectionsDigital: digitalInHand,
-    totalCollections: incomeTotal,
-    expensesPaid: expenseTotal,
-    netCashMovement: net,
-    creditReceivable: creditPending,
-    closingCashPosition: opening + net,
-    note: "Credit / receivable = unpaid customer balances (not cash yet).",
-  };
-
   return {
     from,
     to,
@@ -358,10 +344,25 @@ export function cashbookReport(state, from, to) {
     advance: Math.round(advance),
     rails,
     creditPending,
-    balanceSheet,
     expenses,
     expenseByCat,
     paymentCount: pays.length,
+    /** Credit / balance-sheet style snapshot for management day report */
+    balanceSheet: {
+      opening,
+      collections: {
+        cash: rails.cash,
+        upi: rails.upi,
+        card: rails.card,
+        bank: rails.bank,
+        other: rails.other,
+        total: incomeTotal,
+      },
+      expenses: expenseTotal,
+      closingCash: closing,
+      creditReceivable: creditPending,
+      netWorthProxy: closing + creditPending,
+    },
   };
 }
 

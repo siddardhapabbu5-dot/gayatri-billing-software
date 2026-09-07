@@ -25,7 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity
-@EnableConfigurationProperties({JwtProperties.class, CorsProperties.class, RazorpayProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, CorsProperties.class})
 public class SecurityConfig {
 
   @Bean
@@ -47,7 +47,7 @@ public class SecurityConfig {
         .cors(Customizer.withDefaults())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/api/health", "/api/auth/login", "/api/auth/roles", "/api/payments/gateway/config").permitAll()
+            .requestMatchers("/api/health", "/api/auth/login", "/api/auth/roles").permitAll()
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
             .requestMatchers("/api/admin/**").hasRole("ADMIN")
             .requestMatchers("/api/**").authenticated()
@@ -64,11 +64,9 @@ public class SecurityConfig {
         .map(String::trim)
         .filter(s -> !s.isEmpty())
         .toList();
-    // Patterns cover LAN / alternate Vite ports; exact origins still work via patterns.
-    config.setAllowedOriginPatterns(origins);
+    config.setAllowedOrigins(origins);
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("*"));
-    config.setExposedHeaders(List.of("Authorization"));
     config.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", config);

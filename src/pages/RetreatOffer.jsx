@@ -26,13 +26,13 @@ function Hero({ onBook, loadMedia = true }) {
       <div className="retreat-photos">
         {loadMedia ? (
           <>
-            <img src={`${IMG}/retreat-family-lobby.png`} alt="Family enjoying the lobby together" loading="lazy" />
-            <img src={`${IMG}/retreat-family-dining.png`} alt="Family sharing a meal in the dining hall" loading="lazy" />
+            <img src={`${IMG}/retreat-family-lobby.png`} alt="Family enjoying the lobby together" loading="lazy" decoding="async" />
+            <img src={`${IMG}/retreat-family-dining.png`} alt="Family sharing a meal in the dining hall" loading="lazy" decoding="async" />
           </>
         ) : (
           <>
-            <div className="media-slot" aria-hidden="true" />
-            <div className="media-slot" aria-hidden="true" />
+            <div className="retreat-photo-slot" aria-hidden="true" />
+            <div className="retreat-photo-slot" aria-hidden="true" />
           </>
         )}
       </div>

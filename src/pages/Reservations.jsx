@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
-import { getToken } from "../api/client";
 import { addDays, formatDateDMY, money, nightsBetween, telHref, todayISO, waMe } from "../lib";
 import { buildFolioLinesFromDraft, folioTotals, hallDayStatus, lineKind, originLabel, roomClash } from "../engine";
-import { collectViaGateway } from "../payments/gateway";
+import { PAY_MODES } from "../finance";
 import { housekeepingOf, occupancyOf, policiesOf, roomCheckInOutText, suggestedAdvance } from "../policies";
 import { requiredFromDraft } from "../docTypes";
 import { DEFAULT_EVENT_TYPES } from "../seed";
@@ -168,7 +167,6 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
   const [draft, setDraft] = useState(() => draftFromGuest(state.property, presetGuest, startDate));
   const [error, setError] = useState("");
   const [peekRoom, setPeekRoom] = useState(null);
-  const [gwBusy, setGwBusy] = useState(false);
   const eventOptions = useMemo(() => eventTypeOptions(state.property), [state.property.eventTypes]);
   const lines = useMemo(() => buildFolioLinesFromDraft(state, { ...draft, services: draft.services }), [state, draft]);
   const previewPays = [
@@ -228,10 +226,10 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
   }
 
   function setEventDate(date) {
-    // Hall event date can differ from room check-in / check-out.
     setDraft((d) => ({
       ...d,
       eventDate: date,
+      // Hall dates follow the event date; room stay dates stay independent.
       halls: d.halls.map((h) => applyHallSlotWindow(h, date)),
     }));
   }
@@ -250,79 +248,21 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
       setPeekRoom(id);
       return;
     }
-    const already = draft.rooms.some((r) => r.roomId === id);
-    if (already) {
-      setDraft((d) => ({ ...d, rooms: d.rooms.filter((r) => r.roomId !== id) }));
-      setPeekRoom((cur) => (cur === id ? null : cur));
-      setError("");
-      return;
-    }
-    setDraft((d) => ({
-      ...d,
-      rooms: [
-        ...d.rooms,
-        {
+    setDraft((d) => {
+      if (d.rooms.length === 1 && d.rooms[0].roomId === id) return d;
+      return {
+        ...d,
+        rooms: [{
           roomId: id,
           checkIn: d.checkIn || d.eventDate,
           checkOut: d.checkOut || addDays(d.checkIn || d.eventDate, 1),
           adults: 2,
           children: 0,
           extraBed: 0,
-        },
-      ],
-    }));
-    setPeekRoom(id);
-    setError("");
-  }
-
-  function selectAllHalls() {
-    const date = draft.eventDate || todayISO();
-    setDraft((d) => {
-      const next = [...d.halls];
-      for (const h of state.halls.filter((x) => x.active !== false)) {
-        const hold = hallDayStatus(state, h.id, date);
-        if (hold.booked) continue;
-        if (next.some((x) => x.hallId === h.id)) continue;
-        next.push(applyHallSlotWindow({ hallId: h.id, slotType: "full-day", start: "", end: "" }, date));
-      }
-      return {
-        ...d,
-        halls: next,
-        type: d.type === "Room only" && next.length ? defaultEventType(state.property) : d.type,
+        }],
       };
     });
-  }
-
-  function clearHalls() {
-    setDraft((d) => ({ ...d, halls: [] }));
-  }
-
-  function selectAllFreeRooms() {
-    setDraft((d) => {
-      const checkIn = d.checkIn || d.eventDate;
-      const checkOut = d.checkOut || addDays(checkIn, 1);
-      const next = [...d.rooms];
-      for (const r of state.rooms) {
-        if (stayOnDates(state, r.id, checkIn, checkOut)) continue;
-        if (roomSaleBlocked(r)) continue;
-        if (next.some((x) => x.roomId === r.id)) continue;
-        next.push({
-          roomId: r.id,
-          checkIn,
-          checkOut,
-          adults: 2,
-          children: 0,
-          extraBed: 0,
-        });
-      }
-      return { ...d, checkIn, checkOut, rooms: next };
-    });
-    setError("");
-  }
-
-  function clearRooms() {
-    setDraft((d) => ({ ...d, rooms: [] }));
-    setPeekRoom(null);
+    setPeekRoom(id);
   }
 
   function patchRoom(id, patch) {
@@ -351,21 +291,13 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
         checkOut = addDays(checkIn, Math.max(1, Number(patch.nights) || 1));
       }
       if (checkOut <= checkIn) checkOut = addDays(checkIn, 1);
-      const rooms = d.rooms
-        .map((r) => ({ ...r, checkIn, checkOut }))
-        .filter((r) => {
-          if (stayOnDates(state, r.roomId, checkIn, checkOut)) return false;
-          const room = state.rooms.find((x) => x.id === r.roomId);
-          return !roomSaleBlocked(room);
-        });
       return {
         ...d,
         checkIn,
         checkOut,
-        rooms,
+        rooms: d.rooms.map((r) => ({ ...r, checkIn, checkOut })),
       };
     });
-    setPeekRoom(null);
   }
 
   function dropRoom(id) {
@@ -460,7 +392,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                   {["Direct", "Walk-in", "Website", "Corporate", "Group", "Online"].map((t) => <option key={t}>{t}</option>)}
                 </select>
               </label>
-              <label>Event date<input type="date" value={draft.eventDate} min={todayISO()} onChange={(e) => setEventDate(e.target.value)} /></label>
+              <label>Event / hall date<input type="date" value={draft.eventDate} min={todayISO()} onChange={(e) => setEventDate(e.target.value)} /></label>
               <label>Nationality
                 <select value={draft.guest.nationality} onChange={(e) => setDraft({ ...draft, guest: { ...draft.guest, nationality: e.target.value } })}>
                   <option>India</option>
@@ -485,23 +417,8 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
             </div>
           </div>
           <div className="panel">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <h3>Halls</h3>
-                <p className="muted">
-                  Click a hall card to select or deselect. Half-day or full-day. Hall date can differ from room stay dates.
-                  {draft.halls.length ? ` · ${draft.halls.length} selected` : ""}
-                </p>
-              </div>
-              <div className="row" style={{ gap: 8 }}>
-                <button type="button" className="btn ghost small" onClick={selectAllHalls}>
-                  Select all free
-                </button>
-                <button type="button" className="btn ghost small" onClick={clearHalls} disabled={!draft.halls.length}>
-                  Clear halls
-                </button>
-              </div>
-            </div>
+            <h3>Halls</h3>
+            <p className="muted">Convention halls — use their own date (can differ from room stay). Half-day or full-day.</p>
             <div className="hall-tariff-grid">
               {state.halls.filter((h) => h.active !== false).map((h) => {
                 const selected = draft.halls.some((x) => x.hallId === h.id);
@@ -514,9 +431,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                     className={`hall-tariff-card${selected ? " on" : ""}${booked ? " is-held" : ""}`}
                     disabled={booked && !selected}
                     onClick={() => toggleHall(h.id)}
-                    aria-pressed={selected}
                   >
-                    <span className="hall-tariff-check" aria-hidden="true">{selected ? "✓" : ""}</span>
                     <strong>{h.name}</strong>
                     {booked && !selected ? (
                       <span className="hall-tariff-hold">Booked on {formatDateDMY(draft.eventDate)}</span>
@@ -563,24 +478,12 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
             })}
           </div>
           <div className="panel">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <h3>Room stay</h3>
-                <p className="muted">
-                  Set check-in / check-out, then click room chips to add or remove. Held chips are already booked.
-                  Check-in / check-out: {roomCheckInOutText(pol)}.
-                  {draft.rooms.length ? ` · ${draft.rooms.length} room${draft.rooms.length === 1 ? "" : "s"} selected` : ""}
-                </p>
-              </div>
-              <div className="row" style={{ gap: 8 }}>
-                <button type="button" className="btn ghost small" onClick={selectAllFreeRooms}>
-                  Select all free
-                </button>
-                <button type="button" className="btn ghost small" onClick={clearRooms} disabled={!draft.rooms.length}>
-                  Clear rooms
-                </button>
-              </div>
-            </div>
+            <h3>Room stay</h3>
+            <p className="muted">
+              Room check-in / check-out can be different days from the hall event date.
+              Occupied or Reserved only if a guest is already booked for these dates. Then click a free room.
+              Check-in / check-out: {roomCheckInOutText(pol)}.
+            </p>
             <div className="fields">
               <label>
                 Check-in
@@ -614,9 +517,8 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                     key={r.id}
                     className={`chip${selected ? " on" : ""}${held ? " held" : ""}${peekRoom === r.id ? " peek" : ""}`}
                     onClick={() => toggleRoom(r.id)}
-                    aria-pressed={selected}
                   >
-                    {selected ? "✓ " : ""}{r.number} {label}
+                    {r.number} {label}
                   </button>
                 );
               })}
@@ -680,60 +582,13 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                 <label>
                   Advance mode
                   <select value={draft.paymentMode} onChange={(e) => setDraft({ ...draft, paymentMode: e.target.value })}>
-                    {["Cash", "UPI", "Card", "Net banking", "Bank transfer", "International card"].map((m) => <option key={m}>{m}</option>)}
+                    {PAY_MODES.map((m) => <option key={m}>{m}</option>)}
                   </select>
                 </label>
-                  <label>
+                <label>
                   Advance ref / note
                   <input value={draft.paymentRef || ""} onChange={(e) => setDraft({ ...draft, paymentRef: e.target.value })} placeholder="UPI ref / receipt no." />
                 </label>
-                {(state.property?.paymentGateway?.enabled !== false) && (
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <button
-                      className="btn ghost small"
-                      type="button"
-                      disabled={gwBusy || !(Number(draft.advance) > 0)}
-                      onClick={async () => {
-                        const amount = Number(draft.advance) || 0;
-                        if (!amount) {
-                          setError("Enter advance amount first, then collect via gateway.");
-                          return;
-                        }
-                        setGwBusy(true);
-                        setError("");
-                        try {
-                          const result = await collectViaGateway({
-                            amountInr: amount,
-                            bookingNumber: `ADV-${(draft.guest?.phone || draft.guest?.name || "guest").toString().replace(/\W+/g, "").slice(0, 12)}`,
-                            guestName: draft.guest?.name,
-                            guestPhone: draft.guest?.phone,
-                            guestEmail: draft.guest?.email,
-                            description: "Advance · new reservation",
-                            property: state.property,
-                            authToken: getToken(),
-                            preferMethod: draft.paymentMode === "Cash" ? "UPI" : draft.paymentMode,
-                          });
-                          setDraft((d) => ({
-                            ...d,
-                            advance: String(result.amount),
-                            paymentMode: result.method,
-                            paymentRef: result.ref,
-                            paymentDate: d.paymentDate || todayISO(),
-                          }));
-                        } catch (err) {
-                          if (!err?.cancelled) setError(err.message || "Gateway payment failed");
-                        } finally {
-                          setGwBusy(false);
-                        }
-                      }}
-                    >
-                      {gwBusy ? "Opening gateway…" : "Collect advance via gateway"}
-                    </button>
-                    <span className="muted" style={{ marginLeft: 8 }}>
-                      Fills mode + ref after success. Then Confirm reservation.
-                    </span>
-                  </div>
-                )}
 
                 <h4 style={{ gridColumn: "1 / -1", margin: "12px 0 0" }}>Final payment</h4>
                 <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>
@@ -757,7 +612,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                 <label>
                   Final mode
                   <select value={draft.finalPaymentMode} onChange={(e) => setDraft({ ...draft, finalPaymentMode: e.target.value })}>
-                    {["Cash", "UPI", "Card", "Net banking", "Bank transfer", "International card"].map((m) => <option key={m}>{m}</option>)}
+                    {PAY_MODES.map((m) => <option key={m}>{m}</option>)}
                   </select>
                 </label>
                 <label>
@@ -964,20 +819,6 @@ function RoomGuestPeek({ state, roomId, checkIn, checkOut, onClose, onOpen }) {
         </div>
         <p className="muted" style={{ margin: 0 }}>
           This room is {blocked}. It cannot be added to a new booking until it is Available or Inspected.
-        </p>
-      </div>
-    );
-  }
-
-  if (!stay) {
-    return (
-      <div className="guest-peek">
-        <div className="panel-head">
-          <h4>Room {room?.number}</h4>
-          <button type="button" className="btn ghost small" onClick={onClose}>Close</button>
-        </div>
-        <p className="muted" style={{ margin: 0 }}>
-          This room is free for {formatDateDMY(checkIn)} → {formatDateDMY(checkOut)}. Click the chip again to add it.
         </p>
       </div>
     );
