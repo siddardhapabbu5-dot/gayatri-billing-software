@@ -151,6 +151,8 @@ export function folioTotals(folio, lines, payments, taxPercent) {
   const sgst = tax - cgst;
   const total = taxable + tax;
   const paid = payments.reduce((s, p) => {
+    const st = String(p.status || "SUCCESS").toUpperCase();
+    if (st === "REVERSED" || st === "FAILED" || st === "REJECTED") return s;
     if (p.type === "Deposit" || p.type === "Deposit return") return s;
     return s + (p.type === "Refund" ? -Number(p.amount) : Number(p.amount));
   }, 0);
@@ -167,13 +169,25 @@ export function bookingFolio(state, bookingId) {
   const folio = state.folios.find((f) => f.bookingId === bookingId);
   const lines = state.folioLines.filter((l) => l.folioId === folio?.id);
   const pays = state.payments.filter((p) => p.folioId === folio?.id);
+  const booking = (state.bookings || []).find((b) => b.id === bookingId);
   const tax =
     folio?.gstMode === "without"
       ? 0
       : folio?.taxPercent != null
         ? Number(folio.taxPercent)
         : state.property.taxPercent;
-  return { folio, lines, pays, totals: folio ? folioTotals(folio, lines, pays, tax) : emptyTotals() };
+  if (!folio) return { folio, lines, pays, totals: emptyTotals() };
+  const totals = folioTotals(folio, lines, pays, tax);
+  // Cancelled / refunded bookings are closed — nothing left to collect.
+  if (booking && ["Cancelled", "Refunded"].includes(booking.status)) {
+    return {
+      folio,
+      lines,
+      pays,
+      totals: { ...totals, balance: 0, closed: true },
+    };
+  }
+  return { folio, lines, pays, totals };
 }
 
 function emptyTotals() {
@@ -262,14 +276,31 @@ function inPeriodDay(d, from, to) {
   return true;
 }
 
-/** Cashbook: Opening + Income − Expenses = Closing (cash basis). */
+/** Live payment rows for money math (ignore reversed / failed). */
+function livePayment(p) {
+  const st = String(p.status || "SUCCESS").toUpperCase();
+  return st !== "REVERSED" && st !== "FAILED" && st !== "REJECTED";
+}
+
+/** Cashbook: Opening + Income − Customer refunds − Expenses = Closing (cash basis). */
 export function cashbookReport(state, from, to) {
-  const paysAll = (state.payments || []).filter((p) => p.type !== "Refund" && p.type !== "Deposit return");
+  const bookingIds = new Set((state.bookings || []).map((b) => b.id));
+  const tied = (p) => !p.bookingId || bookingIds.has(p.bookingId);
+  const isRefund = (p) => p.type === "Refund" || p.type === "Deposit return";
+  const isDeposit = (p) => p.type === "Deposit";
+  const incomeAll = (state.payments || []).filter((p) => livePayment(p) && tied(p) && !isRefund(p) && !isDeposit(p));
+  const refundAll = (state.payments || []).filter((p) => livePayment(p) && tied(p) && isRefund(p));
   const expsAll = state.expenses || [];
 
-  const sumPaysBefore = (before) => {
+  const sumIncomeBefore = (before) => {
     if (!before) return 0;
-    return paysAll
+    return incomeAll
+      .filter((p) => payDay(p) && payDay(p) < before)
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+  };
+  const sumRefundBefore = (before) => {
+    if (!before) return 0;
+    return refundAll
       .filter((p) => payDay(p) && payDay(p) < before)
       .reduce((s, p) => s + Number(p.amount || 0), 0);
   };
@@ -280,24 +311,21 @@ export function cashbookReport(state, from, to) {
       .reduce((s, e) => s + Number(e.amount || 0), 0);
   };
 
-  const opening = sumPaysBefore(from) - sumExpBefore(from);
-  const pays = paysAll.filter((p) => inPeriodDay(payDay(p), from, to));
+  const opening = sumIncomeBefore(from) - sumRefundBefore(from) - sumExpBefore(from);
+  const pays = incomeAll.filter((p) => inPeriodDay(payDay(p), from, to));
+  const refunds = refundAll.filter((p) => inPeriodDay(payDay(p), from, to));
   const expenses = expsAll.filter((e) => inPeriodDay(e.date, from, to));
 
   const rails = { cash: 0, upi: 0, card: 0, bank: 0, credit: 0, other: 0 };
+  const byKind = { advance: 0, final: 0, settlement: 0, deposit: 0 };
   let room = 0;
   let hall = 0;
   let food = 0;
   let otherIncome = 0;
   let advance = 0;
 
-  for (const p of pays) {
-    const amt = Number(p.amount) || 0;
-    const rail = railOf(p.method);
-    rails[rail] = (rails[rail] || 0) + amt;
-    if (p.type === "Advance") advance += amt;
-
-    const { lines } = bookingFolio(state, p.bookingId);
+  function applyShare(bookingId, amt) {
+    const { lines } = bookingFolio(state, bookingId);
     const cats = {};
     for (const l of lines || []) {
       const cat = String(l.category || "other");
@@ -314,7 +342,34 @@ export function cashbookReport(state, from, to) {
     otherIncome += amt * Math.max(0, 1 - used);
   }
 
-  const incomeTotal = pays.reduce((s, p) => s + Number(p.amount || 0), 0);
+  for (const p of pays) {
+    const amt = Number(p.amount) || 0;
+    const rail = railOf(p.method);
+    rails[rail] = (rails[rail] || 0) + amt;
+    if (p.type === "Advance") {
+      advance += amt;
+      byKind.advance += amt;
+    } else if (p.type === "Final") {
+      byKind.final += amt;
+    } else if (p.type === "Deposit") {
+      byKind.deposit += amt;
+    } else {
+      byKind.settlement += amt;
+    }
+    applyShare(p.bookingId, amt);
+  }
+
+  // Customer refunds reduce collections (never delete the original payment row).
+  for (const p of refunds) {
+    const amt = Number(p.amount) || 0;
+    const rail = railOf(p.method);
+    rails[rail] = (rails[rail] || 0) - amt;
+    applyShare(p.bookingId, -amt);
+  }
+
+  const incomeGross = pays.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const refundTotal = refunds.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const incomeTotal = incomeGross - refundTotal;
   const expenseByCat = {};
   for (const e of expenses) {
     const key = e.category || "other";
@@ -325,7 +380,7 @@ export function cashbookReport(state, from, to) {
   const closing = opening + net;
 
   const creditPending = (state.bookings || [])
-    .filter((b) => b.status !== "Cancelled")
+    .filter((b) => b.status !== "Cancelled" && b.status !== "Refunded")
     .map((b) => bookingFolio(state, b.id).totals)
     .reduce((s, t) => s + Math.max(0, t.balance || 0), 0);
 
@@ -335,6 +390,8 @@ export function cashbookReport(state, from, to) {
     opening,
     closing,
     incomeTotal,
+    incomeGross,
+    refundTotal,
     expenseTotal,
     net,
     room: Math.round(room),
@@ -342,26 +399,26 @@ export function cashbookReport(state, from, to) {
     food: Math.round(food),
     otherIncome: Math.round(otherIncome),
     advance: Math.round(advance),
+    byKind: {
+      advance: Math.round(byKind.advance),
+      final: Math.round(byKind.final),
+      settlement: Math.round(byKind.settlement),
+      deposit: Math.round(byKind.deposit),
+    },
     rails,
     creditPending,
     expenses,
     expenseByCat,
     paymentCount: pays.length,
+    refundCount: refunds.length,
     /** Credit / balance-sheet style snapshot for management day report */
     balanceSheet: {
       opening,
-      collections: {
-        cash: rails.cash,
-        upi: rails.upi,
-        card: rails.card,
-        bank: rails.bank,
-        other: rails.other,
-        total: incomeTotal,
-      },
+      collections: incomeGross,
+      refunds: refundTotal,
       expenses: expenseTotal,
-      closingCash: closing,
-      creditReceivable: creditPending,
-      netWorthProxy: closing + creditPending,
+      closing,
+      total: incomeTotal,
     },
   };
 }
@@ -369,7 +426,7 @@ export function cashbookReport(state, from, to) {
 export function outstandingCustomers(state) {
   const byGuest = new Map();
   for (const b of state.bookings || []) {
-    if (b.status === "Cancelled") continue;
+    if (b.status === "Cancelled" || b.status === "Refunded") continue;
     const { totals } = bookingFolio(state, b.id);
     if (!(totals.balance > 0)) continue;
     const guest = state.guests.find((g) => g.id === b.guestId);

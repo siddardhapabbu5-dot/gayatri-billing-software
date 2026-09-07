@@ -31,7 +31,16 @@ function cancellationRows(state, from, to) {
         .reduce((s, p) => s + Number(p.amount || 0), 0);
       const cancelledAt = cancellationAt(state, b);
       const audit = (state.audit || []).find((a) => a.entity === b.number && a.action === "Booking cancelled");
-      return { b, guest, totals, refundTotal, cancelledAt, detail: audit?.detail || "" };
+      const reason = b.cancelReason || "";
+      return {
+        b,
+        guest,
+        totals,
+        refundTotal,
+        cancelledAt,
+        reason,
+        detail: reason || audit?.detail || "",
+      };
     })
     .filter((row) => {
       const d = String(row.cancelledAt).slice(0, 10);
@@ -252,7 +261,7 @@ export default function Reports({ state, go }) {
     let body;
     if (reportTab === "cancellations") {
       body = [
-        ["Guest", "Bill no", "Event date", "Cancelled on", "Type", "Billed", "Collected", "Refund", "Detail"],
+        ["Guest", "Bill no", "Event date", "Cancelled on", "Type", "Billed", "Collected", "Refund", "Reason"],
         ...cancelled.map((row) => [
           row.guest?.name || "Guest",
           row.b.number,
@@ -262,7 +271,7 @@ export default function Reports({ state, go }) {
           row.totals.total,
           row.totals.paid,
           row.refundTotal,
-          row.detail,
+          row.reason || row.detail,
         ]),
       ];
     } else if (reportTab === "outstanding") {
@@ -727,7 +736,7 @@ export default function Reports({ state, go }) {
                   <th className="num">Billed</th>
                   <th className="num">Collected</th>
                   <th className="num">Refund</th>
-                  <th>Detail</th>
+                  <th>Reason</th>
                   <th></th>
                 </tr>
               </thead>
@@ -755,7 +764,7 @@ export default function Reports({ state, go }) {
                     <td className="num">{m(row.totals.total)}</td>
                     <td className="num">{row.totals.paid > 0 ? m(row.totals.paid) : "—"}</td>
                     <td className="num">{row.refundTotal > 0 ? m(row.refundTotal) : "—"}</td>
-                    <td className="muted">{row.detail || "—"}</td>
+                    <td>{row.reason || row.detail || "—"}</td>
                     <td>
                       {go ? (
                         <button type="button" className="btn ghost small" onClick={() => go("billing", { bookingId: row.b.id })}>

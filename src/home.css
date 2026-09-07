@@ -1380,6 +1380,7 @@ html.lux-page .terms-focus {
 }
 
 html.lux-page .terms-focus-card {
+  position: relative;
   width: min(820px, 100%);
   max-height: min(86vh, 900px);
   overflow: auto;
@@ -1388,22 +1389,34 @@ html.lux-page .terms-focus-card {
   border: 1px solid #d9d3c8;
   border-radius: 14px;
   padding: 1.6rem 1.5rem 1.4rem;
+  padding-top: 2.6rem;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
 }
 
 html.lux-page .terms-focus-close {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
-  width: 42px;
-  height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cfc6b6;
   border-radius: 999px;
-  background: rgba(20, 16, 10, 0.55);
+  background: #102027;
   color: #f3e6c4;
-  font-size: 1.6rem;
+  font-size: 1.55rem;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 32, 39, 0.2);
+}
+
+html.lux-page .terms-focus-close:hover,
+html.lux-page .terms-focus-close:focus-visible {
+  background: #1a333d;
+  outline: none;
 }
 
 html.lux-page .terms-toc-item.is-on {

@@ -2,6 +2,7 @@ import { KEY, seqNo, uid, dayToISO, todayISO, addDays } from "./lib";
 import { createSeed, defaultRetreatType, defaultRooms, defaultRoomTypes, DEFAULT_ABOUT, DEFAULT_BANQUET, DEFAULT_EVENT_TYPES, DEFAULT_TERMS } from "./seed";
 import { DEFAULT_POLICIES, DEFAULT_TERM_SECTIONS, DEFAULT_TERM_SECTIONS_HI, DEFAULT_TERM_SECTIONS_TE, housekeepingOf, occupancyOf, termSetsOf } from "./policies";
 import { bookingFolio, buildFolioLinesFromDraft, folioTotals, hallClash, publicAvailability, roomClash } from "./engine";
+import { maxRefundable, suggestCancelSettlement } from "./billingFinance";
 import { specById } from "./docTypes";
 import { clearBlobs, deleteBlob, putBlob } from "./fileStore";
 
@@ -276,12 +277,42 @@ function load() {
     if (!Array.isArray(parsed.roomTypes)) parsed.roomTypes = [];
     if (!Array.isArray(parsed.packages)) parsed.packages = [];
     if (!Array.isArray(parsed.agreements)) parsed.agreements = [];
+    if (!Array.isArray(parsed.refunds)) parsed.refunds = [];
+    if (!Array.isArray(parsed.expenses)) parsed.expenses = [];
     parsed.rooms = (parsed.rooms || []).map((r) => ({
       ...r,
       status: occupancyOf(r),
       hkStatus: housekeepingOf(r),
     }));
     if (!parsed.meta) parsed.meta = {};
+    if (!parsed.meta.forceClearLedgerSep2026b) {
+      parsed.guests = [];
+      parsed.bookings = [];
+      parsed.hallReservations = [];
+      parsed.roomReservations = [];
+      parsed.folios = [];
+      parsed.folioLines = [];
+      parsed.payments = [];
+      parsed.refunds = [];
+      parsed.invoices = [];
+      parsed.events = [];
+      parsed.cateringOrders = [];
+      parsed.purchaseOrders = [];
+      parsed.notifications = [];
+      parsed.enquiries = [];
+      parsed.documents = [];
+      parsed.agreements = [];
+      parsed.expenses = [];
+      parsed.audit = [];
+      parsed.rooms = (parsed.rooms || []).map((r) => ({
+        ...r,
+        status: "Available",
+        hkStatus: ["Dirty", "Cleaning"].includes(housekeepingOf(r)) ? "Clean" : housekeepingOf(r),
+      }));
+      parsed.meta.forceClearLedgerSep2026b = true;
+      persist(parsed);
+      clearBlobs().catch(() => {});
+    }
     if (!parsed.meta.ledgerCleared) {
       parsed.guests = [];
       parsed.bookings = [];
@@ -637,6 +668,7 @@ function load() {
     if (!parsed.meta.marriageReceptionEventsSep2026) parsed.meta.marriageReceptionEventsSep2026 = true;
     if (!parsed.meta.gayatriConventionBrandingSep2026) parsed.meta.gayatriConventionBrandingSep2026 = true;
     pruneEvents(parsed);
+    if (pruneOrphanLedger(parsed)) persist(parsed);
     return parsed;
   } catch {
     return createSeed();
@@ -648,6 +680,22 @@ function pruneEvents(state) {
     const bk = (state.bookings || []).find((b) => b.id === e.bookingId);
     return bk && bk.status !== "Cancelled";
   });
+}
+
+/** Drop money rows whose booking was deleted (stops phantom −revenue on an empty desk). */
+function pruneOrphanLedger(state) {
+  const bookingIds = new Set((state.bookings || []).map((b) => b.id));
+  const beforePay = (state.payments || []).length;
+  const beforeRef = (state.refunds || []).length;
+  state.payments = (state.payments || []).filter((p) => !p.bookingId || bookingIds.has(p.bookingId));
+  state.refunds = (state.refunds || []).filter((r) => !r.bookingId || bookingIds.has(r.bookingId));
+  state.folios = (state.folios || []).filter((f) => !f.bookingId || bookingIds.has(f.bookingId));
+  const folioIds = new Set((state.folios || []).map((f) => f.id));
+  state.folioLines = (state.folioLines || []).filter((l) => folioIds.has(l.folioId));
+  state.invoices = (state.invoices || []).filter((i) => !i.bookingId || bookingIds.has(i.bookingId));
+  state.documents = (state.documents || []).filter((d) => !d.bookingId || bookingIds.has(d.bookingId));
+  state.agreements = (state.agreements || []).filter((a) => !a.bookingId || bookingIds.has(a.bookingId));
+  return beforePay !== (state.payments || []).length || beforeRef !== (state.refunds || []).length;
 }
 
 function persist(state) {
@@ -698,6 +746,7 @@ export async function clearAllBookings() {
   state.folios = [];
   state.folioLines = [];
   state.payments = [];
+  state.refunds = [];
   state.invoices = [];
   state.events = [];
   state.cateringOrders = [];
@@ -706,6 +755,7 @@ export async function clearAllBookings() {
   state.enquiries = [];
   state.documents = [];
   state.agreements = [];
+  state.expenses = [];
   state.rooms = (state.rooms || []).map((r) => ({
     ...r,
     status: "Available",
@@ -1167,15 +1217,33 @@ export function createReservation(draft) {
 export function addPayment(folioId, payload) {
   const state = load();
   const folio = state.folios.find((f) => f.id === folioId);
+  if (!folio) return { error: "Folio not found" };
+  const user = state.users.find((u) => u.id === state.session.userId);
+  const amount = Number(payload.amount) || 0;
+  if (amount <= 0) return { error: "Enter a valid amount" };
+  const type = payload.type || "Payment";
+  if (type === "Refund" || type === "Deposit return") {
+    const { pays } = bookingFolio(state, folio.bookingId);
+    const maxRf = maxRefundable(pays);
+    if (amount > maxRf) {
+      return { error: `Refund cannot exceed net paid (${maxRf}). Remove or reverse an extra refund first.` };
+    }
+  }
   const pay = {
     id: uid("pay"),
     folioId,
     bookingId: folio?.bookingId,
-    amount: Number(payload.amount) || 0,
+    customerId: (state.bookings || []).find((b) => b.id === folio?.bookingId)?.guestId || "",
+    amount,
     method: payload.method || "Cash",
-    type: payload.type || "Payment",
+    type,
+    status: payload.status || "SUCCESS",
     at: payload.date ? dayToISO(payload.date) : payload.at || new Date().toISOString(),
     ref: payload.ref || "",
+    notes: payload.notes || "",
+    createdBy: user?.name || "System",
+    createdAt: new Date().toISOString(),
+    receiptNo: "",
   };
   state.payments.unshift(pay);
   const prefix = pay.type === "Refund" ? "RF" : pay.type === "Advance" ? "AR" : pay.type === "Final" ? "FN" : "RC";
@@ -1187,7 +1255,7 @@ export function addPayment(folioId, payload) {
         : pay.type === "Final"
           ? "Final invoice"
           : "Payment receipt";
-  state.invoices.unshift({
+  const inv = {
     id: uid("inv"),
     number: seqNo(state.invoices, "number", prefix),
     type: invType,
@@ -1195,19 +1263,46 @@ export function addPayment(folioId, payload) {
     folioId,
     at: pay.at,
     status: "Issued",
-  });
+  };
+  pay.receiptNo = inv.number;
+  state.invoices.unshift(inv);
   if (pay.type === "Refund") {
     const bk = state.bookings.find((b) => b.id === folio?.bookingId);
-    if (bk) bk.status = "Refunded";
+    if (bk && bk.status !== "Cancelled") bk.status = "Refunded";
   }
   const { totals } = bookingFolio(state, folio?.bookingId);
-  if (totals.balance <= 0 && folio) folio.status = "Settled";
+  if (totals.balance <= 0 && folio && folio.status !== "Cancelled") folio.status = "Settled";
   audit(
     state,
     pay.type === "Refund" ? "Refund posted" : pay.type === "Final" ? "Final payment recorded" : "Payment recorded",
     folio?.bookingId,
-    `${pay.method} ${pay.amount}`
+    `${pay.method} ${pay.amount}`,
+    { newValue: pay.amount, reason: pay.notes || pay.ref || "" }
   );
+  return persist(state);
+}
+
+/** Soft-reverse a mistaken payment/refund — never deletes the row (audit trail). */
+export function reversePayment(paymentId, reason = "") {
+  const state = load();
+  const pay = (state.payments || []).find((p) => p.id === paymentId);
+  if (!pay) return { error: "Payment not found" };
+  if (pay.status === "REVERSED") return { error: "Already reversed" };
+  const user = state.users.find((u) => u.id === state.session.userId);
+  const prev = pay.status || "SUCCESS";
+  pay.status = "REVERSED";
+  pay.reversedAt = new Date().toISOString();
+  pay.reversedBy = user?.name || "System";
+  pay.reverseReason = String(reason || "").trim() || "Reversed";
+  if (pay.refundId && Array.isArray(state.refunds)) {
+    const row = state.refunds.find((r) => r.id === pay.refundId);
+    if (row && row.status === "COMPLETED") row.status = "REJECTED";
+  }
+  audit(state, "Payment reversed", pay.receiptNo || pay.id, `${pay.type} ${pay.amount} · ${pay.reverseReason}`, {
+    oldValue: prev,
+    newValue: "REVERSED",
+    reason: pay.reverseReason,
+  });
   return persist(state);
 }
 
@@ -1294,12 +1389,84 @@ export function removeExpense(id) {
   return persist(state);
 }
 
-export function cancelBooking(bookingId, refund) {
+export function cancelBooking(bookingId, refund, reason = "") {
+  const out = processCancellation(bookingId, {
+    reason,
+    refundAmount: Number(refund) || 0,
+    refundMethod: "Bank transfer",
+    refundRef: "Cancellation",
+    cancellationCharge: 0,
+    notes: "",
+    skipApproval: true,
+  });
+  if (out.error) return getState();
+  return out.state || getState();
+}
+
+export function setBookingCancelReason(bookingId, reason) {
   const state = load();
   const bk = state.bookings.find((b) => b.id === bookingId);
-  if (!bk || bk.status === "Cancelled") return state;
+  if (!bk || bk.status !== "Cancelled") return state;
+  const why = String(reason || "").trim() || "Not specified";
+  const prev = bk.cancelReason || "—";
+  bk.cancelReason = why;
+  if (bk.cancelRecord) bk.cancelRecord.reason = why;
+  audit(state, "Cancel reason updated", bk.number, `${prev} → ${why}`, { oldValue: prev, newValue: why });
+  return persist(state);
+}
+
+/**
+ * Full cancellation + optional refund (never deletes payments/invoice history).
+ * payload: reason, cancelDate, cancellationCharge, refundAmount, refundMethod, refundRef, notes,
+ *          policyOverride, overrideReason, skipApproval
+ */
+export function processCancellation(bookingId, payload = {}) {
+  const state = load();
+  const bk = state.bookings.find((b) => b.id === bookingId);
+  if (!bk) return { error: "Booking not found" };
+  if (bk.status === "Cancelled") return { error: "Already cancelled" };
+
+  const folio = state.folios.find((f) => f.id && f.bookingId === bookingId);
+  const { pays } = bookingFolio(state, bookingId);
+  const user = state.users.find((u) => u.id === state.session.userId);
+  const maxRf = maxRefundable(pays);
+  let refundAmount = Math.max(0, Math.round(Number(payload.refundAmount) || 0));
+  if (refundAmount > maxRf) return { error: `Refund cannot exceed net paid (${maxRf})` };
+
+  const cancellationCharge = Math.max(0, Math.round(Number(payload.cancellationCharge) || 0));
+  const reason = String(payload.reason || "").trim() || "Not specified";
+  const cancelDate = String(payload.cancelDate || todayISO()).slice(0, 10);
+  const refundMethod = payload.refundMethod || "Bank transfer";
+  const refundRef = String(payload.refundRef || "").trim();
+  const notes = String(payload.notes || "").trim();
+  const suggestion = suggestCancelSettlement(state, bookingId, cancelDate);
+  const needsApproval =
+    !payload.skipApproval &&
+    refundAmount > suggestion.approvalLimit &&
+    user?.role !== "admin" &&
+    user?.role !== "manager";
+
   bk.status = "Cancelled";
   bk.cancelledAt = new Date().toISOString();
+  bk.cancelReason = reason;
+  bk.cancelRecord = {
+    reason,
+    cancelDate,
+    cancellationCharge,
+    refundAmount,
+    refundMethod,
+    refundRef,
+    notes,
+    policyTier: suggestion.tier?.label || "",
+    policyRefundPercent: suggestion.refundPercent,
+    daysBefore: suggestion.daysBefore,
+    policyOverride: !!payload.policyOverride,
+    overrideReason: String(payload.overrideReason || "").trim(),
+    processedBy: user?.name || "System",
+    processedById: user?.id || "",
+    at: new Date().toISOString(),
+  };
+
   state.hallReservations = state.hallReservations.map((r) =>
     r.bookingId === bookingId ? { ...r, status: "Cancelled" } : r
   );
@@ -1315,23 +1482,239 @@ export function cancelBooking(bookingId, refund) {
       );
     }
   }
-  const folio = state.folios.find((f) => f.bookingId === bookingId);
   if (folio) folio.status = "Cancelled";
-  if (refund && folio) {
-    state.payments.unshift({
+
+  // Cancellation charge is recorded on cancelRecord / refund row only —
+  // do not mutate historical invoice lines after cancel.
+
+  if (!Array.isArray(state.refunds)) state.refunds = [];
+  let refundRow = null;
+  let paymentId = "";
+
+  if (refundAmount > 0) {
+    refundRow = {
+      id: uid("rfnd"),
+      number: seqNo(state.refunds, "number", "REF"),
+      bookingId,
+      folioId: folio?.id || "",
+      customerId: bk.guestId,
+      amount: refundAmount,
+      cancellationCharge,
+      method: refundMethod,
+      date: cancelDate,
+      ref: refundRef,
+      reason,
+      notes,
+      status: needsApproval ? "PENDING" : "COMPLETED",
+      processedBy: user?.name || "System",
+      processedById: user?.id || "",
+      approvedBy: needsApproval ? "" : user?.name || "System",
+      approvedAt: needsApproval ? "" : new Date().toISOString(),
+      paymentId: "",
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!needsApproval && folio) {
+      const pay = {
+        id: uid("pay"),
+        folioId: folio.id,
+        bookingId,
+        customerId: bk.guestId,
+        amount: refundAmount,
+        method: refundMethod,
+        type: "Refund",
+        status: "SUCCESS",
+        at: dayToISO(cancelDate),
+        ref: refundRef || refundRow.number,
+        notes: notes || reason,
+        createdBy: user?.name || "System",
+        createdAt: new Date().toISOString(),
+        receiptNo: "",
+        refundId: refundRow.id,
+      };
+      state.payments.unshift(pay);
+      const inv = {
+        id: uid("inv"),
+        number: seqNo(state.invoices, "number", "RF"),
+        type: "Refund receipt",
+        bookingId,
+        folioId: folio.id,
+        at: pay.at,
+        status: "Issued",
+        refundId: refundRow.id,
+      };
+      pay.receiptNo = inv.number;
+      refundRow.paymentId = pay.id;
+      refundRow.receiptNo = inv.number;
+      paymentId = pay.id;
+      state.invoices.unshift(inv);
+    }
+    state.refunds.unshift(refundRow);
+  }
+
+  audit(state, "Booking cancelled", bk.number, `${reason} · charge ${cancellationCharge} · refund ${refundAmount}`, {
+    reason,
+    newValue: { cancellationCharge, refundAmount, status: refundRow?.status || "NONE" },
+  });
+  pruneEvents(state);
+  persist(state);
+  return {
+    state: getState(),
+    refund: refundRow,
+    paymentId,
+    pendingApproval: needsApproval,
+  };
+}
+
+/** Complete a PENDING refund after manager approval. Never edits original payments. */
+export function approveRefund(refundId, { note = "", reject = false } = {}) {
+  const state = load();
+  if (!Array.isArray(state.refunds)) state.refunds = [];
+  const row = state.refunds.find((r) => r.id === refundId);
+  if (!row) return { error: "Refund not found" };
+  if (row.status !== "PENDING") return { error: "Refund is not pending" };
+  const user = state.users.find((u) => u.id === state.session.userId);
+  if (user?.role !== "admin" && user?.role !== "manager") {
+    return { error: "Manager or owner approval required" };
+  }
+  if (reject) {
+    row.status = "REJECTED";
+    row.approvedBy = user?.name || "";
+    row.approvedAt = new Date().toISOString();
+    row.notes = [row.notes, note].filter(Boolean).join(" · ");
+    audit(state, "Refund rejected", row.number, note || row.reason);
+    return persist(state);
+  }
+  const folio = state.folios.find((f) => f.id === row.folioId || f.bookingId === row.bookingId);
+  if (!folio) return { error: "Folio not found" };
+  const { pays } = bookingFolio(state, row.bookingId);
+  if (row.amount > maxRefundable(pays)) return { error: "Refund exceeds net paid" };
+
+  const pay = {
+    id: uid("pay"),
+    folioId: folio.id,
+    bookingId: row.bookingId,
+    customerId: row.customerId,
+    amount: row.amount,
+    method: row.method,
+    type: "Refund",
+    status: "SUCCESS",
+    at: dayToISO(row.date || todayISO()),
+    ref: row.ref || row.number,
+    notes: row.notes || row.reason,
+    createdBy: user?.name || "System",
+    createdAt: new Date().toISOString(),
+    receiptNo: "",
+    refundId: row.id,
+  };
+  state.payments.unshift(pay);
+  const inv = {
+    id: uid("inv"),
+    number: seqNo(state.invoices, "number", "RF"),
+    type: "Refund receipt",
+    bookingId: row.bookingId,
+    folioId: folio.id,
+    at: pay.at,
+    status: "Issued",
+    refundId: row.id,
+  };
+  pay.receiptNo = inv.number;
+  state.invoices.unshift(inv);
+  row.status = "COMPLETED";
+  row.paymentId = pay.id;
+  row.receiptNo = inv.number;
+  row.approvedBy = user?.name || "";
+  row.approvedAt = new Date().toISOString();
+  if (note) row.notes = [row.notes, note].filter(Boolean).join(" · ");
+  audit(state, "Refund approved", row.number, `${row.method} ${row.amount}`, { reason: note });
+  return persist(state);
+}
+
+/** Standalone refund on an open or cancelled booking (partial OK). */
+export function processRefund(bookingId, payload = {}) {
+  const state = load();
+  const bk = state.bookings.find((b) => b.id === bookingId);
+  if (!bk) return { error: "Booking not found" };
+  const folio = state.folios.find((f) => f.bookingId === bookingId);
+  if (!folio) return { error: "Invoice/folio not found" };
+  const { pays } = bookingFolio(state, bookingId);
+  const maxRf = maxRefundable(pays);
+  const amount = Math.max(0, Math.round(Number(payload.amount) || 0));
+  if (amount <= 0) return { error: "Enter refund amount" };
+  if (amount > maxRf) return { error: `Refund cannot exceed net paid (${maxRf})` };
+
+  const user = state.users.find((u) => u.id === state.session.userId);
+  const suggestion = suggestCancelSettlement(state, bookingId);
+  const needsApproval =
+    !payload.skipApproval &&
+    amount > suggestion.approvalLimit &&
+    user?.role !== "admin" &&
+    user?.role !== "manager";
+
+  if (!Array.isArray(state.refunds)) state.refunds = [];
+  const row = {
+    id: uid("rfnd"),
+    number: seqNo(state.refunds, "number", "REF"),
+    bookingId,
+    folioId: folio.id,
+    customerId: bk.guestId,
+    amount,
+    cancellationCharge: Number(payload.cancellationCharge) || 0,
+    method: payload.method || "Bank transfer",
+    date: String(payload.date || todayISO()).slice(0, 10),
+    ref: String(payload.ref || "").trim(),
+    reason: String(payload.reason || "").trim() || "Refund",
+    notes: String(payload.notes || "").trim(),
+    status: needsApproval ? "PENDING" : "COMPLETED",
+    processedBy: user?.name || "System",
+    processedById: user?.id || "",
+    approvedBy: needsApproval ? "" : user?.name || "System",
+    approvedAt: needsApproval ? "" : new Date().toISOString(),
+    paymentId: "",
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!needsApproval) {
+    const pay = {
       id: uid("pay"),
       folioId: folio.id,
       bookingId,
-      amount: Number(refund),
-      method: "Bank transfer",
+      customerId: bk.guestId,
+      amount,
+      method: row.method,
       type: "Refund",
-      at: new Date().toISOString(),
-      ref: "Cancellation",
-    });
+      status: "SUCCESS",
+      at: dayToISO(row.date),
+      ref: row.ref || row.number,
+      notes: row.notes || row.reason,
+      createdBy: user?.name || "System",
+      createdAt: new Date().toISOString(),
+      receiptNo: "",
+      refundId: row.id,
+    };
+    state.payments.unshift(pay);
+    const inv = {
+      id: uid("inv"),
+      number: seqNo(state.invoices, "number", "RF"),
+      type: "Refund receipt",
+      bookingId,
+      folioId: folio.id,
+      at: pay.at,
+      status: "Issued",
+      refundId: row.id,
+    };
+    pay.receiptNo = inv.number;
+    row.paymentId = pay.id;
+    row.receiptNo = inv.number;
+    state.invoices.unshift(inv);
+    if (bk.status !== "Cancelled") bk.status = "Refunded";
   }
-  audit(state, "Booking cancelled", bk.number, refund ? `Refund ${refund}` : "No refund");
-  pruneEvents(state);
-  return persist(state);
+  state.refunds.unshift(row);
+  audit(state, needsApproval ? "Refund requested" : "Refund completed", row.number, `${row.method} ${amount}`, {
+    reason: row.reason,
+  });
+  persist(state);
+  return { state: getState(), refund: row, pendingApproval: needsApproval };
 }
 
 /** Cancel room stay only — keep hall booking & payments; no refund. Remove room charges from bill. */

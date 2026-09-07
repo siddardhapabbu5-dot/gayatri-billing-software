@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { addDays, formatDateDMY, money, nightsBetween, telHref, todayISO, waMe } from "../lib";
-import { buildFolioLinesFromDraft, folioTotals, hallDayStatus, lineKind, originLabel, roomClash } from "../engine";
+import { addDays, formatDateDMY, formatDateTime, money, nightsBetween, telHref, todayISO, waMe } from "../lib";
+import { bookingFolio, buildFolioLinesFromDraft, folioTotals, hallDayStatus, lineKind, originLabel, roomClash } from "../engine";
 import { PAY_MODES } from "../finance";
 import { housekeepingOf, occupancyOf, policiesOf, roomCheckInOutText, suggestedAdvance } from "../policies";
 import { requiredFromDraft } from "../docTypes";
@@ -168,10 +168,12 @@ function BookingWorkflow({ step, go, bookingId, guestId }) {
   );
 }
 
-export default function Reservations({ state, presetDate, presetGuest, onSave, onCancel, onOpen, onDocs, go }) {
+export default function Reservations({ state, presetDate, presetGuest, onSave, onCancel, onEditCancelReason, onOpen, onDocs, go }) {
   const startDate = presetDate || todayISO();
   const [mode, setMode] = useState(presetGuest ? "form" : "list");
   const [listTab, setListTab] = useState("active");
+  const [cancelDetailId, setCancelDetailId] = useState(null);
+  const [cancelReasonDraft, setCancelReasonDraft] = useState("");
   const [draft, setDraft] = useState(() => draftFromGuest(state.property, presetGuest, startDate));
   const [error, setError] = useState("");
   const [peekRoom, setPeekRoom] = useState(null);
@@ -186,10 +188,38 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
     ...(Number(draft.finalPayment) > 0 ? [{ amount: Number(draft.finalPayment) || 0, type: "Final" }] : []),
   ];
   const taxRate = draft.gstMode === "without" ? 0 : state.property.taxPercent;
-  const totals = folioTotals({ discount: draft.discount, gstMode: draft.gstMode }, lines, previewPays, taxRate);
+  const totals = folioTotals(
+    { discount: Number(draft.discount) || 0, gstMode: draft.gstMode },
+    lines,
+    previewPays,
+    taxRate
+  );
   const pol = policiesOf(state.property);
   const cur = state.property.currency;
   const loc = state.property.locale;
+
+  const cancelDetail = cancelDetailId ? state.bookings.find((b) => b.id === cancelDetailId) : null;
+  const cancelGuest = cancelDetail ? state.guests.find((g) => g.id === cancelDetail.guestId) : null;
+  const cancelFolio = cancelDetail ? bookingFolio(state, cancelDetail.id) : null;
+  const cancelRefund = cancelDetail
+    ? (state.payments || [])
+        .filter((p) => p.bookingId === cancelDetail.id && p.type === "Refund")
+        .reduce((s, p) => s + Number(p.amount || 0), 0)
+    : 0;
+
+  function openCancelDetail(id) {
+    const bk = state.bookings.find((b) => b.id === id);
+    if (!bk) return;
+    setCancelDetailId(id);
+    setCancelReasonDraft(bk.cancelReason && bk.cancelReason !== "Not specified" ? bk.cancelReason : "");
+  }
+
+  function saveCancelReason() {
+    if (!cancelDetailId) return;
+    onEditCancelReason?.(cancelDetailId, cancelReasonDraft);
+    setCancelDetailId(null);
+    setCancelReasonDraft("");
+  }
 
   function toggleHall(id) {
     const hall = state.halls.find((h) => h.id === id);
@@ -390,7 +420,7 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
       });
       return;
     }
-    const out = onSave({ ...draft, lines });
+    const out = onSave({ ...draft, discount: Number(draft.discount) || 0, lines });
     if (out?.error) setError(out.error);
     else setMode("list");
   }
@@ -644,7 +674,27 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
             <div className="panel">
               <h3>Commercials</h3>
               <div className="fields two">
-                <label>Discount<input type="number" value={draft.discount} onChange={(e) => setDraft({ ...draft, discount: Number(e.target.value) || 0 })} /></label>
+                <label>
+                  Discount
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={draft.discount === "" || draft.discount == null ? "" : draft.discount}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setDraft({
+                        ...draft,
+                        discount: raw === "" ? "" : Math.max(0, Number(raw) || 0),
+                      });
+                    }}
+                    onBlur={() => {
+                      if (draft.discount === "" || draft.discount == null) {
+                        setDraft({ ...draft, discount: 0 });
+                      }
+                    }}
+                  />
+                </label>
                 <label>
                   GST
                   <select value={draft.gstMode || "with"} onChange={(e) => setDraft({ ...draft, gstMode: e.target.value })}>
@@ -808,12 +858,21 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
       <div className="panel">
         <table>
           <thead>
-            <tr><th>No.</th><th>Guest</th><th>Type</th><th>Date</th><th>Source</th><th>Status</th><th></th></tr>
+            <tr>
+              <th>No.</th>
+              <th>Guest</th>
+              <th>Type</th>
+              <th>Date</th>
+              <th>Source</th>
+              <th>Status</th>
+              {listTab === "cancelled" ? <th>Reason</th> : null}
+              <th></th>
+            </tr>
           </thead>
           <tbody>
             {!rows.length && (
               <tr>
-                <td colSpan={7} className="muted">
+                <td colSpan={listTab === "cancelled" ? 8 : 7} className="muted">
                   {listTab === "cancelled" ? "No cancelled bookings." : "No active bookings."}
                 </td>
               </tr>
@@ -828,26 +887,26 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                   <td>{b.eventDate}</td>
                   <td>{originLabel(b.source)}</td>
                   <td><Pill status={b.status} /></td>
+                  {listTab === "cancelled" ? (
+                    <td>{b.cancelReason || "—"}</td>
+                  ) : null}
                   <td className="row">
                     <button className="btn small" onClick={() => onOpen(b.id)}>Payment</button>
-                    <button className="btn ghost small" type="button" onClick={() => go?.("guests", { guestId: g?.id })}>
-                      CRM
-                    </button>
-                    {g?.phone ? (
-                      <a className="btn ghost small" href={waMe(g.phone, `${state.property.name}: regarding ${b.number}`)} target="_blank" rel="noreferrer">
-                        WhatsApp
-                      </a>
-                    ) : null}
-                    {g?.phone ? (
-                      <a className="btn ghost small" href={telHref(g.phone)}>Call</a>
-                    ) : null}
-                    <button className="btn ghost small" onClick={() => onDocs?.(b.id)}>Documents</button>
                     {b.status !== "Cancelled" ? (
                       <button className="btn danger small" onClick={() => onCancel(b.id)}>Cancel</button>
                     ) : (
-                      <button className="btn ghost small" type="button" onClick={() => go?.("reports")}>
-                        Report
-                      </button>
+                      <>
+                        <button
+                          className="btn ghost small"
+                          type="button"
+                          onClick={() => openCancelDetail(b.id)}
+                        >
+                          Edit reason
+                        </button>
+                        <button className="btn ghost small" type="button" onClick={() => go?.("reports")}>
+                          Report
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -856,6 +915,106 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
           </tbody>
         </table>
       </div>
+
+      {cancelDetail ? (
+        <div
+          className="cancel-detail-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Cancellation details ${cancelDetail.number}`}
+          onClick={() => {
+            setCancelDetailId(null);
+            setCancelReasonDraft("");
+          }}
+        >
+          <div className="panel cancel-detail-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-head">
+              <h3>Cancellation details</h3>
+              <button
+                type="button"
+                className="btn ghost small"
+                aria-label="Close"
+                onClick={() => {
+                  setCancelDetailId(null);
+                  setCancelReasonDraft("");
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div className="cancel-detail-grid">
+              <div>
+                <div className="muted">Bill no</div>
+                <strong>{cancelDetail.number}</strong>
+              </div>
+              <div>
+                <div className="muted">Status</div>
+                <Pill status={cancelDetail.status} />
+              </div>
+              <div>
+                <div className="muted">Guest</div>
+                <strong>{cancelGuest?.name || "—"}</strong>
+                <div className="muted">{cancelGuest?.phone || ""}</div>
+              </div>
+              <div>
+                <div className="muted">Type</div>
+                <strong>{cancelDetail.type || "—"}</strong>
+              </div>
+              <div>
+                <div className="muted">Event date</div>
+                <strong>{formatDateDMY(cancelDetail.eventDate)}</strong>
+              </div>
+              <div>
+                <div className="muted">Source</div>
+                <strong>{originLabel(cancelDetail.source)}</strong>
+              </div>
+              <div>
+                <div className="muted">Cancelled on</div>
+                <strong>{cancelDetail.cancelledAt ? formatDateTime(cancelDetail.cancelledAt) : "—"}</strong>
+              </div>
+              <div>
+                <div className="muted">Billed</div>
+                <strong>{money(cancelFolio?.totals?.total || 0, cur, loc)}</strong>
+              </div>
+              <div>
+                <div className="muted">Collected</div>
+                <strong>{money(cancelFolio?.totals?.paid || 0, cur, loc)}</strong>
+              </div>
+              <div>
+                <div className="muted">Refund recorded</div>
+                <strong>{cancelRefund > 0 ? money(cancelRefund, cur, loc) : "—"}</strong>
+              </div>
+            </div>
+            <label className="cancel-reason-field">
+              Cancel reason
+              <textarea
+                rows={4}
+                value={cancelReasonDraft}
+                onChange={(e) => setCancelReasonDraft(e.target.value)}
+                placeholder="e.g. Guest requested, date change, no-show…"
+              />
+            </label>
+            <div className="row" style={{ marginTop: 12, gap: 8 }}>
+              <button type="button" className="btn" onClick={saveCancelReason}>
+                Save reason
+              </button>
+              <button type="button" className="btn ghost" onClick={() => onOpen?.(cancelDetail.id)}>
+                Open payment
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setCancelDetailId(null);
+                  setCancelReasonDraft("");
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -1,8 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  BookingFinanceBar,
+  CancelBookingModal,
+  PaymentLedgerTable,
+  PendingRefundsPanel,
+  ProcessRefundModal,
+  RefundReceiptView,
+} from "../components/CancelRefundDesk";
 import { bookingFolio, collectionsReport } from "../engine";
 import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
-import { TERM_SECTIONS, cancelSectionLines, sectionLines, termSetsOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
 const DOCS = ["Quotation", "Proforma invoice", "Tax invoice", "Advance receipt", "Payment receipt", "Credit note", "Debit note", "Refund receipt", "Final invoice"];
@@ -72,21 +79,55 @@ function partyMatch(state, booking, pays, q) {
   return hay.includes(needle);
 }
 
-export default function Billing({ state, focusId, onPay, onDiscount, onCharge, onGstMode, onCancelRoom, onIssue, onClose, onBack, onDocs, backLabel }) {
+export default function Billing({
+  state,
+  focusId,
+  onPay,
+  onDiscount,
+  onCharge,
+  onGstMode,
+  onCancelRoom,
+  onIssue,
+  onClose,
+  onBack,
+  onDocs,
+  backLabel,
+  onCancelBooking,
+  onProcessRefund,
+  onReversePayment,
+  onApproveRefund,
+  onRejectRefund,
+}) {
   const [open, setOpen] = useState(focusId || null);
   const [partyQuery, setPartyQuery] = useState("");
   const [balanceFilter, setBalanceFilter] = useState("all");
   const [kindFilter, setKindFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
+  const [showCancelled, setShowCancelled] = useState(true);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [receiptId, setReceiptId] = useState(null);
   const booking = state.bookings.find((b) => b.id === open);
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
 
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem("gayatri-open-cancel");
+      if (id && (focusId === id || open === id)) {
+        sessionStorage.removeItem("gayatri-open-cancel");
+        setCancelOpen(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [focusId, open]);
+
   const rows = useMemo(
     () =>
       state.bookings
-        .filter((b) => b.status !== "Cancelled")
+        .filter((b) => showCancelled || b.status !== "Cancelled")
         .map((b) => ({ b, ...bookingFolio(state, b.id), stay: stayFor(state, b) }))
         .filter(({ b, pays, totals, stay }) => {
           if (!partyMatch(state, b, pays, partyQuery)) return false;
@@ -100,7 +141,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
           }
           return true;
         }),
-    [state, partyQuery, balanceFilter, kindFilter, modeFilter]
+    [state, partyQuery, balanceFilter, kindFilter, modeFilter, showCancelled]
   );
 
   if (booking) {
@@ -124,8 +165,50 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
             {backLabel || "Back"}
           </button>
           <button className="btn ghost" onClick={() => onDocs?.(booking.id)}>KYC documents</button>
+          {booking.status !== "Cancelled" ? (
+            <button className="btn danger" type="button" onClick={() => setCancelOpen(true)}>
+              Cancel booking
+            </button>
+          ) : null}
+          <button className="btn ghost" type="button" onClick={() => setRefundOpen(true)}>
+            Process refund
+          </button>
           <button className="btn" onClick={() => window.print()}>Print / PDF</button>
         </PageHead>
+        <BookingFinanceBar state={state} bookingId={booking.id} />
+        {(state.refunds || []).filter((r) => r.bookingId === booking.id).length > 0 && (
+          <div className="panel no-print" style={{ marginBottom: 12 }}>
+            <h3>Refund history</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Refund no</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(state.refunds || [])
+                  .filter((r) => r.bookingId === booking.id)
+                  .map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.number}</td>
+                      <td>{formatDateDMY(r.date || r.createdAt)}</td>
+                      <td>{m(r.amount)}</td>
+                      <td>{r.status}</td>
+                      <td>
+                        <button type="button" className="btn ghost small" onClick={() => setReceiptId(r.id)}>
+                          Receipt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         <div className="invoice">
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <div>
@@ -265,13 +348,19 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
               <tr><td colSpan={3}>Advance paid</td><td>{m(pays.filter((p) => p.type === "Advance").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
               <tr><td colSpan={3}>Final payment</td><td>{m(pays.filter((p) => p.type === "Final").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
               <tr><td colSpan={3}>Other collections</td><td>{m(pays.filter((p) => !["Advance", "Final", "Refund", "Deposit return"].includes(p.type)).reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
-              <tr><td colSpan={3}>Paid (all)</td><td>{m(totals.paid)}</td></tr>
+              <tr><td colSpan={3}>Refunds</td><td>{m(pays.filter((p) => p.type === "Refund" || p.type === "Deposit return").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
+              <tr><td colSpan={3}>Paid (all, net)</td><td>{m(totals.paid)}</td></tr>
               {Number(totals.deposit) > 0 && (
                 <tr><td colSpan={3}>Security deposit held</td><td>{m(totals.deposit)}</td></tr>
               )}
               <tr className={totals.balance > 0 ? "due-row" : ""}>
                 <td colSpan={3}><strong>Remaining to collect</strong></td>
-                <td><strong>{m(totals.balance)}</strong></td>
+                <td>
+                  <strong>{m(totals.balance)}</strong>
+                  {(booking.status === "Cancelled" || booking.status === "Refunded") && (
+                    <div className="muted" style={{ fontWeight: 400, fontSize: 12 }}>Booking cancelled — closed</div>
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -299,35 +388,20 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
               </tbody>
             </table>
           )}
-          <div className="invoice-terms">
-            <h4>Terms and conditions</h4>
-            <p className="muted">
-              Version v{booking.termsVersion || termSetsOf(state.property).version}. By paying this bill the guest agrees to the terms below.
-            </p>
-            {TERM_SECTIONS.map((sec) => {
-              const lines =
-                sec.id === "cancel"
-                  ? cancelSectionLines(state.property, "en")
-                  : sectionLines(termSetsOf(state.property).sections[sec.id], state.property);
-              if (!lines.length) return null;
-              return (
-                <div key={sec.id}>
-                  <h4 style={{ marginTop: 12 }}>{sec.label}</h4>
-                  <ol>
-                    {lines.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ol>
-                </div>
-              );
-            })}
-          </div>
         </div>
         <div className={`due-box no-print ${totals.balance > 0 ? "is-due" : "is-paid"}`}>
-          {totals.balance > 0 ? (
+          {booking.status === "Cancelled" || booking.status === "Refunded" ? (
+            <div>
+              <div className="muted">Payment status</div>
+              <strong>{paymentStatus(totals, booking)} · {m(0)}</strong>
+              <p className="muted" style={{ margin: "4px 0 0" }}>
+                Booking cancelled. Net paid {m(totals.paid)}. Nothing left to collect.
+              </p>
+            </div>
+          ) : totals.balance > 0 ? (
             <div>
               <div className="muted">Payment status · Remaining amount (balance)</div>
-              <strong>{paymentStatus(totals)} · {m(totals.balance)}</strong>
+              <strong>{paymentStatus(totals, booking)} · {m(totals.balance)}</strong>
               <p className="muted" style={{ margin: "4px 0 0" }}>
                 Total {m(totals.total)} − advance and payments {m(totals.paid)}. Use Payments → Save settlement when the guest pays the rest.
               </p>
@@ -335,7 +409,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
           ) : (
             <div>
               <div className="muted">Payment status</div>
-              <strong>{paymentStatus(totals)} · {m(0)}</strong>
+              <strong>{paymentStatus(totals, booking)} · {m(0)}</strong>
               <p className="muted" style={{ margin: "4px 0 0" }}>Settled. Nothing left to collect.</p>
             </div>
           )}
@@ -385,6 +459,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
             <button className="btn small" type="submit">Add to bill</button>
           </form>
         </div>
+        <PaymentLedgerTable state={state} bookingId={booking.id} onReverse={onReversePayment} />
         <div className="g2 no-print" style={{ marginTop: 12 }}>
           <div className="panel">
             <h3>Payments</h3>
@@ -411,7 +486,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 ))}
               </tbody>
             </table>
-            {folio && (
+            {folio && totals.balance > 0 ? (
               <form
                 className="fields two"
                 style={{ marginTop: 10 }}
@@ -466,38 +541,97 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                 <button
                   className="btn danger small"
                   type="button"
-                  onClick={() => {
-                    const amount = window.prompt("Refund amount");
-                    if (amount) onPay(folio.id, { amount, method: "Bank transfer", type: "Refund", date: todayISO() });
-                  }}
+                  onClick={() => setRefundOpen(true)}
                 >
                   Refund
                 </button>
               </form>
-            )}
+            ) : folio ? (
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <span className="muted">Fully paid — settlement form hidden.</span>
+                <button
+                  className="btn ghost small"
+                  type="button"
+                  onClick={() => {
+                    const d = window.prompt("Discount", folio.discount);
+                    if (d != null) onDiscount(folio.id, d);
+                  }}
+                >
+                  Discount
+                </button>
+                <button className="btn danger small" type="button" onClick={() => setRefundOpen(true)}>
+                  Refund
+                </button>
+              </div>
+            ) : null}
           </div>
           <div className="panel">
             <h3>Documents</h3>
+            {!docs.length && <p className="muted" style={{ margin: 0 }}>No documents issued yet.</p>}
             {docs.map((d) => (
               <div key={d.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
                 <span>{d.number}</span>
                 <span className="muted">{d.type} · {formatDate(d.at)}</span>
               </div>
             ))}
-            <div className="chips" style={{ marginTop: 10 }}>
-              {DOCS.map((t) => (
-                <button key={t} className="chip" onClick={() => onIssue(booking.id, t)}>{t}</button>
-              ))}
-            </div>
+            <label style={{ display: "block", marginTop: 10 }}>
+              <span className="muted">Issue document</span>
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  const t = e.target.value;
+                  e.target.value = "";
+                  if (t) onIssue(booking.id, t);
+                }}
+              >
+                <option value="" disabled>
+                  Choose type…
+                </option>
+                {DOCS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
+        {cancelOpen ? (
+          <CancelBookingModal
+            state={state}
+            bookingId={booking.id}
+            onClose={() => setCancelOpen(false)}
+            onSubmit={(payload) => {
+              const out = onCancelBooking?.(booking.id, payload);
+              if (out?.error) return out;
+              setCancelOpen(false);
+              if (out?.refund?.id) setReceiptId(out.refund.id);
+              return out;
+            }}
+          />
+        ) : null}
+        {refundOpen ? (
+          <ProcessRefundModal
+            state={state}
+            bookingId={booking.id}
+            onClose={() => setRefundOpen(false)}
+            onSubmit={(payload) => {
+              const out = onProcessRefund?.(booking.id, payload);
+              if (out?.error) return out;
+              setRefundOpen(false);
+              if (out?.refund?.id) setReceiptId(out.refund.id);
+              return out;
+            }}
+          />
+        ) : null}
+        {receiptId ? <RefundReceiptView state={state} refundId={receiptId} onClose={() => setReceiptId(null)} /> : null}
       </>
     );
   }
 
   return (
     <>
-      <PageHead title="Payment & Invoice" sub="Search by party booking no. (BK-…), guest name, phone or UPI/ref. Open a row for advance or final payment.">
+      <PageHead title="Payment & Invoice" sub="Search by party booking no. (BK-…), guest name, phone or UPI/ref. Cancel and refund never delete payment history.">
         <button className="btn ghost" type="button" onClick={() => window.print()}>
           Print / PDF
         </button>
@@ -542,6 +676,11 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
           Download Excel
         </button>
       </PageHead>
+      <PendingRefundsPanel
+        state={state}
+        onApprove={(id) => onApproveRefund?.(id)}
+        onReject={(id) => onRejectRefund?.(id)}
+      />
       <div className="panel no-print bill-filters" style={{ marginBottom: 12 }}>
         <div className="fields bill-filter-grid">
           <label style={{ gridColumn: "1 / -1" }}>
@@ -579,11 +718,16 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
               ))}
             </select>
           </label>
+          <label className="check">
+            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
+            Show cancelled
+          </label>
         </div>
         <p className="muted" style={{ margin: "10px 0 0" }}>
-          Click a row to open advance / final payment. Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
+          Click a row to open the bill. Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
         </p>
-      </div>      <div className="panel">
+      </div>
+      <div className="panel">
         <table>
           <thead>
             <tr>
@@ -630,7 +774,7 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
                   <td>{m(advance)}</td>
                   <td>{lastPay ? formatDateTime(lastPay.at) : "—"}</td>
                   <td>{m(Math.max(0, totals.balance))}</td>
-                  <td>{paymentStatus(totals)}</td>
+                  <td>{paymentStatus(totals, b)}</td>
                   <td>{totals.gstMode === "without" ? "Without GST" : "With GST"}</td>
                   <td>{settlement || ""}</td>
                 </tr>

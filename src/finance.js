@@ -36,10 +36,12 @@ export function chargeLabel(id) {
   return CHARGE_CATEGORIES.find((c) => c.id === id)?.label || id || "Charge";
 }
 
-export function paymentStatus(totals) {
+export function paymentStatus(totals, booking) {
+  if (booking && ["Cancelled", "Refunded"].includes(booking.status)) return "Cancelled";
   const total = Number(totals?.total || 0);
   const paid = Number(totals?.paid || 0);
   const balance = Number(totals?.balance || 0);
+  if (totals?.closed) return "Cancelled";
   if (total <= 0) return "—";
   if (balance <= 0) return "Paid";
   if (paid > 0) return "Partially Paid";

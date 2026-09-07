@@ -144,10 +144,18 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
           <p className="muted">Do not hard-code these on the reservation screen. The desk can change them here.</p>
           <div className="fields two">
             <label>Advance %<input type="number" value={pol.advancePercent} onChange={(e) => setPol({ ...pol, advancePercent: Number(e.target.value) || 0 })} /></label>
-            <label>Cancellation charge %<input type="number" value={pol.cancellationPercent} onChange={(e) => setPol({ ...pol, cancellationPercent: Number(e.target.value) || 0 })} /></label>
+            <label>Cancellation charge % (legacy flat)<input type="number" value={pol.cancellationPercent} onChange={(e) => setPol({ ...pol, cancellationPercent: Number(e.target.value) || 0 })} /></label>
             <label className="check">
-              Refund advance on cancel
+              Refund advance on cancel (legacy)
               <input type="checkbox" checked={!!pol.refundAdvance} onChange={(e) => setPol({ ...pol, refundAdvance: e.target.checked })} />
+            </label>
+            <label>
+              Manager approval above ₹
+              <input
+                type="number"
+                value={pol.refundApprovalAbove ?? 5000}
+                onChange={(e) => setPol({ ...pol, refundApprovalAbove: Number(e.target.value) || 0 })}
+              />
             </label>
             <label>Room check-in / check-out
               <input value={pol.roomCheckInOut || ""} onChange={(e) => setPol({ ...pol, roomCheckInOut: e.target.value })} placeholder="24 hrs" />
@@ -158,6 +166,96 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
             <label>Payment due (days before event)<input type="number" value={pol.paymentDueDays} onChange={(e) => setPol({ ...pol, paymentDueDays: Number(e.target.value) || 0 })} /></label>
             <label>Grace period (minutes)<input type="number" value={pol.graceMinutes} onChange={(e) => setPol({ ...pol, graceMinutes: Number(e.target.value) || 0 })} /></label>
           </div>
+          <h4 style={{ marginTop: 16 }}>Cancellation tiers (days before event)</h4>
+          <p className="muted">Used when cancelling from Payment &amp; Invoice. Highest matching “min days” wins.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Min days</th>
+                <th>Refund %</th>
+                <th>Fixed fee</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(pol.cancelTiers || []).map((tier, idx) => (
+                <tr key={tier.id || idx}>
+                  <td>
+                    <input
+                      value={tier.label || ""}
+                      onChange={(e) => {
+                        const cancelTiers = [...(pol.cancelTiers || [])];
+                        cancelTiers[idx] = { ...tier, label: e.target.value };
+                        setPol({ ...pol, cancelTiers });
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={tier.minDays}
+                      onChange={(e) => {
+                        const cancelTiers = [...(pol.cancelTiers || [])];
+                        cancelTiers[idx] = { ...tier, minDays: Number(e.target.value) || 0 };
+                        setPol({ ...pol, cancelTiers });
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={tier.refundPercent}
+                      onChange={(e) => {
+                        const cancelTiers = [...(pol.cancelTiers || [])];
+                        cancelTiers[idx] = { ...tier, refundPercent: Number(e.target.value) || 0 };
+                        setPol({ ...pol, cancelTiers });
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={tier.fixedFee || 0}
+                      onChange={(e) => {
+                        const cancelTiers = [...(pol.cancelTiers || [])];
+                        cancelTiers[idx] = { ...tier, fixedFee: Number(e.target.value) || 0 };
+                        setPol({ ...pol, cancelTiers });
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn danger small"
+                      onClick={() => {
+                        const cancelTiers = (pol.cancelTiers || []).filter((_, i) => i !== idx);
+                        setPol({ ...pol, cancelTiers });
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button
+            type="button"
+            className="btn ghost small"
+            style={{ marginTop: 8 }}
+            onClick={() =>
+              setPol({
+                ...pol,
+                cancelTiers: [
+                  ...(pol.cancelTiers || []),
+                  { id: `t${Date.now()}`, minDays: 0, refundPercent: 0, fixedFee: 0, label: "New tier" },
+                ],
+              })
+            }
+          >
+            + Add tier
+          </button>
           <p className="muted" style={{ marginTop: 8 }}>
             Tax % is on Property. Extra bed rate is on each room type in Master data. Gayatri does not sell catering from this desk — catering policy is T&C only.
           </p>

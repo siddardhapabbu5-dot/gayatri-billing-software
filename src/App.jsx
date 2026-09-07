@@ -24,6 +24,10 @@ import {
   createReservation,
   getState,
   issueDocument,
+  processCancellation,
+  processRefund,
+  approveRefund,
+  reversePayment,
   removeDocument,
   removeGuest,
   resetDemo,
@@ -33,6 +37,7 @@ import {
   saveRoomType,
   removeRoom,
   saveGuest,
+  setBookingCancelReason,
   setFolioDiscount,
   setFolioGstMode,
   setRoomHousekeeping,
@@ -191,6 +196,16 @@ export default function App() {
   useEffect(() => {
     if (authUser) setState(applyAuthUser(authUser));
   }, [authUser]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("clearAll") !== "1") return;
+    params.delete("clearAll");
+    const qs = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`);
+    void handleClearAllBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL clear
+  }, []);
 
   useEffect(() => {
     function applyHash() {
@@ -513,22 +528,15 @@ export default function App() {
                 onCancel={(id) => {
                   const bk = state.bookings.find((b) => b.id === id);
                   if (!bk || bk.status === "Cancelled") return;
-                  const { totals } = bookingFolio(state, id);
-                  const m = (n) => money(n, state.property.currency, state.property.locale);
-                  if (
-                    !window.confirm(
-                      `Cancel booking ${bk.number}?\n\nThe record is kept under Reports → Cancellations. Calendar and room holds are released.${
-                        totals.paid > 0 ? `\n\nAmount collected: ${m(totals.paid)}` : ""
-                      }`
-                    )
-                  ) {
-                    return;
+                  try {
+                    sessionStorage.setItem("gayatri-open-cancel", id);
+                  } catch {
+                    /* ignore */
                   }
-                  let refund = 0;
-                  if (totals.paid > 0 && window.confirm(`Record a refund of ${m(totals.paid)}?`)) {
-                    refund = totals.paid;
-                  }
-                  setState(cancelBooking(id, refund));
+                  go("billing", { bookingId: id });
+                }}
+                onEditCancelReason={(id, reason) => {
+                  setState(setBookingCancelReason(id, reason));
                 }}
                 onOpen={(id) => go("billing", { bookingId: id })}
                 go={go}
@@ -592,6 +600,51 @@ export default function App() {
                   if (out?.error) return out;
                   setState(out);
                   return out;
+                }}
+                onCancelBooking={(id, payload) => {
+                  const out = processCancellation(id, payload);
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return out;
+                  }
+                  setState(out.state || getState());
+                  if (out.pendingApproval) window.alert("Refund is pending manager approval.");
+                  return out;
+                }}
+                onProcessRefund={(id, payload) => {
+                  const out = processRefund(id, payload);
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return out;
+                  }
+                  setState(out.state || getState());
+                  if (out.pendingApproval) window.alert("Refund is pending manager approval.");
+                  return out;
+                }}
+                onReversePayment={(paymentId, reason) => {
+                  const out = reversePayment(paymentId, reason);
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
+                  setState(out);
+                }}
+                onApproveRefund={(id) => {
+                  const out = approveRefund(id, { note: "Approved" });
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
+                  setState(out);
+                }}
+                onRejectRefund={(id) => {
+                  const note = window.prompt("Reject reason") || "Rejected";
+                  const out = approveRefund(id, { note, reject: true });
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
+                  setState(out);
                 }}
                 onCancelRoom={(resId) => {
                   if (!window.confirm("Cancel this room stay only?\n\nHall booking and payments stay. Room charges drop from the bill. No refund is posted.")) {

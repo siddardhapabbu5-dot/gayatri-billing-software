@@ -1590,11 +1590,25 @@ export default function Home({ state, onEnquire, onStaff }) {
         if (!sec || !lines.length) return null;
         const idx = TERM_SECTIONS.findIndex((s) => s.id === sec.id);
         return (
-          <div className="terms-focus" role="dialog" aria-modal="true" aria-label={termLoc.labels[sec.id] || sec.label}>
-            <button type="button" className="terms-focus-close" aria-label="Close section" onClick={() => setTermFocus(null)}>
-              ×
-            </button>
-            <article className={`terms-focus-card lang-${termLang}`}>
+          <div
+            className="terms-focus"
+            role="dialog"
+            aria-modal="true"
+            aria-label={termLoc.labels[sec.id] || sec.label}
+            onClick={() => setTermFocus(null)}
+          >
+            <article
+              className={`terms-focus-card lang-${termLang}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="terms-focus-close"
+                aria-label="Close"
+                onClick={() => setTermFocus(null)}
+              >
+                ×
+              </button>
               <div className="terms-article-num">{String(idx + 1).padStart(2, "0")}</div>
               <h3>{termLoc.labels[sec.id] || sec.label}</h3>
               <ul className="terms-list">

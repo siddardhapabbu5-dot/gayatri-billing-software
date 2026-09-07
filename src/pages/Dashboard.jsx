@@ -34,14 +34,77 @@ function payDay(p) {
   return String(p.at || p.date || "").slice(0, 10);
 }
 
-function monthOptions(today) {
-  const opts = [];
-  let cursor = startOfMonthISO(parseISO(today));
-  for (let i = 0; i < 18; i += 1) {
-    opts.push({ value: cursor.slice(0, 7), label: monthShort(cursor) });
-    cursor = startOfMonthISO(new Date(parseISO(cursor).getFullYear(), parseISO(cursor).getMonth() - 1, 1));
+function buildMonthCells(monthStartISO) {
+  const start = parseISO(monthStartISO);
+  const y = start.getFullYear();
+  const m = start.getMonth();
+  const firstDow = (start.getDay() + 6) % 7; // Mon=0
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDow; i += 1) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d += 1) {
+    cells.push(todayISO(new Date(y, m, d)));
   }
-  return opts;
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
+/** Always-visible month calendar in the dashboard filter row. */
+function MonthCalendarInline({ value, onChange, today, bookedDays }) {
+  const viewMonth = `${value}-01`;
+  const cells = useMemo(() => buildMonthCells(viewMonth), [viewMonth]);
+  const viewLabel = monthLabel(viewMonth);
+  const booked = bookedDays || new Set();
+
+  function shiftMonth(delta) {
+    const d = parseISO(viewMonth);
+    onChange(startOfMonthISO(new Date(d.getFullYear(), d.getMonth() + delta, 1)).slice(0, 7));
+  }
+
+  return (
+    <div className="dash-month-cal dash-month-cal-inline" aria-label="Month calendar">
+      <div className="dash-month-cal-nav">
+        <button type="button" className="btn ghost small" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+          ‹
+        </button>
+        <strong>{viewLabel}</strong>
+        <button type="button" className="btn ghost small" onClick={() => shiftMonth(1)} aria-label="Next month">
+          ›
+        </button>
+      </div>
+      <div className="dash-month-cal-weekdays">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+          <span key={d}>{d}</span>
+        ))}
+      </div>
+      <div className="dash-month-cal-grid">
+        {cells.map((iso, idx) => {
+          if (!iso) return <span key={`e-${idx}`} className="dash-month-cal-empty" />;
+          const isToday = iso === today;
+          const hasBook = booked.has(iso);
+          return (
+            <button
+              key={iso}
+              type="button"
+              className={`dash-month-cal-day${isToday ? " today" : ""}${hasBook ? " booked" : ""}`}
+              title={hasBook ? "Has booking" : undefined}
+              onClick={() => onChange(iso.slice(0, 7))}
+            >
+              {Number(iso.slice(8, 10))}
+            </button>
+          );
+        })}
+      </div>
+      <div className="dash-month-cal-foot">
+        <button type="button" className="btn ghost small" onClick={() => onChange(today.slice(0, 7))}>
+          This month
+        </button>
+        <span className="muted" style={{ fontSize: 12 }}>
+          {monthShort(viewMonth)}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function bookingMatchesAsset(state, bookingId, asset) {
@@ -68,9 +131,13 @@ function bookingMatchesAsset(state, bookingId, asset) {
 }
 
 function paymentsIncome(state, from, to, bookingIdSet) {
+  const bookingIds = new Set((state.bookings || []).map((b) => b.id));
   return (state.payments || [])
-    .filter((p) => p.type !== "Refund" && p.type !== "Deposit return")
+    .filter((p) => p.type !== "Deposit")
     .filter((p) => {
+      const st = String(p.status || "SUCCESS").toUpperCase();
+      if (st === "REVERSED" || st === "FAILED" || st === "REJECTED") return false;
+      if (p.bookingId && !bookingIds.has(p.bookingId)) return false;
       const day = payDay(p);
       if (!day) return false;
       if (from && day < from) return false;
@@ -78,7 +145,11 @@ function paymentsIncome(state, from, to, bookingIdSet) {
       if (bookingIdSet && !bookingIdSet.has(p.bookingId)) return false;
       return true;
     })
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
+    .reduce((s, p) => {
+      const amt = Number(p.amount || 0);
+      if (p.type === "Refund" || p.type === "Deposit return") return s - amt;
+      return s + amt;
+    }, 0);
 }
 
 export default function Dashboard({ state, go }) {
@@ -105,8 +176,6 @@ export default function Dashboard({ state, go }) {
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
-
-  const monthOpts = useMemo(() => monthOptions(today), [today]);
 
   const assetOptions = useMemo(() => {
     const halls = (state.halls || []).map((h) => ({ id: `hall:${h.id}`, label: h.name }));
@@ -227,6 +296,26 @@ export default function Dashboard({ state, go }) {
     }).length;
   }, [state, filterMonthStart, filterMonthEnd, filterAsset, filteredBookingIds]);
 
+  const bookedDaysInFilterMonth = useMemo(() => {
+    const days = new Set();
+    for (const b of state.bookings || []) {
+      if (!isActiveBooking(b)) continue;
+      if (filteredBookingIds && !filteredBookingIds.has(b.id)) continue;
+      if (filterAsset !== "all" && !bookingMatchesAsset(state, b.id, filterAsset)) continue;
+      const day = bookingDay(b);
+      if (day && day.slice(0, 7) === filterMonth) days.add(day);
+    }
+    for (const r of state.hallReservations || []) {
+      if (r.status === "Cancelled") continue;
+      const day = String(r.start || r.date || "").slice(0, 10);
+      if (!day || day.slice(0, 7) !== filterMonth) continue;
+      if (filterAsset.startsWith("hall:") && r.hallId !== filterAsset.slice(5)) continue;
+      if (filterAsset === "retreat" || filterAsset.startsWith("roomType:")) continue;
+      days.add(day);
+    }
+    return days;
+  }, [state, filterMonth, filterAsset, filteredBookingIds]);
+
   const checkInsToday = useMemo(() => {
     return (state.roomReservations || []).filter((r) => {
       if (r.checkIn !== today || ["Cancelled", "Checked out"].includes(r.status)) return false;
@@ -265,24 +354,41 @@ export default function Dashboard({ state, go }) {
   );
   const monthNet = filterAsset === "all" ? monthCashAll.net : monthIncome;
 
+  const assetLabel = assetOptions.find((a) => a.id === filterAsset)?.label || "All";
+
   const hallHeadline =
     todayHalls.length === 0
       ? filterAsset.startsWith("roomType:")
-        ? "—"
-        : "No hall booked"
+        ? `${occ.occupied} occupied · ${availableToday} free`
+        : filterAsset === "retreat"
+          ? "Not booked today"
+          : "No hall booked"
       : todayHalls.length === 1
         ? todayHalls[0].name
-        : `${todayHalls.length} halls booked`;
+        : todayHalls.map((h) => h.name).join(" · ");
   const hallSub =
     todayHalls.length === 0
       ? filterAsset.startsWith("roomType:")
-        ? "Room filter active"
-        : "Free today"
+        ? `${assetLabel} · today`
+        : filterAsset === "all"
+          ? "Free today · all halls"
+          : "Free today"
       : todayHalls.length === 1
-        ? "Event running"
-        : "Events running";
+        ? filterAsset === "all"
+          ? "Event running · all halls"
+          : "Event running"
+        : `${todayHalls.length} events running`;
 
-  const assetLabel = assetOptions.find((a) => a.id === filterAsset)?.label || "All";
+  const todayBookingCardTitle =
+    filterAsset === "all"
+      ? "Today's all booking"
+      : filterAsset.startsWith("hall:")
+        ? `Today's ${assetLabel}`
+        : filterAsset === "retreat"
+          ? "Today's Royal Family Retreat"
+          : filterAsset.startsWith("roomType:")
+            ? `Today's ${assetLabel}`
+            : `Today's ${assetLabel}`;
 
   function setThisMonth() {
     setFrom(currentMonthStart);
@@ -309,17 +415,16 @@ export default function Dashboard({ state, go }) {
       </PageHead>
 
       <div className="panel dash-filters">
-        <div className="dash-filter-row">
-          <label className="dash-filter-month">
-            <span>Month</span>
-            <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
-              {monthOpts.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="dash-filter-row dash-filter-row-cal">
+          <div className="dash-filter-month">
+            <span>Month calendar</span>
+            <MonthCalendarInline
+              value={filterMonth}
+              onChange={setFilterMonth}
+              today={today}
+              bookedDays={bookedDaysInFilterMonth}
+            />
+          </div>
           <div className="dash-filter-assets">
             <span className="dash-filter-label">Function hall / rooms</span>
             <div className="dash-filter-chips">
@@ -334,23 +439,23 @@ export default function Dashboard({ state, go }) {
                 </button>
               ))}
             </div>
+            <p className="muted dash-filter-note" style={{ marginTop: 10 }}>
+              Showing overview for <strong>{monthShort(filterMonthStart)}</strong>
+              {filterAsset !== "all" ? (
+                <>
+                  {" "}
+                  · <strong>{assetLabel}</strong>
+                </>
+              ) : null}
+              . Days with a booking mark are highlighted. Today / Period money below stay unfiltered.
+            </p>
           </div>
         </div>
-        <p className="muted dash-filter-note">
-          Showing overview for <strong>{monthShort(filterMonthStart)}</strong>
-          {filterAsset !== "all" ? (
-            <>
-              {" "}
-              · <strong>{assetLabel}</strong>
-            </>
-          ) : null}
-          . Today / Period money below stay unfiltered.
-        </p>
       </div>
 
       <div className="dash-overview-kpis">
         <button type="button" className="dash-ov-card tone-hall" onClick={() => go("calendar")}>
-          <span className="dash-ov-k">Today&apos;s hall booking</span>
+          <span className="dash-ov-k">{todayBookingCardTitle}</span>
           <span className="dash-ov-v">{hallHeadline}</span>
           <span className="dash-ov-s">{hallSub}</span>
         </button>
@@ -445,32 +550,74 @@ export default function Dashboard({ state, go }) {
             </span>
           </div>
         </div>
+        <div className="dash-report-grid" style={{ marginTop: 10 }}>
+          <div className="dash-report-item">
+            <span className="dash-ov-k">Cash received</span>
+            <span className="dash-ov-v">{m(monthCashAll.rails?.cash || 0)}</span>
+            <span className="dash-ov-s">Month · after refunds</span>
+          </div>
+          <div className="dash-report-item">
+            <span className="dash-ov-k">UPI received</span>
+            <span className="dash-ov-v">{m(monthCashAll.rails?.upi || 0)}</span>
+            <span className="dash-ov-s">Month · after refunds</span>
+          </div>
+          <div className="dash-report-item">
+            <span className="dash-ov-k">Card received</span>
+            <span className="dash-ov-v">{m(monthCashAll.rails?.card || 0)}</span>
+            <span className="dash-ov-s">Month · after refunds</span>
+          </div>
+          <div className="dash-report-item">
+            <span className="dash-ov-k">Bank received</span>
+            <span className="dash-ov-v">{m(monthCashAll.rails?.bank || 0)}</span>
+            <span className="dash-ov-s">Month · after refunds</span>
+          </div>
+          <div className="dash-report-item">
+            <span className="dash-ov-k">Advance (kind)</span>
+            <span className="dash-ov-v">{m(monthCashAll.byKind?.advance ?? monthCashAll.advance ?? 0)}</span>
+            <span className="dash-ov-s">Advance collections · month</span>
+          </div>
+          <div className="dash-report-item">
+            <span className="dash-ov-k">Final (kind)</span>
+            <span className="dash-ov-v">{m(monthCashAll.byKind?.final || 0)}</span>
+            <span className="dash-ov-s">Final payments · month</span>
+          </div>
+        </div>
       </div>
 
       <h3 className="dash-section-title">Today</h3>
       <p className="muted" style={{ margin: "0 0 8px", maxWidth: 52 + "rem" }}>
-        Money received today is one total. Rooms / hall / food below are only a split of that same money (from what is on each bill) — not separate payments.
+        Collections and customer refunds are shown separately. Net = collections − refunds. If refunds are higher than collections, a duplicate refund may be on a bill — open Payment &amp; Invoice and reverse the extra one.
       </p>
       <div className="kpis dash-kpis">
-        <div className="kpi tone-d">
-          <div className="k">Today money received</div>
-          <div className="v">{m(todayBook.incomeTotal)}</div>
-          <div className="s">All cash / UPI / card / bank today</div>
-        </div>
         <div className="kpi tone-b">
-          <div className="k">Of which · Rooms</div>
-          <div className="v">{m(todayBook.room)}</div>
-          <div className="s">Share for room charges on the bill</div>
+          <div className="k">Today collections</div>
+          <div className="v">{m(todayBook.incomeGross || 0)}</div>
+          <div className="s">Money taken in (before refunds)</div>
+        </div>
+        <div className="kpi tone-e">
+          <div className="k">Today refunds</div>
+          <div className="v">{m(todayBook.refundTotal || 0)}</div>
+          <div className="s">Customer refunds posted today</div>
+        </div>
+        <div className="kpi tone-d">
+          <div className="k">Today net money</div>
+          <div className="v">{m(todayBook.incomeTotal)}</div>
+          <div className="s">Collections − refunds</div>
         </div>
         <div className="kpi tone-a">
-          <div className="k">Of which · Hall</div>
+          <div className="k">Of which · Hall (net)</div>
           <div className="v">{m(todayBook.hall)}</div>
-          <div className="s">Share for hall charges on the bill</div>
+          <div className="s">Hall share after refunds</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Of which · Rooms (net)</div>
+          <div className="v">{m(todayBook.room)}</div>
+          <div className="s">Room share after refunds</div>
         </div>
         <div className="kpi tone-c">
           <div className="k">Of which · Food &amp; extras</div>
           <div className="v">{m(todayBook.food + todayBook.otherIncome)}</div>
-          <div className="s">Food, tea, laundry and other extras</div>
+          <div className="s">Extras share after refunds</div>
         </div>
         <div className="kpi tone-e">
           <div className="k">Today expenses</div>
@@ -478,14 +625,56 @@ export default function Dashboard({ state, go }) {
           <div className="s">From expense entry</div>
         </div>
         <div className="kpi tone-c">
-          <div className="k">Today net</div>
+          <div className="k">Today net profit</div>
           <div className="v">{m(todayBook.net)}</div>
-          <div className="s">Money received − expenses</div>
+          <div className="s">Net money − expenses</div>
         </div>
         <div className="kpi tone-e">
           <div className="k">Pending payments</div>
           <div className="v">{m(openAll.reduce((s, x) => s + x.totals.balance, 0))}</div>
           <div className="s">{openAll.length} open bills · not dated</div>
+        </div>
+      </div>
+
+      <h3 className="dash-section-title">Today · payment received by type</h3>
+      <p className="muted" style={{ margin: "0 0 8px" }}>
+        Mode = how money came in. Kind = advance / final / settlement. Mode figures are after refunds.
+      </p>
+      <div className="kpis dash-kpis">
+        <div className="kpi tone-d">
+          <div className="k">Cash</div>
+          <div className="v">{m(todayBook.rails?.cash || 0)}</div>
+          <div className="s">Cash received today</div>
+        </div>
+        <div className="kpi tone-c">
+          <div className="k">UPI</div>
+          <div className="v">{m(todayBook.rails?.upi || 0)}</div>
+          <div className="s">UPI received today</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Card</div>
+          <div className="v">{m(todayBook.rails?.card || 0)}</div>
+          <div className="s">Card received today</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Bank transfer</div>
+          <div className="v">{m(todayBook.rails?.bank || 0)}</div>
+          <div className="s">Bank / NEFT / IMPS</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Advance</div>
+          <div className="v">{m(todayBook.byKind?.advance ?? todayBook.advance ?? 0)}</div>
+          <div className="s">Kind · advance collections</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Final payment</div>
+          <div className="v">{m(todayBook.byKind?.final || 0)}</div>
+          <div className="s">Kind · final collections</div>
+        </div>
+        <div className="kpi tone-c">
+          <div className="k">Settlement</div>
+          <div className="v">{m(todayBook.byKind?.settlement || 0)}</div>
+          <div className="s">Kind · other settlements</div>
         </div>
       </div>
 
@@ -511,13 +700,21 @@ export default function Dashboard({ state, go }) {
         </div>
       </div>
       <p className="muted" style={{ margin: "0 0 8px" }}>
-        Revenue, expenses and hall collections for <strong>{rangeLabel}</strong>.
+        Revenue = collections − refunds for <strong>{rangeLabel}</strong>
+        {periodBook.refundTotal > 0
+          ? ` · collections ${m(periodBook.incomeGross || 0)}, refunds ${m(periodBook.refundTotal)}`
+          : ""}
+        .
       </p>
       <div className="kpis dash-kpis">
         <div className="kpi tone-b">
-          <div className="k">Total revenue</div>
+          <div className="k">Total revenue (net)</div>
           <div className="v">{m(periodBook.incomeTotal)}</div>
-          <div className="s">{rangeLabel}</div>
+          <div className="s">
+            {periodBook.refundTotal > 0
+              ? `Collections ${m(periodBook.incomeGross || 0)} − refunds ${m(periodBook.refundTotal)}`
+              : rangeLabel}
+          </div>
         </div>
         <div className="kpi tone-e">
           <div className="k">Total expenses</div>
@@ -543,6 +740,48 @@ export default function Dashboard({ state, go }) {
           <div className="k">Food &amp; extras</div>
           <div className="v">{m(periodBook.food + periodBook.otherIncome)}</div>
           <div className="s">Extras share in this period</div>
+        </div>
+      </div>
+
+      <h3 className="dash-section-title">Period · payment received by type</h3>
+      <p className="muted" style={{ margin: "0 0 8px" }}>
+        Same split for <strong>{rangeLabel}</strong>. Mode amounts are after refunds.
+      </p>
+      <div className="kpis dash-kpis">
+        <div className="kpi tone-d">
+          <div className="k">Cash</div>
+          <div className="v">{m(periodBook.rails?.cash || 0)}</div>
+          <div className="s">Cash in period</div>
+        </div>
+        <div className="kpi tone-c">
+          <div className="k">UPI</div>
+          <div className="v">{m(periodBook.rails?.upi || 0)}</div>
+          <div className="s">UPI in period</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Card</div>
+          <div className="v">{m(periodBook.rails?.card || 0)}</div>
+          <div className="s">Card in period</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Bank transfer</div>
+          <div className="v">{m(periodBook.rails?.bank || 0)}</div>
+          <div className="s">Bank / NEFT / IMPS</div>
+        </div>
+        <div className="kpi tone-b">
+          <div className="k">Advance</div>
+          <div className="v">{m(periodBook.byKind?.advance ?? periodBook.advance ?? 0)}</div>
+          <div className="s">Kind · advance</div>
+        </div>
+        <div className="kpi tone-a">
+          <div className="k">Final payment</div>
+          <div className="v">{m(periodBook.byKind?.final || 0)}</div>
+          <div className="s">Kind · final</div>
+        </div>
+        <div className="kpi tone-c">
+          <div className="k">Settlement</div>
+          <div className="v">{m(periodBook.byKind?.settlement || 0)}</div>
+          <div className="s">Kind · settlement</div>
         </div>
       </div>
     </>

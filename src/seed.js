@@ -347,6 +347,7 @@ export function createSeed() {
     enquiries: [],
     agreements: [],
     expenses: [],
+    refunds: [],
     audit: [],
   };
 }
