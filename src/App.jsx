@@ -327,8 +327,8 @@ export default function App() {
               {authUser.roleLabel || authUser.role}
             </div>
           </div>
-          <button className="btn ghost small" type="button" onClick={logoutStaff} style={{ width: "100%" }}>
-            Sign out
+          <button className="btn ghost small nav-signout" type="button" onClick={logoutStaff} style={{ width: "100%" }}>
+            Log out
           </button>
         </div>
       </aside>
@@ -340,10 +340,15 @@ export default function App() {
             </div>
             <h2>{titles[page]}</h2>
           </div>
-          <div className="row">
-            <span className="muted">{state.notifications[0]?.title}</span>
-            <button className="btn ghost small" onClick={() => go("home")}>
+          <div className="row topbar-actions">
+            <span className="muted topbar-user" title={authUser.email}>
+              {authUser.name}
+            </span>
+            <button className="btn ghost small" type="button" onClick={() => go("home")}>
               Public site
+            </button>
+            <button className="btn ghost small topbar-logout" type="button" onClick={logoutStaff}>
+              Log out
             </button>
           </div>
         </header>

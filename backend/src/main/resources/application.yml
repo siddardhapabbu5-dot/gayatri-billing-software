@@ -25,7 +25,12 @@ app:
     secret: GayatriConventionHallJwtSecretKeyChangeInProduction_2026_MustBeLongEnough256Bits!!
     expiration-ms: 86400000
   cors:
-    allowed-origins: http://localhost:5177,http://127.0.0.1:5177
+    allowed-origins: >-
+      http://localhost:*,
+      http://127.0.0.1:*,
+      http://[::1]:*,
+      http://192.168.*.*:*,
+      http://10.*.*.*:*
   razorpay:
     enabled: false
     key-id: ${RAZORPAY_KEY_ID:}

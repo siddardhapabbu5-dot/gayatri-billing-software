@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { coverage, formatBytes, requiredList } from "../docTypes";
 import { downloadBlob, getBlob } from "../fileStore";
 import { formatDateTime } from "../lib";
 import { Pill } from "../ui";
+
+function docStatus(rec, staged) {
+  if (rec?.verified) return "verified";
+  if (rec || staged) return "onfile";
+  return "missing";
+}
 
 export default function DocPanel({ state, bookingId, guestId, types: typeOverride, pending, onPending, onAttach, onRemove, onVerify }) {
   const booking = state.bookings.find((b) => b.id === bookingId);
@@ -14,12 +20,28 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
   const [view, setView] = useState(null);
   const [err, setErr] = useState("");
   const [note, setNote] = useState(null);
+  const [needFilter, setNeedFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     return () => {
       if (view?.url) URL.revokeObjectURL(view.url);
     };
   }, [view]);
+
+  const pendingMap = Object.fromEntries((pending || []).map((p) => [p.typeId, p.file]));
+
+  const filteredTypes = useMemo(() => {
+    return types.filter((t) => {
+      if (needFilter === "required" && !t.required) return false;
+      if (needFilter === "optional" && t.required) return false;
+      const rec = uploaded.find((d) => d.typeId === t.id);
+      const staged = pendingMap[t.id];
+      const status = docStatus(rec, staged);
+      if (statusFilter !== "all" && status !== statusFilter) return false;
+      return true;
+    });
+  }, [types, needFilter, statusFilter, uploaded, pendingMap]);
 
   async function open(doc) {
     const row = await getBlob(doc.id);
@@ -63,8 +85,6 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
     setNote({ typeId: rec.typeId, text: "Deleted. Upload the correct file if needed." });
   }
 
-  const pendingMap = Object.fromEntries((pending || []).map((p) => [p.typeId, p.file]));
-
   return (
     <div>
       {cov && (
@@ -74,6 +94,30 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
         </p>
       )}
       {err && <p style={{ color: "var(--due)" }}>{err}</p>}
+
+      <div className="row doc-filters">
+        <label className="doc-filter">
+          <span>Need</span>
+          <select value={needFilter} onChange={(e) => setNeedFilter(e.target.value)}>
+            <option value="all">All</option>
+            <option value="required">Required</option>
+            <option value="optional">Optional</option>
+          </select>
+        </label>
+        <label className="doc-filter">
+          <span>Status</span>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">All</option>
+            <option value="missing">Missing</option>
+            <option value="onfile">On file</option>
+            <option value="verified">Verified</option>
+          </select>
+        </label>
+        <span className="muted doc-filter-count">
+          Showing {filteredTypes.length} of {types.length}
+        </span>
+      </div>
+
       <table>
         <thead>
           <tr>
@@ -85,80 +129,88 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
           </tr>
         </thead>
         <tbody>
-          {types.map((t) => {
-            const rec = uploaded.find((d) => d.typeId === t.id);
-            const staged = pendingMap[t.id];
-            const hasFile = Boolean(rec || staged);
-            const justNow = note?.typeId === t.id;
-            return (
-              <tr key={t.id}>
-                <td>
-                  {t.label}
-                  <div className="muted">{t.hint}</div>
-                </td>
-                <td>{t.required ? <Pill status="Due">Required</Pill> : <Pill status="Cancelled">Optional</Pill>}</td>
-                <td>
-                  {rec ? (
-                    rec.verified ? <Pill status="Paid">Verified</Pill> : <Pill status="Paid">{justNow ? "Updated" : "On file"}</Pill>
-                  ) : staged ? (
-                    <Pill status="Paid">{justNow && note?.text?.startsWith("Updated") ? "Updated" : "Uploaded"}</Pill>
-                  ) : (
-                    <Pill status="Due">Missing</Pill>
-                  )}
-                  {justNow ? (
-                    <div style={{ color: "var(--ok)", fontSize: 12, marginTop: 4 }}>{note.text}</div>
-                  ) : rec?.uploadedAt ? (
-                    <div className="muted">{formatDateTime(rec.uploadedAt)}</div>
-                  ) : null}
-                </td>
-                <td>
-                  {rec ? (
-                    <>
-                      {rec.fileName}
-                      <div className="muted">{formatBytes(rec.size)} · {rec.storage}</div>
-                    </>
-                  ) : staged ? (
-                    staged.name
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="row">
-                  <label className="btn ghost small" style={{ margin: 0 }}>
-                    {hasFile ? "Replace" : "Upload"}
-                    <input
-                      type="file"
-                      accept="image/*,video/*,.pdf,.mp4,.mov,.webm,.m4v,application/pdf"
-                      hidden
-                      onChange={(e) => {
-                        pick(t.id, e.target.files?.[0], hasFile);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                  {staged && (
-                    <button type="button" className="btn danger small" onClick={() => dropStaged(t.id)}>
-                      Delete
-                    </button>
-                  )}
-                  {rec && (
-                    <>
-                      <button type="button" className="btn small" onClick={() => open(rec)}>View</button>
-                      <button type="button" className="btn ghost small" onClick={() => saveCopy(rec)}>Save copy</button>
-                      {onVerify && (
-                        <button type="button" className="btn ghost small" onClick={() => onVerify(rec.id, !rec.verified)}>
-                          {rec.verified ? "Unverify" : "Verify"}
-                        </button>
-                      )}
-                      {onRemove && (
-                        <button type="button" className="btn danger small" onClick={() => dropSaved(rec)}>Delete</button>
-                      )}
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {filteredTypes.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="muted">
+                No documents match these filters.
+              </td>
+            </tr>
+          ) : (
+            filteredTypes.map((t) => {
+              const rec = uploaded.find((d) => d.typeId === t.id);
+              const staged = pendingMap[t.id];
+              const hasFile = Boolean(rec || staged);
+              const justNow = note?.typeId === t.id;
+              return (
+                <tr key={t.id}>
+                  <td>
+                    {t.label}
+                    <div className="muted">{t.hint}</div>
+                  </td>
+                  <td>{t.required ? <Pill status="Due">Required</Pill> : <Pill status="Cancelled">Optional</Pill>}</td>
+                  <td>
+                    {rec ? (
+                      rec.verified ? <Pill status="Paid">Verified</Pill> : <Pill status="Paid">{justNow ? "Updated" : "On file"}</Pill>
+                    ) : staged ? (
+                      <Pill status="Paid">{justNow && note?.text?.startsWith("Updated") ? "Updated" : "Uploaded"}</Pill>
+                    ) : (
+                      <Pill status="Due">Missing</Pill>
+                    )}
+                    {justNow ? (
+                      <div style={{ color: "var(--ok)", fontSize: 12, marginTop: 4 }}>{note.text}</div>
+                    ) : rec?.uploadedAt ? (
+                      <div className="muted">{formatDateTime(rec.uploadedAt)}</div>
+                    ) : null}
+                  </td>
+                  <td>
+                    {rec ? (
+                      <>
+                        {rec.fileName}
+                        <div className="muted">{formatBytes(rec.size)} · {rec.storage}</div>
+                      </>
+                    ) : staged ? (
+                      staged.name
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="row">
+                    <label className="btn ghost small" style={{ margin: 0 }}>
+                      {hasFile ? "Replace" : "Upload"}
+                      <input
+                        type="file"
+                        accept="image/*,video/*,.pdf,.mp4,.mov,.webm,.m4v,application/pdf"
+                        hidden
+                        onChange={(e) => {
+                          pick(t.id, e.target.files?.[0], hasFile);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {staged && (
+                      <button type="button" className="btn danger small" onClick={() => dropStaged(t.id)}>
+                        Delete
+                      </button>
+                    )}
+                    {rec && (
+                      <>
+                        <button type="button" className="btn small" onClick={() => open(rec)}>View</button>
+                        <button type="button" className="btn ghost small" onClick={() => saveCopy(rec)}>Save copy</button>
+                        {onVerify && (
+                          <button type="button" className="btn ghost small" onClick={() => onVerify(rec.id, !rec.verified)}>
+                            {rec.verified ? "Unverify" : "Verify"}
+                          </button>
+                        )}
+                        {onRemove && (
+                          <button type="button" className="btn danger small" onClick={() => dropSaved(rec)}>Delete</button>
+                        )}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })
+          )}
         </tbody>
       </table>
       {booking && <p className="muted" style={{ marginTop: 8 }}>{booking.number}</p>}

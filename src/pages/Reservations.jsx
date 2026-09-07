@@ -250,21 +250,79 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
       setPeekRoom(id);
       return;
     }
-    setDraft((d) => {
-      if (d.rooms.length === 1 && d.rooms[0].roomId === id) return d;
-      return {
-        ...d,
-        rooms: [{
+    const already = draft.rooms.some((r) => r.roomId === id);
+    if (already) {
+      setDraft((d) => ({ ...d, rooms: d.rooms.filter((r) => r.roomId !== id) }));
+      setPeekRoom((cur) => (cur === id ? null : cur));
+      setError("");
+      return;
+    }
+    setDraft((d) => ({
+      ...d,
+      rooms: [
+        ...d.rooms,
+        {
           roomId: id,
           checkIn: d.checkIn || d.eventDate,
           checkOut: d.checkOut || addDays(d.checkIn || d.eventDate, 1),
           adults: 2,
           children: 0,
           extraBed: 0,
-        }],
+        },
+      ],
+    }));
+    setPeekRoom(id);
+    setError("");
+  }
+
+  function selectAllHalls() {
+    const date = draft.eventDate || todayISO();
+    setDraft((d) => {
+      const next = [...d.halls];
+      for (const h of state.halls.filter((x) => x.active !== false)) {
+        const hold = hallDayStatus(state, h.id, date);
+        if (hold.booked) continue;
+        if (next.some((x) => x.hallId === h.id)) continue;
+        next.push(applyHallSlotWindow({ hallId: h.id, slotType: "full-day", start: "", end: "" }, date));
+      }
+      return {
+        ...d,
+        halls: next,
+        type: d.type === "Room only" && next.length ? defaultEventType(state.property) : d.type,
       };
     });
-    setPeekRoom(id);
+  }
+
+  function clearHalls() {
+    setDraft((d) => ({ ...d, halls: [] }));
+  }
+
+  function selectAllFreeRooms() {
+    setDraft((d) => {
+      const checkIn = d.checkIn || d.eventDate;
+      const checkOut = d.checkOut || addDays(checkIn, 1);
+      const next = [...d.rooms];
+      for (const r of state.rooms) {
+        if (stayOnDates(state, r.id, checkIn, checkOut)) continue;
+        if (roomSaleBlocked(r)) continue;
+        if (next.some((x) => x.roomId === r.id)) continue;
+        next.push({
+          roomId: r.id,
+          checkIn,
+          checkOut,
+          adults: 2,
+          children: 0,
+          extraBed: 0,
+        });
+      }
+      return { ...d, checkIn, checkOut, rooms: next };
+    });
+    setError("");
+  }
+
+  function clearRooms() {
+    setDraft((d) => ({ ...d, rooms: [] }));
+    setPeekRoom(null);
   }
 
   function patchRoom(id, patch) {
@@ -293,13 +351,21 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
         checkOut = addDays(checkIn, Math.max(1, Number(patch.nights) || 1));
       }
       if (checkOut <= checkIn) checkOut = addDays(checkIn, 1);
+      const rooms = d.rooms
+        .map((r) => ({ ...r, checkIn, checkOut }))
+        .filter((r) => {
+          if (stayOnDates(state, r.roomId, checkIn, checkOut)) return false;
+          const room = state.rooms.find((x) => x.id === r.roomId);
+          return !roomSaleBlocked(room);
+        });
       return {
         ...d,
         checkIn,
         checkOut,
-        rooms: d.rooms.map((r) => ({ ...r, checkIn, checkOut })),
+        rooms,
       };
     });
+    setPeekRoom(null);
   }
 
   function dropRoom(id) {
@@ -419,8 +485,23 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
             </div>
           </div>
           <div className="panel">
-            <h3>Halls</h3>
-            <p className="muted">Convention halls. Half-day or full-day. Hall date can be different from room stay dates.</p>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <h3>Halls</h3>
+                <p className="muted">
+                  Click a hall card to select or deselect. Half-day or full-day. Hall date can differ from room stay dates.
+                  {draft.halls.length ? ` · ${draft.halls.length} selected` : ""}
+                </p>
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="btn ghost small" onClick={selectAllHalls}>
+                  Select all free
+                </button>
+                <button type="button" className="btn ghost small" onClick={clearHalls} disabled={!draft.halls.length}>
+                  Clear halls
+                </button>
+              </div>
+            </div>
             <div className="hall-tariff-grid">
               {state.halls.filter((h) => h.active !== false).map((h) => {
                 const selected = draft.halls.some((x) => x.hallId === h.id);
@@ -433,7 +514,9 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                     className={`hall-tariff-card${selected ? " on" : ""}${booked ? " is-held" : ""}`}
                     disabled={booked && !selected}
                     onClick={() => toggleHall(h.id)}
+                    aria-pressed={selected}
                   >
+                    <span className="hall-tariff-check" aria-hidden="true">{selected ? "✓" : ""}</span>
                     <strong>{h.name}</strong>
                     {booked && !selected ? (
                       <span className="hall-tariff-hold">Booked on {formatDateDMY(draft.eventDate)}</span>
@@ -480,12 +563,24 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
             })}
           </div>
           <div className="panel">
-            <h3>Room stay</h3>
-            <p className="muted">
-              Room stay dates are separate from the hall event date — set check-in / check-out below.
-              Occupied or Reserved only if a guest is already booked for these dates. Then click a free room.
-              Check-in / check-out: {roomCheckInOutText(pol)}.
-            </p>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <h3>Room stay</h3>
+                <p className="muted">
+                  Set check-in / check-out, then click room chips to add or remove. Held chips are already booked.
+                  Check-in / check-out: {roomCheckInOutText(pol)}.
+                  {draft.rooms.length ? ` · ${draft.rooms.length} room${draft.rooms.length === 1 ? "" : "s"} selected` : ""}
+                </p>
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="btn ghost small" onClick={selectAllFreeRooms}>
+                  Select all free
+                </button>
+                <button type="button" className="btn ghost small" onClick={clearRooms} disabled={!draft.rooms.length}>
+                  Clear rooms
+                </button>
+              </div>
+            </div>
             <div className="fields">
               <label>
                 Check-in
@@ -519,8 +614,9 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                     key={r.id}
                     className={`chip${selected ? " on" : ""}${held ? " held" : ""}${peekRoom === r.id ? " peek" : ""}`}
                     onClick={() => toggleRoom(r.id)}
+                    aria-pressed={selected}
                   >
-                    {r.number} {label}
+                    {selected ? "✓ " : ""}{r.number} {label}
                   </button>
                 );
               })}
@@ -868,6 +964,20 @@ function RoomGuestPeek({ state, roomId, checkIn, checkOut, onClose, onOpen }) {
         </div>
         <p className="muted" style={{ margin: 0 }}>
           This room is {blocked}. It cannot be added to a new booking until it is Available or Inspected.
+        </p>
+      </div>
+    );
+  }
+
+  if (!stay) {
+    return (
+      <div className="guest-peek">
+        <div className="panel-head">
+          <h4>Room {room?.number}</h4>
+          <button type="button" className="btn ghost small" onClick={onClose}>Close</button>
+        </div>
+        <p className="muted" style={{ margin: 0 }}>
+          This room is free for {formatDateDMY(checkIn)} → {formatDateDMY(checkOut)}. Click the chip again to add it.
         </p>
       </div>
     );
