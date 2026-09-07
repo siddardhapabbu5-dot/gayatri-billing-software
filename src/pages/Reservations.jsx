@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { addDays, formatDateDMY, money, nightsBetween, telHref, todayISO, waMe } from "../lib";
 import { buildFolioLinesFromDraft, folioTotals, hallDayStatus, lineKind, originLabel, roomClash } from "../engine";
 import { PAY_MODES } from "../finance";
@@ -34,14 +34,22 @@ function roomOccupant(state, roomId, checkIn, checkOut) {
 }
 
 function eventTypeOptions(property) {
-  const fromProp = (property?.eventTypes || DEFAULT_EVENT_TYPES).filter(Boolean);
-  const tail = ["Room only"].filter((t) => !fromProp.includes(t));
-  return [...fromProp, ...tail];
+  const base = (property?.eventTypes || DEFAULT_EVENT_TYPES)
+    .filter(Boolean)
+    .map((t) => (t === "Marriages" ? "Marriage" : t))
+    .filter((t) => t !== "Room only");
+  for (const extra of ["Rooms", "The Royal Family Retreat"]) {
+    if (base.includes(extra)) continue;
+    const otherIdx = base.indexOf("Other");
+    if (otherIdx >= 0) base.splice(otherIdx, 0, extra);
+    else base.push(extra);
+  }
+  return base;
 }
 
 function defaultEventType(property) {
   const types = eventTypeOptions(property);
-  return types.find((t) => t !== "Room only" && t !== "Other") || types[0] || "Conference";
+  return types.find((t) => t !== "Other") || types[0] || "Conference";
 }
 
 function emptyDraft(property, date) {
@@ -167,7 +175,11 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
   const [draft, setDraft] = useState(() => draftFromGuest(state.property, presetGuest, startDate));
   const [error, setError] = useState("");
   const [peekRoom, setPeekRoom] = useState(null);
+  const agreeHallRef = useRef(null);
+  const agreeRoomRef = useRef(null);
   const eventOptions = useMemo(() => eventTypeOptions(state.property), [state.property.eventTypes]);
+  const hasRetreat = draft.packageId === "pkg-retreat";
+  const needsRoomTerms = draft.rooms.length > 0 || hasRetreat;
   const lines = useMemo(() => buildFolioLinesFromDraft(state, { ...draft, services: draft.services }), [state, draft]);
   const previewPays = [
     ...(Number(draft.advance) > 0 ? [{ amount: Number(draft.advance) || 0, type: "Advance" }] : []),
@@ -203,6 +215,22 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
           applyHallSlotWindow({ hallId: id, slotType: "full-day", start: "", end: "" }, date),
         ],
         type: d.type === "Room only" ? defaultEventType(state.property) : d.type,
+      };
+    });
+  }
+
+  function toggleRetreatPackage() {
+    setError("");
+    setDraft((d) => {
+      if (d.packageId === "pkg-retreat") return { ...d, packageId: "" };
+      return {
+        ...d,
+        packageId: "pkg-retreat",
+        type: "The Royal Family Retreat",
+        guestsExpected: d.guestsExpected && Number(d.guestsExpected) <= 30 ? d.guestsExpected : 8,
+        notes:
+          String(d.notes || "").trim() ||
+          "Royal Family Retreat — ₹30,000 · 4 rooms, kitchen, dining hall, lobby",
       };
     });
   }
@@ -317,8 +345,9 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
       setError("Enter a valid phone number (10–15 digits).");
       return;
     }
-    if (!draft.halls.length && !draft.rooms.length) {
-      setError("Select at least one hall or room.");
+    const hasRetreatPkg = draft.packageId === "pkg-retreat";
+    if (!draft.halls.length && !draft.rooms.length && !hasRetreatPkg) {
+      setError("Select at least one hall, room, or The Royal Family Retreat.");
       return;
     }
     for (const h of draft.halls) {
@@ -347,10 +376,18 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
     }
     if (draft.halls.length && !draft.agreeHall) {
       setError("Tick the Convention Terms & Conditions for hall bookings.");
+      requestAnimationFrame(() => {
+        agreeHallRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        agreeHallRef.current?.focus();
+      });
       return;
     }
-    if (draft.rooms.length && !draft.agreeRoom) {
+    if ((draft.rooms.length || hasRetreatPkg) && !draft.agreeRoom) {
       setError("Tick the Room Booking Terms & Conditions for room stay.");
+      requestAnimationFrame(() => {
+        agreeRoomRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        agreeRoomRef.current?.focus();
+      });
       return;
     }
     const out = onSave({ ...draft, lines });
@@ -383,7 +420,22 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                 />
               </label>
               <label>Event
-                <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
+                <select
+                  value={draft.type}
+                  onChange={(e) => {
+                    const type = e.target.value;
+                    setDraft((d) => {
+                      const next = { ...d, type };
+                      if (type === "The Royal Family Retreat") {
+                        next.guestsExpected = d.guestsExpected && Number(d.guestsExpected) <= 30 ? d.guestsExpected : 8;
+                        if (!String(d.notes || "").trim()) {
+                          next.notes = "Royal Family Retreat — ₹30,000 · 4 rooms, kitchen, dining hall, lobby";
+                        }
+                      }
+                      return next;
+                    });
+                  }}
+                >
                   {eventOptions.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </label>
@@ -413,7 +465,27 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                   onChange={(e) => setDraft({ ...draft, guest: { ...draft.guest, idProof: { ...draft.guest.idProof, number: e.target.value } } })}
                 />
               </label>
-              <label>Expected guests<input type="number" value={draft.guestsExpected} onChange={(e) => setDraft({ ...draft, guestsExpected: e.target.value })} /></label>
+              <label>Expected guests
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={draft.guestsExpected}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setDraft({ ...draft, guestsExpected: "" });
+                      return;
+                    }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n) || n < 1) {
+                      setDraft({ ...draft, guestsExpected: 1 });
+                      return;
+                    }
+                    setDraft({ ...draft, guestsExpected: Math.floor(n) });
+                  }}
+                />
+              </label>
             </div>
           </div>
           <div className="panel">
@@ -449,6 +521,20 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                   </button>
                 );
               })}
+              <button
+                type="button"
+                className={`hall-tariff-card hall-tariff-retreat${draft.packageId === "pkg-retreat" ? " on" : ""}`}
+                onClick={toggleRetreatPackage}
+              >
+                <strong>The Royal Family Retreat</strong>
+                <div className="hall-tariff-lines">
+                  <span>
+                    <em>Package</em>
+                    {money(30000, cur, loc)}
+                  </span>
+                </div>
+                <span className="hall-tariff-note">4 Rooms + Kitchen + Dining Hall + Lobby</span>
+              </button>
             </div>
             {draft.halls.map((h) => {
               const hall = state.halls.find((x) => x.id === h.hallId);
@@ -621,15 +707,25 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                 </label>
 
                 {draft.halls.length > 0 && (
-                <label className="check">
+                <label className="check" style={{ gridColumn: "1 / -1" }}>
                   I have read and agree to the Convention Terms & Conditions.
-                  <input type="checkbox" checked={!!draft.agreeHall} onChange={(e) => setDraft({ ...draft, agreeHall: e.target.checked })} />
+                  <input
+                    ref={agreeHallRef}
+                    type="checkbox"
+                    checked={!!draft.agreeHall}
+                    onChange={(e) => setDraft({ ...draft, agreeHall: e.target.checked })}
+                  />
                 </label>
                 )}
-                {draft.rooms.length > 0 && (
-                <label className="check">
+                {needsRoomTerms && (
+                <label className="check" style={{ gridColumn: "1 / -1" }}>
                   I have read and agree to the Room Booking Terms & Conditions.
-                  <input type="checkbox" checked={!!draft.agreeRoom} onChange={(e) => setDraft({ ...draft, agreeRoom: e.target.checked })} />
+                  <input
+                    ref={agreeRoomRef}
+                    type="checkbox"
+                    checked={!!draft.agreeRoom}
+                    onChange={(e) => setDraft({ ...draft, agreeRoom: e.target.checked })}
+                  />
                 </label>
                 )}
                 <label style={{ gridColumn: "1 / -1" }}>Booking notes<input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>

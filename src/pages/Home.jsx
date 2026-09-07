@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { publicAvailability } from "../engine";
-import { TERM_LANGS, TERM_SECTIONS, sectionLines, termLocaleOf } from "../policies";
+import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, sectionLines, termLocaleOf } from "../policies";
 import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
 import RetreatOffer from "./RetreatOffer.jsx";
 import "../home.css";
@@ -11,6 +11,7 @@ const PAGES = [
   { id: "venues", label: "Venues" },
   { id: "stay", label: "The Royal Family Retreat" },
   { id: "stay-space", label: "The Royal Family Retreat", hideNav: true },
+  { id: "rooms", label: "Rooms" },
   { id: "gallery", label: "Gallery" },
   { id: "booking", label: "Book" },
   { id: "contact", label: "Visit" },
@@ -126,7 +127,6 @@ const HALL_GALLERY_SLIDES = (() => {
     [`${IMG}/venue-imperial.jpg`, "Imperial Ballroom"],
     [`${IMG}/venue-garden.jpg`, "Garden Pavilion"],
     [`${IMG}/venue-courtyard.jpg`, "Heritage Courtyard"],
-    [`${IMG}/film/mandap.jpg`, "Hall interior"],
     [`${IMG}/film/agni.jpg`, "Stage and light"],
     [`${IMG}/gallery-1.jpg`, "Guests in the hall"],
     [`${IMG}/gallery-5.jpg`, "Dining setup"],
@@ -217,6 +217,20 @@ function hallSelectLabel(h) {
   return h.name;
 }
 
+function roomTypePhoto(t) {
+  const name = String(t?.name || "");
+  const id = String(t?.id || "");
+  if (id === "rt-suite" || /suite/i.test(name)) return `${IMG}/rooms/suite-ac.jpg`;
+  if (id === "rt-dlx" || /deluxe/i.test(name)) return `${IMG}/rooms/deluxe-ac.jpg`;
+  if (id === "rt-std" || /standard/i.test(name)) return `${IMG}/rooms/standard-ac.jpg`;
+  return `${IMG}/rooms/deluxe-ac.jpg`;
+}
+
+const BOOK_STAY_OPTIONS = [
+  { name: "Rooms", label: "Rooms" },
+  { name: "The Royal Family Retreat", label: "The Royal Family Retreat" },
+];
+
 function loadDraft() {
   const base = { ...emptyForm, eventDate: todayISO() };
   try {
@@ -251,7 +265,6 @@ export default function Home({ state, onEnquire, onStaff }) {
   const p = state.property;
   const deckRef = useRef(null);
   const pageRef = useRef(0);
-  const wheelLock = useRef(false);
   const [page, setPage] = useState(0);
   const [filmFrame, setFilmFrame] = useState(0);
   const [form, setForm] = useState(loadDraft);
@@ -306,11 +319,28 @@ export default function Home({ state, onEnquire, onStaff }) {
       copy: h.copy || h.tag,
       photo: h.webPhoto || h.photo,
     }));
+  const roomTypesPublic = useMemo(() => {
+    return (state.roomTypes || []).filter(
+      (t) => t && t.name && t.id !== "rt-retreat" && !/royal family retreat/i.test(t.name)
+    );
+  }, [state.roomTypes]);
   const occasions = p.eventTypes?.length ? p.eventTypes : [];
   const mapSrc = mapEmbedSrc(p);
   const mapLink = mapGoogleUrl(p);
   const termLoc = termLocaleOf(p, termLang);
   const termLangLabel = TERM_LANGS.find((l) => l.id === termLang)?.label || "English";
+  const bookPol = policiesOf(p);
+  const publicTermSections = useMemo(() => {
+    const cancel = TERM_SECTIONS.find((s) => s.id === "cancel");
+    const rest = TERM_SECTIONS.filter((s) => s.id !== "cancel");
+    return cancel ? [cancel, ...rest] : TERM_SECTIONS;
+  }, []);
+
+  function openCancellationPolicy(e) {
+    if (e) e.preventDefault();
+    goTo("terms");
+    window.setTimeout(() => scrollToTermSection("cancel"), 120);
+  }
 
   const dateAvail = useMemo(
     () => publicAvailability(state, form.venue, form.eventDate),
@@ -319,9 +349,12 @@ export default function Home({ state, onEnquire, onStaff }) {
 
   const bookHallOptions = useMemo(() => {
     const imperial = halls.find((h) => /imperial/i.test(h.name));
-    const heritage = halls.find((h) => /heritage/i.test(h.name));
-    const list = [imperial, heritage].filter(Boolean);
-    return (list.length ? list : halls).map((h) => ({ name: h.name, label: hallSelectLabel(h) }));
+    const garden = halls.find((h) => /garden|pavilion/i.test(h.name) && !/imperial/i.test(h.name));
+    const heritage = halls.find((h) => /heritage|courtyard/i.test(h.name));
+    const list = [imperial, garden, heritage].filter(Boolean);
+    const fallback = halls.filter((h) => !list.some((x) => x.id === h.id));
+    const hallOpts = [...list, ...fallback].map((h) => ({ name: h.name, label: hallSelectLabel(h) }));
+    return [...hallOpts, ...BOOK_STAY_OPTIONS];
   }, [halls]);
 
   const phoneOk = isTenDigitPhone(form.phone);
@@ -552,27 +585,16 @@ export default function Home({ state, onEnquire, onStaff }) {
   }, [currentId, reduceMotion, lightbox]);
 
   useEffect(() => {
+    // Trackpad / mouse wheel must NOT change site pages — only left/right arrows (and keys) do.
+    // Allow normal vertical scroll inside nested panels (terms, gallery, book form).
     const onWheel = (e) => {
       if (lightbox) return;
-      const sheet = e.target?.closest?.(".terms-scroll, #gallery");
-      if (sheet) {
-        const { scrollTop, scrollHeight, clientHeight } = sheet;
-        const dy = e.deltaY + e.deltaX;
-        if (scrollHeight > clientHeight + 4) {
-          if (dy > 0 && scrollTop + clientHeight < scrollHeight - 2) return;
-          if (dy < 0 && scrollTop > 2) return;
-        }
-      }
-      if (e.target?.closest?.("input, textarea, select, .booking-form")) return;
+      const sheet = e.target?.closest?.(
+        ".terms-scroll, #gallery, .booking-form, .organize, .book-shell, textarea, input, select"
+      );
+      if (sheet) return;
+      // Stop wheel from driving the horizontal page deck.
       e.preventDefault();
-      if (wheelLock.current) return;
-      const delta = e.deltaY + e.deltaX;
-      if (Math.abs(delta) < 24) return;
-      wheelLock.current = true;
-      goBy(delta > 0 ? 1 : -1);
-      window.setTimeout(() => {
-        wheelLock.current = false;
-      }, 650);
     };
     const onKey = (e) => {
       if (e.key === "Escape") {
@@ -582,22 +604,22 @@ export default function Home({ state, onEnquire, onStaff }) {
       }
       if (termFocus) return;
       if (lightbox) {
-        if (e.key === "ArrowRight" || e.key === "PageDown") {
+        if (e.key === "ArrowRight") {
           e.preventDefault();
           shiftLightbox(1);
         }
-        if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        if (e.key === "ArrowLeft") {
           e.preventDefault();
           shiftLightbox(-1);
         }
         return;
       }
       if (e.target?.closest?.("input, textarea, select")) return;
-      if (e.key === "ArrowRight" || e.key === "PageDown") {
+      if (e.key === "ArrowRight") {
         e.preventDefault();
         goBy(1);
       }
-      if (e.key === "ArrowLeft" || e.key === "PageUp") {
+      if (e.key === "ArrowLeft") {
         e.preventDefault();
         goBy(-1);
       }
@@ -683,13 +705,6 @@ export default function Home({ state, onEnquire, onStaff }) {
     setTermFocus(id);
   }
 
-  function openBookWhatsApp(e) {
-    if (e) e.preventDefault();
-    const text = "Hello Gayatri Convention, I would like to book a hall. Please share availability and packages.";
-    const wa = waMe(BOOK_WHATSAPP, text) || `https://wa.me/91${BOOK_WHATSAPP}`;
-    window.open(wa, "_blank", "noopener,noreferrer");
-  }
-
   return (
     <div className={`lux-root${lightPage ? " is-light" : ""}${currentId === "booking" ? " is-book" : ""}`}>
       <header className={`site-header${lightPage ? " scrolled" : ""}`} id="header">
@@ -697,7 +712,7 @@ export default function Home({ state, onEnquire, onStaff }) {
           <img className="logo-mark" src={`${IMG}/logo-mark.png`} alt="" />
           <span>
             <strong>{p.brandName || "Gayatri"}</strong>
-            <em>{currentId.startsWith("stay") ? "The Royal Family Retreat" : (p.place || "")}</em>
+            <em>{p.place || ""}</em>
           </span>
         </div>
         <nav className="site-nav" aria-label="Site">
@@ -718,10 +733,11 @@ export default function Home({ state, onEnquire, onStaff }) {
         <div className="header-actions">
           <a
             className="btn btn-gold"
-            href={`https://wa.me/91${BOOK_WHATSAPP}?text=${encodeURIComponent("Hello Gayatri Convention, I would like to book a hall. Please share availability and packages.")}`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={openBookWhatsApp}
+            href="#booking"
+            onClick={(e) => {
+              e.preventDefault();
+              goBooking();
+            }}
           >
             Book Now <span>↗</span>
           </a>
@@ -832,13 +848,6 @@ export default function Home({ state, onEnquire, onStaff }) {
                 const cur = p.currency || "INR";
                 const loc = p.locale || "en-IN";
                 const title = h.name.replace(/\s*\(MINI\)\s*$/i, "");
-                const tag = /imperial/i.test(h.name)
-                  ? "Banquet Hall"
-                  : /garden/i.test(h.name)
-                    ? "Outdoor Conference"
-                    : h.jp || "Board meetings";
-                const todayHold = publicAvailability(state, h.name, todayISO());
-                const w = todayHold.rows[0]?.windows[0];
                 const half = Number(h.rates?.halfDay) || 0;
                 const full = Number(h.rates?.fullDay) || 0;
                 return (
@@ -849,7 +858,6 @@ export default function Home({ state, onEnquire, onStaff }) {
                       <div className="venue-photo-slot" aria-hidden="true" />
                     )}
                     <div className="venue-card-body">
-                      <span className="venues-tag">{tag}</span>
                       <h3 title={h.name}>{title}</h3>
                       <p className="venue-copy">{h.copy}</p>
                       <p className="capacity" title="Seating capacity">
@@ -877,25 +885,6 @@ export default function Home({ state, onEnquire, onStaff }) {
                           </li>
                         ) : null}
                       </ul>
-                      {todayHold.blocked ? (
-                        <p className="venue-hold">
-                          Booked today
-                          {w ? ` · ${w.windowLabel || `${w.startLabel} – ${w.endLabel}`}` : ""}
-                        </p>
-                      ) : (
-                        <button
-                          type="button"
-                          className="venues-avail"
-                          title="This hall is available today"
-                          onClick={() => goBooking({ venue: h.name })}
-                        >
-                          <span className="venues-ico venues-ico-cal" aria-hidden="true" />
-                          Free today <em>|</em> Available now
-                          <span className="venues-avail-arrow" aria-hidden="true">
-                            →
-                          </span>
-                        </button>
-                      )}
                     </div>
                   </article>
                 );
@@ -925,6 +914,7 @@ export default function Home({ state, onEnquire, onStaff }) {
             loadMedia={loadStayMedia}
             onBook={() =>
               goBooking({
+                venue: "The Royal Family Retreat",
                 eventType: "Family retreat",
                 notes: "Royal Family Retreat — ₹30,000 · 4 rooms, kitchen, dining hall, lobby",
                 guests: "8",
@@ -935,6 +925,65 @@ export default function Home({ state, onEnquire, onStaff }) {
 
         <section className="stay-page stay-story-page reveal" id="stay-space">
           <RetreatOffer part="space" loadMedia={loadStayMedia} />
+        </section>
+
+        <section className="rooms-page reveal" id="rooms">
+          <div className="rooms-page-inner">
+            <p className="rooms-kicker">Guest rooms</p>
+            <h2 className="rooms-title">Room types &amp; rates</h2>
+            <p className="rooms-lead">
+              Same rates as at the desk. Extra bed charged when needed.
+            </p>
+            {roomTypesPublic.length ? (
+              <div className="rooms-rate-grid">
+                {roomTypesPublic.map((t) => {
+                  const cur = p.currency || "INR";
+                  const loc = p.locale || "en-IN";
+                  const base = Number(t.baseRate) || 0;
+                  const extra = Number(t.extraBed) || 0;
+                  return (
+                    <article key={t.id} className="rooms-rate-card">
+                      <div className="rooms-rate-photo">
+                        <img src={roomTypePhoto(t)} alt={t.name} loading="lazy" decoding="async" />
+                      </div>
+                      <div className="rooms-rate-body">
+                        <h3>{t.name}</h3>
+                        <p className="rooms-rate-price">
+                          {money(base, cur, loc)} <span>/ night</span>
+                        </p>
+                        <p className="rooms-rate-guests">
+                          Max guests <strong>{Number(t.extraBeds) > 0 ? `2+${Number(t.extraBeds)}` : String(t.maxGuests || 2)}</strong>
+                        </p>
+                        {extra > 0 ? (
+                          <p className="rooms-rate-extra">Extra bed {money(extra, cur, loc)}</p>
+                        ) : (
+                          <p className="rooms-rate-extra is-blank" aria-hidden="true">
+                            &nbsp;
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          className="btn rooms-rate-book"
+                          onClick={() =>
+                            goBooking({
+                              venue: "Rooms",
+                              eventType: "Rooms",
+                              notes: `${t.name} — ${money(base, cur, loc)} / night`,
+                              guests: String(t.maxGuests || 2),
+                            })
+                          }
+                        >
+                          Enquire
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="rooms-empty muted">Room rates will appear here once added in Master data.</p>
+            )}
+          </div>
         </section>
 
         <section className="gallery reveal" id="gallery">
@@ -1134,10 +1183,23 @@ export default function Home({ state, onEnquire, onStaff }) {
                   type="number"
                   min="30"
                   max="1500"
+                  step="1"
                   placeholder="e.g. 400"
                   required
                   value={form.guests}
-                  onChange={(e) => setForm({ ...form, guests: e.target.value })}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setForm({ ...form, guests: "" });
+                      return;
+                    }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n) || n < 0) {
+                      setForm({ ...form, guests: "30" });
+                      return;
+                    }
+                    setForm({ ...form, guests: String(Math.min(1500, Math.floor(n))) });
+                  }}
                 />
               </div>
               <div className="field">
@@ -1168,7 +1230,7 @@ export default function Home({ state, onEnquire, onStaff }) {
               </div>
 
               <div className="field">
-                <label htmlFor="venue">Hall *</label>
+                <label htmlFor="venue">Hall / stay *</label>
                 <select
                   id="venue"
                   name="venue"
@@ -1176,10 +1238,31 @@ export default function Home({ state, onEnquire, onStaff }) {
                   value={form.venue}
                   onChange={(e) => {
                     setError("");
-                    setForm({ ...form, venue: e.target.value });
+                    const venue = e.target.value;
+                    if (venue === "The Royal Family Retreat") {
+                      setForm((f) => ({
+                        ...f,
+                        venue,
+                        eventType: f.eventType || "Family retreat",
+                        guests: f.guests || "8",
+                        notes:
+                          f.notes?.trim() ||
+                          "Royal Family Retreat — ₹30,000 · 4 rooms, kitchen, dining hall, lobby",
+                      }));
+                      return;
+                    }
+                    if (venue === "Rooms") {
+                      setForm((f) => ({
+                        ...f,
+                        venue,
+                        notes: f.notes?.trim() || "Room stay enquiry",
+                      }));
+                      return;
+                    }
+                    setForm({ ...form, venue });
                   }}
                 >
-                  <option value="">Choose hall</option>
+                  <option value="">Choose hall or stay</option>
                   {bookHallOptions.map((h) => (
                     <option key={h.name} value={h.name}>
                       {h.label}
@@ -1251,6 +1334,17 @@ export default function Home({ state, onEnquire, onStaff }) {
                 </div>
               </div>
               {error ? <p className="form-error">{error}</p> : null}
+              <div className="book-cancel-policy">
+                <p>
+                  <strong>Cancellation:</strong>{" "}
+                  Advance {Number(bookPol.advancePercent) || 0}% · Charge {Number(bookPol.cancellationPercent) || 0}% · Refund{" "}
+                  {bookPol.refundAdvance ? "Yes" : "No"}
+                  {" · "}
+                  <button type="button" className="book-cancel-link" onClick={openCancellationPolicy}>
+                    Full policy
+                  </button>
+                </p>
+              </div>
               <label className="book-agree">
                 <input
                   type="checkbox"
@@ -1262,7 +1356,15 @@ export default function Home({ state, onEnquire, onStaff }) {
                 />
                 <span>
                   I have read and agree to the{" "}
-                  <a href="#terms" onClick={(e) => onPageNav(e, "terms")}>Terms & Conditions</a>.
+                  <a
+                    href="#terms-cancel"
+                    onClick={(e) => {
+                      openCancellationPolicy(e);
+                    }}
+                  >
+                    Terms &amp; Cancellation Policy
+                  </a>
+                  .
                 </span>
               </label>
               <button className="btn btn-gold full" type="submit" disabled={!bookReady}>
@@ -1408,8 +1510,11 @@ export default function Home({ state, onEnquire, onStaff }) {
                 </div>
                 <nav className={`terms-toc lang-${termLang}`} aria-label={termLoc.ui.tocLabel}>
                   <p className="terms-toc-kicker">{termLoc.ui.tocLabel}</p>
-                  {TERM_SECTIONS.map((sec, i) => {
-                    const lines = sectionLines(termLoc.sections[sec.id], p);
+                  {publicTermSections.map((sec, i) => {
+                    const lines =
+                      sec.id === "cancel"
+                        ? cancelSectionLines(p, termLang)
+                        : sectionLines(termLoc.sections[sec.id], p);
                     if (!lines.length) return null;
                     return (
                       <button
@@ -1427,14 +1532,24 @@ export default function Home({ state, onEnquire, onStaff }) {
               </aside>
               <div className="terms-scroll">
                 <div className={`terms-articles lang-${termLang}`}>
-                  {TERM_SECTIONS.map((sec, i) => {
-                    const lines = sectionLines(termLoc.sections[sec.id], p);
+                  {publicTermSections.map((sec, i) => {
+                    const lines =
+                      sec.id === "cancel"
+                        ? cancelSectionLines(p, termLang)
+                        : sectionLines(termLoc.sections[sec.id], p);
                     if (!lines.length) return null;
                     return (
-                      <article key={sec.id} id={`terms-${sec.id}`} className="terms-article">
+                      <article key={sec.id} id={`terms-${sec.id}`} className={`terms-article${sec.id === "cancel" ? " is-cancel" : ""}`}>
                         <div className="terms-article-num">{String(i + 1).padStart(2, "0")}</div>
                         <div className="terms-article-body">
                           <h3>{termLoc.labels[sec.id] || sec.label}</h3>
+                          {sec.id === "cancel" ? (
+                            <p className="terms-cancel-figures">
+                              Advance {Number(bookPol.advancePercent) || 0}% · Cancellation{" "}
+                              {Number(bookPol.cancellationPercent) || 0}% · Refund on cancel{" "}
+                              {bookPol.refundAdvance ? "Yes" : "No"}
+                            </p>
+                          ) : null}
                           <ul className="terms-list">
                             {lines.map((line) => (
                               <li key={line}>{line}</li>
@@ -1467,7 +1582,11 @@ export default function Home({ state, onEnquire, onStaff }) {
 
       {termFocus ? (() => {
         const sec = TERM_SECTIONS.find((s) => s.id === termFocus);
-        const lines = sec ? sectionLines(termLoc.sections[sec.id], p) : [];
+        const lines = sec
+          ? sec.id === "cancel"
+            ? cancelSectionLines(p, termLang)
+            : sectionLines(termLoc.sections[sec.id], p)
+          : [];
         if (!sec || !lines.length) return null;
         const idx = TERM_SECTIONS.findIndex((s) => s.id === sec.id);
         return (

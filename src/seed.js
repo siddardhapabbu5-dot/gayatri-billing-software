@@ -41,7 +41,7 @@ export const ROLES = {
 };
 
 export const DEFAULT_EVENT_TYPES = [
-  "Marriages",
+  "Marriage",
   "Reception",
   "Conference",
   "Seminar",
@@ -51,6 +51,8 @@ export const DEFAULT_EVENT_TYPES = [
   "Product launch",
   "Annual day / AGM",
   "Family retreat",
+  "Rooms",
+  "The Royal Family Retreat",
   "Other",
 ];
 
@@ -237,6 +239,15 @@ export function createSeed() {
       price: 250000,
       minGuests: 200,
       hallId: "hall-2",
+    },
+    {
+      id: "pkg-retreat",
+      name: "The Royal Family Retreat",
+      includes: ["4 Rooms", "Kitchen", "Dining Hall", "Lobby"],
+      price: 30000,
+      minGuests: 8,
+      hallId: "",
+      kind: "stay",
     },
   ];
 

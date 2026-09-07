@@ -144,6 +144,7 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
           <p className="muted">Do not hard-code these on the reservation screen. The desk can change them here.</p>
           <div className="fields two">
             <label>Advance %<input type="number" value={pol.advancePercent} onChange={(e) => setPol({ ...pol, advancePercent: Number(e.target.value) || 0 })} /></label>
+            <label>Cancellation charge %<input type="number" value={pol.cancellationPercent} onChange={(e) => setPol({ ...pol, cancellationPercent: Number(e.target.value) || 0 })} /></label>
             <label className="check">
               Refund advance on cancel
               <input type="checkbox" checked={!!pol.refundAdvance} onChange={(e) => setPol({ ...pol, refundAdvance: e.target.checked })} />

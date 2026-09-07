@@ -1,8 +1,67 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["pwa/icon-180.png", "site/images/logo-gold.png"],
+      manifest: {
+        name: "Gayatri Convention",
+        short_name: "Gayatri",
+        description: "Gayatri Convention — public website and staff desk",
+        theme_color: "#102027",
+        background_color: "#102027",
+        display: "standalone",
+        orientation: "portrait-primary",
+        start_url: "/",
+        scope: "/",
+        categories: ["business", "productivity"],
+        icons: [
+          {
+            src: "/pwa/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "/pwa/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
+            src: "/pwa/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      },
+      workbox: {
+        navigateFallback: "/index.html",
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp,woff2}"],
+        // Keep large gallery videos out of the precache; load on demand.
+        navigateFallbackDenylist: [/^\/api/],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith("/site/images/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "gayatri-images",
+              expiration: {
+                maxEntries: 80,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: false,
+      },
+    }),
+  ],
   server: {
     port: 5177,
     strictPort: true,

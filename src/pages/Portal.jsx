@@ -61,7 +61,27 @@ export default function Portal({ state, onEnquire, onBack }) {
                   {state.halls.map((h) => <option key={h.id}>{h.name}</option>)}
                 </select>
               </label>
-              <label>Guests<input type="number" value={form.guests} onChange={(e) => setForm({ ...form, guests: e.target.value })} /></label>
+              <label>Guests
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={form.guests}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setForm({ ...form, guests: "" });
+                      return;
+                    }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n) || n < 1) {
+                      setForm({ ...form, guests: 1 });
+                      return;
+                    }
+                    setForm({ ...form, guests: Math.floor(n) });
+                  }}
+                />
+              </label>
             </div>
             <label style={{ marginTop: 10 }}>Message
               <textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />

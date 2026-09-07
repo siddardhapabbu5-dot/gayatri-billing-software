@@ -659,6 +659,17 @@ function requireMoney(state) {
 
 export function buildFolioLinesFromDraft(state, draft) {
   const lines = [];
+  const pkg = (state.packages || []).find((p) => p.id && p.id === draft.packageId);
+  if (pkg) {
+    lines.push({
+      id: uid("ln"),
+      category: pkg.kind === "stay" || pkg.id === "pkg-retreat" ? "room" : "hall",
+      description: `Package · ${pkg.name}`,
+      qty: 1,
+      unitPrice: Number(pkg.price) || 0,
+      amount: Number(pkg.price) || 0,
+    });
+  }
   for (const h of draft.halls || []) {
     const hall = state.halls.find((x) => x.id === h.hallId);
     if (!hall) continue;

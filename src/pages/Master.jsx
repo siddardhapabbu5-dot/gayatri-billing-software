@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { flushSync } from "react-dom";
 import { capacityText, formatDateDMY, gstinText, money, todayISO, totalPhysicalRooms, typeListedRoomsCell, typeRoomMix } from "../lib";
-import { TERM_LANGS, TERM_SECTIONS, policiesOf, roomCheckInOutText, sectionLines, termSetsOf } from "../policies";
+import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, roomCheckInOutText, sectionLines, termSetsOf } from "../policies";
 import { getState } from "../store";
 import { PageHead } from "../ui";
 
@@ -613,7 +613,16 @@ export default function Master({ state, onProperty, onHall, onRoomType, onRoom, 
         <table>
           <tbody>
             <tr><td>Advance</td><td>{sheetPol.advancePercent}%</td></tr>
+            <tr><td>Cancellation charge</td><td>{sheetPol.cancellationPercent}%</td></tr>
             <tr><td>Refund advance on cancel</td><td>{sheetPol.refundAdvance ? "Yes" : "No"}</td></tr>
+            <tr>
+              <td>Cancellation summary</td>
+              <td>
+                {sheetPol.refundAdvance
+                  ? `Refund may be allowed; charge ${sheetPol.cancellationPercent}% of booking total (or advance as written by desk).`
+                  : "Advance is not refundable on guest cancel. No-show is treated as cancellation."}
+              </td>
+            </tr>
             <tr><td>Room check-in / check-out</td><td>{roomCheckInOutText(sheetPol)}</td></tr>
             <tr><td>Security deposit</td><td>{sheetM(sheetPol.securityDeposit)}</td></tr>
             <tr><td>Minimum hall amount</td><td>{sheetM(sheetPol.minHallAmount)}</td></tr>
@@ -622,12 +631,25 @@ export default function Master({ state, onProperty, onHall, onRoomType, onRoom, 
           </tbody>
         </table>
 
+        <h3>Cancellation Policy (T&amp;C)</h3>
+        <p className="muted" style={{ marginBottom: 8 }}>
+          Figures from booking policies: advance {sheetPol.advancePercent}% · cancellation {sheetPol.cancellationPercent}% · refund on cancel {sheetPol.refundAdvance ? "Yes" : "No"}
+        </p>
+        <ol>
+          {cancelSectionLines(sheetP, "en").map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ol>
+
         <h3>Terms &amp; Conditions v{sheetTerms.version}</h3>
         {TERM_LANGS.map((lang) => (
           <div key={lang.id} style={{ marginBottom: 18 }}>
             <strong>{lang.label}</strong>
             {TERM_SECTIONS.map((sec) => {
-              const lines = sectionLines(sheetTerms.locales?.[lang.id]?.[sec.id] || sheetTerms.sections[sec.id], sheetP);
+              const lines =
+                sec.id === "cancel"
+                  ? cancelSectionLines(sheetP, lang.id)
+                  : sectionLines(sheetTerms.locales?.[lang.id]?.[sec.id] || sheetTerms.sections[sec.id], sheetP);
               if (!lines.length) return null;
               return (
                 <div key={`${lang.id}-${sec.id}`} style={{ marginBottom: 12 }}>

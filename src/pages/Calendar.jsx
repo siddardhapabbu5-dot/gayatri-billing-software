@@ -31,8 +31,8 @@ function hoverLines(m) {
       h.slots.forEach((s) => {
         lines.push({
           kind: "hall",
-          title: h.hall.name,
-          body: [s.guestName || "Guest", slotWords(s.slotType), s.windowLabel].filter(Boolean).join(" · "),
+          title: s.guestName || "Guest",
+          body: [h.hall.name, slotWords(s.slotType), s.windowLabel, s.number].filter(Boolean).join(" · "),
         });
       });
     });
@@ -41,8 +41,8 @@ function hoverLines(m) {
     .forEach((r) => {
       lines.push({
         kind: "room",
-        title: `Room ${r.room.number}`,
-        body: `${r.guest?.name || "Guest"} · ${formatDate(r.res.checkIn)} → ${formatDate(r.res.checkOut)}`,
+        title: r.guest?.name || "Guest",
+        body: `Room ${r.room.number} · ${formatDate(r.res.checkIn)} → ${formatDate(r.res.checkOut)}`,
       });
     });
   return lines;

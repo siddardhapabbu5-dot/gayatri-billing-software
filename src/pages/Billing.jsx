@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { bookingFolio, collectionsReport, lineKind } from "../engine";
+import { bookingFolio, collectionsReport } from "../engine";
 import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
-import { TERM_SECTIONS, sectionLines, termSetsOf } from "../policies";
+import { TERM_SECTIONS, cancelSectionLines, sectionLines, termSetsOf } from "../policies";
 import { PageHead, Pill } from "../ui";
 
 const DOCS = ["Quotation", "Proforma invoice", "Tax invoice", "Advance receipt", "Payment receipt", "Credit note", "Debit note", "Refund receipt", "Final invoice"];
@@ -194,30 +194,61 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
           <table style={{ marginTop: 16 }}>
             <thead><tr><th>Charge</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
             <tbody>
-              {lines.some((l) => lineKind(l) === "function") && (
-                <tr><td colSpan={4}><strong>Hall</strong></td></tr>
-              )}
-              {lines.filter((l) => lineKind(l) === "function").map((l) => (
-                <tr key={l.id}>
-                  <td>{l.description}<div className="muted">{l.category}</div></td>
-                  <td>{l.qty}</td>
-                  <td>{m(l.unitPrice)}</td>
-                  <td>{m(l.amount)}</td>
-                </tr>
-              ))}
-              {lines.some((l) => lineKind(l) === "room") && (
-                <tr><td colSpan={4}><strong>Room stay</strong></td></tr>
-              )}
-              {lines.filter((l) => lineKind(l) === "room").map((l) => (
-                <tr key={l.id}>
-                  <td>{l.description}<div className="muted">{l.category}</div></td>
-                  <td>{l.qty}</td>
-                  <td>{m(l.unitPrice)}</td>
-                  <td>{m(l.amount)}</td>
-                </tr>
-              ))}
-              <tr><td colSpan={3}>Hall subtotal</td><td>{m(lines.filter((l) => lineKind(l) === "function").reduce((s, l) => s + Number(l.amount || 0), 0))}</td></tr>
-              <tr><td colSpan={3}>Room stay subtotal</td><td>{m(lines.filter((l) => lineKind(l) === "room").reduce((s, l) => s + Number(l.amount || 0), 0))}</td></tr>
+              {(() => {
+                const hallLines = lines.filter((l) => String(l.category || "") === "hall");
+                const roomLines = lines.filter((l) => String(l.category || "") === "room");
+                const extraLines = lines.filter((l) => {
+                  const c = String(l.category || "");
+                  return c !== "hall" && c !== "room";
+                });
+                const sum = (arr) => arr.reduce((s, l) => s + Number(l.amount || 0), 0);
+                return (
+                  <>
+                    {hallLines.length > 0 && (
+                      <tr><td colSpan={4}><strong>Hall</strong></td></tr>
+                    )}
+                    {hallLines.map((l) => (
+                      <tr key={l.id}>
+                        <td>{l.description}<div className="muted">{chargeLabel(l.category)}</div></td>
+                        <td>{l.qty}</td>
+                        <td>{m(l.unitPrice)}</td>
+                        <td>{m(l.amount)}</td>
+                      </tr>
+                    ))}
+                    {roomLines.length > 0 && (
+                      <tr><td colSpan={4}><strong>Room stay</strong></td></tr>
+                    )}
+                    {roomLines.map((l) => (
+                      <tr key={l.id}>
+                        <td>{l.description}<div className="muted">{chargeLabel(l.category)}</div></td>
+                        <td>{l.qty}</td>
+                        <td>{m(l.unitPrice)}</td>
+                        <td>{m(l.amount)}</td>
+                      </tr>
+                    ))}
+                    {extraLines.length > 0 && (
+                      <tr><td colSpan={4}><strong>Extra charges</strong></td></tr>
+                    )}
+                    {extraLines.map((l) => (
+                      <tr key={l.id}>
+                        <td>{l.description}<div className="muted">{chargeLabel(l.category)}</div></td>
+                        <td>{l.qty}</td>
+                        <td>{m(l.unitPrice)}</td>
+                        <td>{m(l.amount)}</td>
+                      </tr>
+                    ))}
+                    {hallLines.length > 0 && (
+                      <tr><td colSpan={3}>Hall subtotal</td><td>{m(sum(hallLines))}</td></tr>
+                    )}
+                    {roomLines.length > 0 && (
+                      <tr><td colSpan={3}>Room stay subtotal</td><td>{m(sum(roomLines))}</td></tr>
+                    )}
+                    {extraLines.length > 0 && (
+                      <tr><td colSpan={3}>Extra charges subtotal</td><td>{m(sum(extraLines))}</td></tr>
+                    )}
+                  </>
+                );
+              })()}
               <tr><td colSpan={3}>Subtotal</td><td>{m(totals.subtotal)}</td></tr>
               <tr><td colSpan={3}>Discount</td><td>{m(totals.discount)}</td></tr>
               {totals.gstMode === "without" ? (
@@ -274,7 +305,10 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
               Version v{booking.termsVersion || termSetsOf(state.property).version}. By paying this bill the guest agrees to the terms below.
             </p>
             {TERM_SECTIONS.map((sec) => {
-              const lines = sectionLines(termSetsOf(state.property).sections[sec.id], state.property);
+              const lines =
+                sec.id === "cancel"
+                  ? cancelSectionLines(state.property, "en")
+                  : sectionLines(termSetsOf(state.property).sections[sec.id], state.property);
               if (!lines.length) return null;
               return (
                 <div key={sec.id}>
@@ -309,7 +343,9 @@ export default function Billing({ state, focusId, onPay, onDiscount, onCharge, o
         <div className="panel no-print" style={{ marginTop: 12 }}>
           <h3>Add extra charges</h3>
           <p className="muted" style={{ margin: "0 0 8px" }}>
-            Food, tea/coffee, laundry, extra bed, decoration and other services.
+            Use this for food, tea, laundry, decoration, etc. after the booking is made.
+            Click <strong>Add to bill</strong> — it adds a breakup line on the bill above (qty × rate), increases Total / Remaining.
+            It does <strong>not</strong> record money received. To collect payment, use <strong>Payments → Save settlement</strong> below.
           </p>
           <form
             className="fields two"

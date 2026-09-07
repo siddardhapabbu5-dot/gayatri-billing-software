@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import Home from "./pages/Home.jsx";
 import StaffLogin from "./pages/StaffLogin.jsx";
+import InstallPrompt from "./components/InstallPrompt.jsx";
 import { ROLES } from "./seed";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
@@ -23,7 +24,6 @@ import {
   createReservation,
   getState,
   issueDocument,
-  loadSampleManagementDay,
   removeDocument,
   removeGuest,
   resetDemo,
@@ -133,16 +133,52 @@ function can(role, perm) {
   return list.includes("*") || list.includes(perm);
 }
 
+const STAFF_PAGES = new Set(
+  GROUPS.flatMap((g) => g.items.map((i) => i.id)).filter((id) => id !== "home" && id !== "portal")
+);
+
+function staffHref(id) {
+  if (id === "home" || id === "portal") return `${window.location.pathname}${window.location.search}#home`;
+  return `${window.location.pathname}${window.location.search}#staff/${id}`;
+}
+
+function pageFromHash() {
+  const raw = String(window.location.hash || "").replace(/^#/, "");
+  if (!raw || raw === "home") return "home";
+  if (raw === "portal") return "portal";
+  if (raw.startsWith("staff/")) {
+    const id = raw.slice(6).split(/[/?#]/)[0];
+    if (STAFF_PAGES.has(id)) return id;
+    return "desk";
+  }
+  if (STAFF_PAGES.has(raw)) return raw;
+  return null;
+}
+
 export default function App() {
   const [state, setState] = useState(getState);
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(() => {
+    const fromHash = pageFromHash();
+    if (fromHash && fromHash !== "home" && fromHash !== "portal" && getToken() && getAuthUser()) {
+      return fromHash;
+    }
+    if (fromHash === "home" || fromHash === "portal") return fromHash;
+    return "home";
+  });
   const [presetDate, setPresetDate] = useState("");
   const [presetGuestId, setPresetGuestId] = useState("");
   const [focusGuestId, setFocusGuestId] = useState("");
   const [bookingId, setBookingId] = useState(null);
   const [navStack, setNavStack] = useState([]);
   const [authUser, setAuthUser] = useState(() => (getToken() ? getAuthUser() : null));
-  const [staffGate, setStaffGate] = useState(false);
+  const [staffGate, setStaffGate] = useState(() => {
+    const fromHash = pageFromHash();
+    return Boolean(fromHash && fromHash !== "home" && fromHash !== "portal" && !(getToken() && getAuthUser()));
+  });
+  const [pendingStaffPage, setPendingStaffPage] = useState(() => {
+    const fromHash = pageFromHash();
+    return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
+  });
 
   useEffect(() => {
     // Always reload desk data from localStorage when opening staff pages
@@ -156,6 +192,32 @@ export default function App() {
     if (authUser) setState(applyAuthUser(authUser));
   }, [authUser]);
 
+  useEffect(() => {
+    function applyHash() {
+      const next = pageFromHash();
+      if (!next) return;
+      if (next === "home" || next === "portal") {
+        setStaffGate(false);
+        setPage(next);
+        return;
+      }
+      if (!getToken() || !getAuthUser()) {
+        setPendingStaffPage(next);
+        setStaffGate(true);
+        return;
+      }
+      setAuthUser(getAuthUser());
+      setStaffGate(false);
+      setPage(next);
+    }
+    window.addEventListener("hashchange", applyHash);
+    window.addEventListener("popstate", applyHash);
+    return () => {
+      window.removeEventListener("hashchange", applyHash);
+      window.removeEventListener("popstate", applyHash);
+    };
+  }, []);
+
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
   const role = authUser?.role || user.role;
 
@@ -163,9 +225,10 @@ export default function App() {
     if (getToken() && getAuthUser()) {
       setAuthUser(getAuthUser());
       setStaffGate(false);
-      setPage("desk");
+      go("desk");
       return;
     }
+    setPendingStaffPage("desk");
     setStaffGate(true);
   }
 
@@ -173,7 +236,7 @@ export default function App() {
     clearAuth();
     setAuthUser(null);
     setStaffGate(false);
-    setPage("home");
+    go("home");
   }
 
   function go(id, extra = {}) {
@@ -199,10 +262,18 @@ export default function App() {
     else if (!drilling) setFocusGuestId("");
     if (extra.bookingId) setBookingId(extra.bookingId);
     else setBookingId(null);
-    if (id === "home" || id === "portal") {
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#home`);
+    const href = staffHref(id);
+    const nextHash = href.includes("#") ? `#${href.split("#")[1]}` : "";
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(null, "", href);
     }
     setPage(id);
+  }
+
+  function openNav(e, id) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
+    e.preventDefault();
+    go(id);
   }
 
   async function handleClearAllBookings() {
@@ -223,7 +294,7 @@ export default function App() {
     window.alert(
       "Clean start complete.\n\nAll bookings, guests, payments, bills, document vault files and calendar entries are cleared."
     );
-    setPage("desk");
+    go("desk");
     window.location.reload();
   }
 
@@ -262,50 +333,61 @@ export default function App() {
 
   if (staffGate && !authUser) {
     return (
-      <StaffLogin
-        onBack={() => {
-          setStaffGate(false);
-          setPage("home");
-        }}
-        onSuccess={(u) => {
-          setAuthUser(u);
-          setStaffGate(false);
-          setState(applyAuthUser(u));
-          setPage("desk");
-        }}
-      />
+      <>
+        <InstallPrompt />
+        <StaffLogin
+          onBack={() => {
+            setStaffGate(false);
+            go("home");
+          }}
+          onSuccess={(u) => {
+            setAuthUser(u);
+            setStaffGate(false);
+            setState(applyAuthUser(u));
+            go(pendingStaffPage || "desk");
+          }}
+        />
+      </>
     );
   }
 
   if (page === "home" || page === "portal") {
     return (
-      <Home
-        key="public-home"
-        state={state}
-        onStaff={enterStaff}
-        onEnquire={(form) => {
-          const out = addEnquiry(form);
-          if (out.state) setState(out.state);
-          return out;
-        }}
-      />
+      <>
+        <InstallPrompt />
+        <Home
+          key="public-home"
+          state={state}
+          onStaff={enterStaff}
+          onEnquire={(form) => {
+            const out = addEnquiry(form);
+            if (out.state) setState(out.state);
+            return out;
+          }}
+        />
+      </>
     );
   }
 
   if (!authUser) {
     return (
-      <StaffLogin
-        onBack={() => setPage("home")}
-        onSuccess={(u) => {
-          setAuthUser(u);
-          setState(applyAuthUser(u));
-          setPage("desk");
-        }}
-      />
+      <>
+        <InstallPrompt />
+        <StaffLogin
+          onBack={() => go("home")}
+          onSuccess={(u) => {
+            setAuthUser(u);
+            setState(applyAuthUser(u));
+            go(pendingStaffPage || "desk");
+          }}
+        />
+      </>
     );
   }
 
   return (
+    <>
+    <InstallPrompt />
     <div className="shell">
       <aside className="nav no-print">
         <div className="brand">
@@ -319,9 +401,14 @@ export default function App() {
               {g.items
                 .filter((i) => can(role, i.perm))
                 .map((i) => (
-                  <button key={i.id} className={page === i.id ? "on" : ""} onClick={() => go(i.id)}>
+                  <a
+                    key={i.id}
+                    href={staffHref(i.id)}
+                    className={page === i.id ? "on" : ""}
+                    onClick={(e) => openNav(e, i.id)}
+                  >
                     {i.label}
-                  </button>
+                  </a>
                 ))}
             </div>
           ))}
@@ -346,9 +433,9 @@ export default function App() {
           </div>
           <div className="row">
             <span className="muted">{state.notifications[0]?.title}</span>
-            <button className="btn ghost small" type="button" onClick={() => go("home")}>
+            <a className="btn ghost small" href={staffHref("home")} onClick={(e) => openNav(e, "home")}>
               Public site
-            </button>
+            </a>
             <button className="btn ghost small" type="button" onClick={logoutStaff}>
               Logout
             </button>
@@ -361,25 +448,6 @@ export default function App() {
                 key={`desk-${(state.payments || []).length}-${(state.expenses || []).length}-${(state.bookings || []).length}`}
                 state={state}
                 go={go}
-                onClearBookings={handleClearAllBookings}
-                onLoadSample={() => {
-                  if (
-                    !window.confirm(
-                      "Load sample management day?\n\nAdds sample hall/room bookings (different dates), Cash/UPI/Card/Bank payments, room cancel without refund, expenses, and credit balances."
-                    )
-                  ) {
-                    return;
-                  }
-                  const out = loadSampleManagementDay();
-                  if (out?.error) {
-                    window.alert(out.error);
-                    return;
-                  }
-                  setState(getState());
-                  window.alert(
-                    "Sample day loaded.\n\nDashboard Today KPIs, expenses and collections are updated.\nOpen Reports → Income & expense (Today) for the full day report + credit."
-                  );
-                }}
               />
             )}
             {page === "calendar" && (
@@ -601,5 +669,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </>
   );
 }

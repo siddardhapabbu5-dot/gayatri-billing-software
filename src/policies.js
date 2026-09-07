@@ -102,8 +102,11 @@ export const DEFAULT_TERM_SECTIONS = {
     "Room assignment may change to an equal or higher type if the original room cannot be used.",
   ].join("\n"),
   cancel: [
-    "Advance is not refundable if the guest cancels, unless property policy is set to allow a refund.",
-    "If a refund is allowed, the cancellation charge is the cancellation percent of the booking total (or of the advance, as written by the desk).",
+    "To confirm a booking, Gayatri Convention collects an advance of {advancePercent}% of the bill.",
+    "Cancellation charge under current property policy: {cancellationPercent}% of the booking total.",
+    "Refund of advance on guest cancel: {refundAdvanceLabel}.",
+    "If refund is No, the advance is forfeited on cancel or no-show.",
+    "If refund is Yes, any refund is paid only after deducting the {cancellationPercent}% cancellation charge.",
     "A date change is possible only if the new date is free, at the desk's discretion.",
     "A no-show is treated as a cancellation on the check-in / event date.",
   ].join("\n"),
@@ -146,8 +149,11 @@ export const DEFAULT_TERM_SECTIONS_TE = {
     "అసలు గది ఉపయోగించలేకపోతే, సమాన లేదా ఉన్నత రకం గదికి మార్చవచ్చు.",
   ].join("\n"),
   cancel: [
-    "అతిథి రద్దు చేస్తే అడ్వాన్స్ తిరిగి ఇవ్వరు, ఆస్తి విధానంలో రీఫండ్ అనుమతించినప్పుడు మినహా.",
-    "రీఫండ్ అనుమతించినప్పుడు, రద్దు ఛార్జీ బుకింగ్ మొత్తంపై (లేదా డెస్క్ రాసినట్లు అడ్వాన్స్‌పై) రద్దు శాతం.",
+    "బుకింగ్ ధృవీకరణకు గాయత్రి కన్వెన్షన్ బిల్లులో {advancePercent}% అడ్వాన్స్ తీసుకుంటుంది.",
+    "ప్రస్తుత ఆస్తి విధానం ప్రకారం రద్దు ఛార్జీ: బుకింగ్ మొత్తంపై {cancellationPercent}%.",
+    "అతిథి రద్దుపై అడ్వాన్స్ రీఫండ్: {refundAdvanceLabel}.",
+    "రీఫండ్ లేదు అయితే, రద్దు లేదా నో-షోలో అడ్వాన్స్ ఉంచుకుంటారు.",
+    "రీఫండ్ అవును అయితే, {cancellationPercent}% రద్దు ఛార్జీ తగ్గించి మిగిలినది చెల్లిస్తారు.",
     "కొత్త తేదీ ఖాళీగా ఉంటేనే, డెస్క్ అభీష్టం మేరకు తేదీ మార్పు సాధ్యం.",
     "హాజరుకాని (నో-షో) సందర్భం చెక్-ఇన్ / కార్యక్రమ తేదీన రద్దుగా పరిగణిస్తారు.",
   ].join("\n"),
@@ -190,8 +196,11 @@ export const DEFAULT_TERM_SECTIONS_HI = {
     "मूल कमरा उपयोग न हो सके तो समान या ऊँचे प्रकार के कमरे में बदला जा सकता है।",
   ].join("\n"),
   cancel: [
-    "अतिथि रद्द करे तो अग्रिम राशि वापस नहीं होगी, जब तक संपत्ति नीति में रिफंड की अनुमति न हो।",
-    "रिफंड की अनुमति हो तो रद्दीकरण शुल्क बुकिंग कुल (या डेस्क के अनुसार अग्रिम) पर रद्दीकरण प्रतिशत होगा।",
+    "बुकिंग पक्की करने के लिए गायत्री कन्वेंशन बिल का {advancePercent}% अग्रिम लेता है।",
+    "वर्तमान संपत्ति नीति के अनुसार रद्दीकरण शुल्क: बुकिंग कुल का {cancellationPercent}%.",
+    "अतिथि रद्द करने पर अग्रिम रिफंड: {refundAdvanceLabel}.",
+    "रिफंड नहीं है तो रद्द या नो-शो पर अग्रिम जब्त रहेगा।",
+    "रिफंड हाँ हो तो {cancellationPercent}% रद्दीकरण शुल्क काटकर शेष दिया जाएगा।",
     "नई तिथि खाली हो तो ही, डेस्क के विवेक पर तिथि बदली जा सकती है।",
     "न आने (नो-शो) को चेक-इन / कार्यक्रम तिथि पर रद्दीकरण माना जाएगा।",
   ].join("\n"),
@@ -250,7 +259,14 @@ export function defaultTermSets() {
 }
 
 function mergeLocale(base, extra) {
-  return { ...base, ...(extra || {}) };
+  const out = { ...base };
+  for (const [key, value] of Object.entries(extra || {})) {
+    if (value == null) continue;
+    // Empty stored sections must not wipe built-in defaults (e.g. Cancellation Policy).
+    if (!String(value).trim()) continue;
+    out[key] = value;
+  }
+  return out;
 }
 
 export function termSetsOf(property) {
@@ -301,6 +317,9 @@ export function fillPolicyVars(text, property) {
   const pol = policiesOf(property);
   const map = {
     ...pol,
+    advancePercent: Number(pol.advancePercent) || 0,
+    cancellationPercent: Number(pol.cancellationPercent) || 0,
+    refundAdvanceLabel: pol.refundAdvance ? "Yes" : "No",
     taxPercent: property?.taxPercent ?? 0,
     taxName: property?.taxName || "GST",
     name: property?.name || "Gayatri Convention",
@@ -308,11 +327,63 @@ export function fillPolicyVars(text, property) {
   return String(text || "").replace(/\{(\w+)\}/g, (_, key) => (map[key] != null ? String(map[key]) : `{${key}}`));
 }
 
+/** Concrete cancellation figures from Master / Settings policies — always shown to guests. */
+export function cancelPolicyNumberLines(property, lang = "en") {
+  const pol = policiesOf(property);
+  const advance = Number(pol.advancePercent) || 0;
+  const cancelPct = Number(pol.cancellationPercent) || 0;
+  const refund = !!pol.refundAdvance;
+  if (lang === "te") {
+    return [
+      `బుకింగ్ ధృవీకరణకు అడ్వాన్స్: ${advance}%.`,
+      `రద్దు ఛార్జీ: బుకింగ్ మొత్తంపై ${cancelPct}%.`,
+      `అతిథి రద్దుపై అడ్వాన్స్ రీఫండ్: ${refund ? "అవును (రద్దు ఛార్జీ తర్వాత)" : "లేదు"}.`,
+      refund
+        ? `రీఫండ్ ఉంటే, ${cancelPct}% రద్దు ఛార్జీ తగ్గించి మిగిలినది చెల్లిస్తారు.`
+        : `అతిథి రద్దు లేదా నో-షోలో అడ్వాన్స్ ఉంచుకుంటారు (${cancelPct}% రద్దు ఛార్జీ).`,
+    ];
+  }
+  if (lang === "hi") {
+    return [
+      `बुकिंग पक्की करने के लिए अग्रिम: ${advance}%.`,
+      `रद्दीकरण शुल्क: बुकिंग कुल का ${cancelPct}%.`,
+      `अतिथि रद्द करने पर अग्रिम रिफंड: ${refund ? "हाँ (शुल्क काटने के बाद)" : "नहीं"}.`,
+      refund
+        ? `रिफंड हो तो ${cancelPct}% रद्दीकरण शुल्क काटकर शेष दिया जाएगा।`
+        : `अतिथि रद्द या नो-शो पर अग्रिम जब्त (${cancelPct}% रद्दीकरण शुल्क)।`,
+    ];
+  }
+  return [
+    `Advance to confirm booking: ${advance}%.`,
+    `Cancellation charge: ${cancelPct}% of the booking total.`,
+    `Refund of advance on guest cancel: ${refund ? "Yes (after cancellation charge)" : "No"}.`,
+    refund
+      ? `If a refund is paid, ${cancelPct}% cancellation charge is deducted first.`
+      : `On guest cancel or no-show, advance is forfeited (${cancelPct}% cancellation charge).`,
+  ];
+}
+
 export function sectionLines(text, property) {
   return fillPolicyVars(text, property)
     .split(/\n+/)
     .map((line) => line.replace(/^\s*\d+[.)]\s*/, "").trim())
     .filter(Boolean);
+}
+
+/** Cancellation T&C lines with Master policy numbers always filled in. */
+export function cancelSectionLines(property, lang = "en") {
+  const sets = termSetsOf(property);
+  const prose = sectionLines(sets.locales?.[lang]?.cancel || sets.sections.cancel, property);
+  const numbers = cancelPolicyNumberLines(property, lang);
+  // Prefer number lines first; keep prose clauses that are not duplicates of the % facts.
+  const seen = new Set(numbers.map((l) => l.toLowerCase()));
+  const rest = prose.filter((line) => {
+    const low = line.toLowerCase();
+    if (seen.has(low)) return false;
+    if (/\d+\s*%/.test(line) && /cancel|refund|advance|రద్దు|అడ్వాన్స్|रद्द|अग्रिम/i.test(line)) return false;
+    return true;
+  });
+  return [...numbers, ...rest];
 }
 
 export function allTermLines(property) {
