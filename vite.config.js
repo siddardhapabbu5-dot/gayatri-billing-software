@@ -7,6 +7,7 @@ export default defineConfig({
     port: 5177,
     strictPort: true,
     host: true,
+    allowedHosts: true,
     proxy: {
       "/api": {
         target: "http://localhost:8080",
@@ -17,5 +18,11 @@ export default defineConfig({
       // Large MP4s under OneDrive can lock and crash Vite's file watcher (EBUSY).
       ignored: ["**/public/site/images/gallery/videos/**"],
     },
+  },
+  preview: {
+    host: true,
+    port: 4173,
+    strictPort: true,
+    allowedHosts: true,
   },
 });

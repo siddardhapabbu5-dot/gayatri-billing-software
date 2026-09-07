@@ -177,9 +177,6 @@ function GalleryTile({ item, index, tabActive, onOpen, kind }) {
       ) : (
         <span className="gallery-media-slot" aria-hidden="true" />
       )}
-      <span className={`gallery-kind-badge${video ? " is-video" : " is-photo"}`}>
-        {video ? "Video" : "Photo"}
-      </span>
       <span className="gallery-caption">
         {video ? <em className="gallery-play" aria-hidden="true">▶️</em> : null}
         {item.label}
@@ -824,69 +821,102 @@ export default function Home({ state, onEnquire, onStaff }) {
           </div>
         </section>
 
-        <section className="locations reveal" id="venues">
-          <h2 className="page-title">Convention halls</h2>
-          <p className="page-sub">Venues</p>
-          <div className="venue-grid">
-            {halls.map((h) => (
-              <article key={h.id} className="venue-card">
-                {loadVenueMedia ? (
-                  <img src={h.photo} alt={h.name} loading="lazy" decoding="async" />
-                ) : (
-                  <div className="venue-photo-slot" />
-                )}
-                <p className="venue-jp">{h.jp}</p>
-                <h3>{h.name}</h3>
-                <p className="venue-copy">{h.copy}</p>
-                <p className="capacity" title="Seating capacity">
-                  <span className="capacity-emoji" aria-hidden="true">🪑</span>
-                  Capacity <span>|</span> {capacityText(h)}
-                </p>
-                {(() => {
-                  const cur = p.currency || "INR";
-                  const loc = p.locale || "en-IN";
-                  const slots = [
-                    ["Half day", h.rates?.halfDay],
-                    ["Full day", h.rates?.fullDay],
-                  ].filter(([, amount]) => Number(amount) > 0);
-                  if (!slots.length) return null;
-                  return (
-                    <ul className="venue-packages">
-                      {slots.map(([label, amount]) => (
-                        <li key={label}>
-                          <span className="venue-pkg-label">{label}</span>
-                          <span className="venue-price-rule" aria-hidden="true">
-                            --------------------
+        <section className="locations venues-page reveal" id="venues">
+          <div className="venues-leaf venues-leaf-tr" aria-hidden="true" />
+          <div className="venues-leaf venues-leaf-bl" aria-hidden="true" />
+          <div className="venues-leaf venues-leaf-br" aria-hidden="true" />
+
+          <div className="venues-stage">
+            <div className="venue-grid">
+              {halls.map((h) => {
+                const cur = p.currency || "INR";
+                const loc = p.locale || "en-IN";
+                const title = h.name.replace(/\s*\(MINI\)\s*$/i, "");
+                const tag = /imperial/i.test(h.name)
+                  ? "Banquet Hall"
+                  : /garden/i.test(h.name)
+                    ? "Outdoor Conference"
+                    : h.jp || "Board meetings";
+                const todayHold = publicAvailability(state, h.name, todayISO());
+                const w = todayHold.rows[0]?.windows[0];
+                const half = Number(h.rates?.halfDay) || 0;
+                const full = Number(h.rates?.fullDay) || 0;
+                return (
+                  <article key={h.id} className="venue-card">
+                    {loadVenueMedia ? (
+                      <img src={h.photo} alt={title} loading="lazy" decoding="async" />
+                    ) : (
+                      <div className="venue-photo-slot" aria-hidden="true" />
+                    )}
+                    <div className="venue-card-body">
+                      <span className="venues-tag">{tag}</span>
+                      <h3 title={h.name}>{title}</h3>
+                      <p className="venue-copy">{h.copy}</p>
+                      <p className="capacity" title="Seating capacity">
+                        <span className="venues-ico venues-ico-people" aria-hidden="true" />
+                        <span className="capacity-label">Capacity</span>
+                        <strong>{capacityText(h)}</strong>
+                      </p>
+                      <ul className="venue-packages">
+                        {half > 0 ? (
+                          <li>
+                            <span className="venue-pkg-label">
+                              <span className="venues-ico venues-ico-moon" aria-hidden="true" />
+                              Half day
+                            </span>
+                            <strong className="venue-pkg-price">{money(half, cur, loc)}</strong>
+                          </li>
+                        ) : null}
+                        {full > 0 ? (
+                          <li>
+                            <span className="venue-pkg-label">
+                              <span className="venues-ico venues-ico-sun" aria-hidden="true" />
+                              Full day
+                            </span>
+                            <strong className="venue-pkg-price">{money(full, cur, loc)}</strong>
+                          </li>
+                        ) : null}
+                      </ul>
+                      {todayHold.blocked ? (
+                        <p className="venue-hold">
+                          Booked today
+                          {w ? ` · ${w.windowLabel || `${w.startLabel} – ${w.endLabel}`}` : ""}
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          className="venues-avail"
+                          title="This hall is available today"
+                          onClick={() => goBooking({ venue: h.name })}
+                        >
+                          <span className="venues-ico venues-ico-cal" aria-hidden="true" />
+                          Free today <em>|</em> Available now
+                          <span className="venues-avail-arrow" aria-hidden="true">
+                            →
                           </span>
-                          <strong className="venue-pkg-price">{money(amount, cur, loc)}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  );
-                })()}
-                {(() => {
-                  const todayHold = publicAvailability(state, h.name, todayISO());
-                  const w = todayHold.rows[0]?.windows[0];
-                  return todayHold.blocked ? (
-                    <p className="venue-hold">Booked today {w ? `· ${w.windowLabel || `${w.startLabel} – ${w.endLabel}`}` : ""}</p>
-                  ) : (
-                    <p className="venue-hold is-free" title="This hall is available today">
-                      <span className="venue-free-dot" aria-hidden="true" />
-                      Free today
-                      <em>Available now</em>
-                    </p>
-                  );
-                })()}
-                <button
-                  type="button"
-                  className="btn btn-gold venue-reserve"
-                  onClick={() => goBooking({ venue: h.name })}
-                >
-                  Reserve the hall <span>↗</span>
-                </button>
-              </article>
-            ))}
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
+
+          <footer className="venues-reserve-bar">
+            {halls.map((h) => (
+              <button
+                key={`reserve-${h.id}`}
+                type="button"
+                className="venues-reserve-btn"
+                onClick={() => goBooking({ venue: h.name })}
+              >
+                <span className="venues-ico venues-ico-cal" aria-hidden="true" />
+                Reserve the hall
+                <span aria-hidden="true">→</span>
+              </button>
+            ))}
+          </footer>
         </section>
 
         <section className="stay-page stay-hero-page reveal" id="stay">
@@ -1243,29 +1273,71 @@ export default function Home({ state, onEnquire, onStaff }) {
           </div>
         </section>
 
-        <section className="contact reveal" id="contact">
-          <p className="kicker visit-thanks">With thanks 🙏 visit again our convention hall.</p>
-          <h2>{p.name}</h2>
-          <address>
-            {(p.address || []).map(
-              (line) => (
-                <span key={line}>
-                  {line}
+        <section className="contact visit-page reveal" id="contact">
+          <div className="visit-ornament visit-ornament-top" aria-hidden="true" />
+          <div className="visit-leaf visit-leaf-tl" aria-hidden="true" />
+          <div className="visit-leaf visit-leaf-tr" aria-hidden="true" />
+          <div className="visit-leaf visit-leaf-bl" aria-hidden="true" />
+          <div className="visit-leaf visit-leaf-br" aria-hidden="true" />
+
+          <header className="visit-head">
+            <p className="visit-thanks">With thanks 🙏 visit again our convention hall.</p>
+            <h2>GAYATRI CONVENTION</h2>
+            <p className="visit-tagline">
+              <span>A premium destination for weddings, celebrations &amp; corporate events</span>
+            </p>
+          </header>
+
+          <div className="visit-main">
+            <figure className="visit-photo">
+              {loadContactMedia ? (
+                <img
+                  src={`${IMG}/visit-building.jpg`}
+                  alt="Gayatri Convention night view"
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : (
+                <div className="venue-photo-slot" aria-hidden="true" />
+              )}
+            </figure>
+
+            <aside className="visit-card">
+              <div className="visit-address">
+                <span className="visit-ico visit-ico-pin" aria-hidden="true" />
+                <p>
+                  Palagummi Village, Razole Mandal
                   <br />
-                </span>
-              )
-            )}
-          </address>
-          <p>{p.desk}</p>
-          <p>
-            <a href={`tel:${(p.phone || "").replace(/\s/g, "")}`}>{p.phone}</a>
-            {" · "}
-            <a href={`mailto:${p.email}`}>{p.email}</a>
-          </p>
+                  Dr. B.R.A. Konaseema
+                  <br />
+                  Andhra Pradesh 533249
+                </p>
+              </div>
+
+              <div className="visit-card-rule" aria-hidden="true" />
+
+              <div className="visit-card-contacts">
+                <a className="visit-contact-link" href="tel:+919849600555">
+                  <span className="visit-ico visit-ico-phone" aria-hidden="true" />
+                  +91 98496 00555
+                </a>
+                <a className="visit-contact-link" href="mailto:events@gayatrifunctionhall.com">
+                  <span className="visit-ico visit-ico-mail" aria-hidden="true" />
+                  events@gayatrifunctionhall.com
+                </a>
+              </div>
+
+              <p className="visit-appoint">
+                <span className="visit-ico visit-ico-person" aria-hidden="true" />
+                Tours by appointment
+              </p>
+            </aside>
+          </div>
+
           <div className="map-wrap">
             {loadContactMedia ? (
               <iframe
-                title="Gayatri Water and Beverages, Palagummi on Google Maps"
+                title="Gayatri Convention, Palagummi on Google Maps"
                 src={mapSrc}
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
@@ -1275,19 +1347,21 @@ export default function Home({ state, onEnquire, onStaff }) {
               <div className="map-slot" />
             )}
           </div>
+
           <div className="contact-actions">
-            <a
-              className="btn btn-ghost dark"
-              href={mapLink}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open in Google Maps <span>↗</span>
+            <a className="btn visit-btn-maps" href={mapLink} target="_blank" rel="noreferrer">
+              <span className="visit-ico visit-ico-map" aria-hidden="true" />
+              Open in Google Maps
+              <span aria-hidden="true">↗</span>
             </a>
-            <a className="btn btn-gold" href="/Gayatri-Brochure.pdf?v=20260902d" download="Gayatri-Brochure.pdf">
-              Download brochure PDF
+            <a className="btn visit-btn-pdf" href="/Gayatri-Brochure.pdf?v=20260902d" download="Gayatri-Brochure.pdf">
+              <span className="visit-ico visit-ico-doc" aria-hidden="true" />
+              Download Brochure PDF
+              <span aria-hidden="true">↓</span>
             </a>
           </div>
+
+          <div className="visit-ornament visit-ornament-bottom" aria-hidden="true" />
         </section>
 
         <section className="terms-page reveal" id="terms">
@@ -1378,7 +1452,6 @@ export default function Home({ state, onEnquire, onStaff }) {
         </section>
 
         <section className="contact staff-gate reveal" id="staff">
-          <p className="kicker">Staff</p>
           <h2>Convention desk</h2>
           <p className="page-sub">
             For the Gayatri team. Open the calendar, rooms, reservations, and payments.
@@ -1448,9 +1521,6 @@ export default function Home({ state, onEnquire, onStaff }) {
               className={`lightbox-frame${isGalleryVideo(lightbox) ? " is-video" : " is-photo"}`}
               onClick={(e) => e.stopPropagation()}
             >
-              <span className={`lightbox-kind${isGalleryVideo(lightbox) ? " is-video" : " is-photo"}`}>
-                {isGalleryVideo(lightbox) ? "Video" : "Photo"}
-              </span>
               {isGalleryVideo(lightbox) ? (
                 <video
                   key={lightbox.src}

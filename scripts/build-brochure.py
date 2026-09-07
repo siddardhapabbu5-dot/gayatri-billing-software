@@ -256,8 +256,8 @@ def page3():
 
     photo_w = (W - 2 * M - 18) // 2
     photo_h = 210
-    im.paste(cover_fit(IMG / "retreat-family-lobby.png", (photo_w, photo_h)), (M, 190))
-    im.paste(cover_fit(IMG / "retreat-family-dining.png", (photo_w, photo_h)), (M + photo_w + 18, 190))
+    im.paste(cover_fit(IMG / "retreat-family-lobby.jpg", (photo_w, photo_h)), (M, 190))
+    im.paste(cover_fit(IMG / "retreat-family-dining.jpg", (photo_w, photo_h)), (M + photo_w + 18, 190))
 
     y = 424
     d.rounded_rectangle([M, y, W - M, y + 92], radius=6, fill=(28, 62, 62), outline=GOLD, width=1)

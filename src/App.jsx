@@ -1,20 +1,5 @@
-import { useEffect, useState } from "react";
-import Dashboard from "./pages/Dashboard.jsx";
-import Calendar from "./pages/Calendar.jsx";
-import Venues from "./pages/Venues.jsx";
-import Rooms from "./pages/Rooms.jsx";
-import Reservations from "./pages/Reservations.jsx";
-import Guests from "./pages/Guests.jsx";
-import Catering from "./pages/Catering.jsx";
-import Vendors from "./pages/Vendors.jsx";
-import Billing from "./pages/Billing.jsx";
-import Reports from "./pages/Reports.jsx";
-import Expenses from "./pages/Expenses.jsx";
-import Settings from "./pages/Settings.jsx";
-import Master from "./pages/Master.jsx";
-import Documents from "./pages/Documents.jsx";
+import { Suspense, lazy, useEffect, useState } from "react";
 import Home from "./pages/Home.jsx";
-import Assistant from "./pages/Assistant.jsx";
 import StaffLogin from "./pages/StaffLogin.jsx";
 import { ROLES } from "./seed";
 import { coverage } from "./docTypes";
@@ -60,6 +45,32 @@ import {
   removeExpense,
   addFolioCharge,
 } from "./store";
+
+const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
+const Calendar = lazy(() => import("./pages/Calendar.jsx"));
+const Venues = lazy(() => import("./pages/Venues.jsx"));
+const Rooms = lazy(() => import("./pages/Rooms.jsx"));
+const Reservations = lazy(() => import("./pages/Reservations.jsx"));
+const Guests = lazy(() => import("./pages/Guests.jsx"));
+const Catering = lazy(() => import("./pages/Catering.jsx"));
+const Vendors = lazy(() => import("./pages/Vendors.jsx"));
+const Billing = lazy(() => import("./pages/Billing.jsx"));
+const Reports = lazy(() => import("./pages/Reports.jsx"));
+const Expenses = lazy(() => import("./pages/Expenses.jsx"));
+const Settings = lazy(() => import("./pages/Settings.jsx"));
+const Master = lazy(() => import("./pages/Master.jsx"));
+const Documents = lazy(() => import("./pages/Documents.jsx"));
+const Assistant = lazy(() => import("./pages/Assistant.jsx"));
+
+function StaffPageFallback() {
+  return (
+    <div className="page" style={{ padding: "2rem 1.25rem" }}>
+      <p className="muted" style={{ margin: 0 }}>
+        Loading…
+      </p>
+    </div>
+  );
+}
 
 function applyAuthUser(authUser) {
   const state = getState();
@@ -301,27 +312,27 @@ export default function App() {
           <img className="brand-logo" src="/site/images/logo-gold.png" alt="" />
           <h1>{state.property.brandName || "Gayatri"}</h1>
         </div>
-        {GROUPS.map((g) => (
-          <div className="nav-group" key={g.label}>
-            <span>{g.label}</span>
-            {g.items
-              .filter((i) => can(role, i.perm))
-              .map((i) => (
-                <button key={i.id} className={page === i.id ? "on" : ""} onClick={() => go(i.id)}>
-                  {i.label}
-                </button>
-              ))}
-          </div>
-        ))}
-        <div className="nav-foot">
-          <div style={{ marginBottom: 6 }}>
-            {authUser.name}
-            <div className="muted" style={{ fontSize: 12 }}>
-              {authUser.roleLabel || authUser.role}
+        <div className="nav-scroll">
+          {GROUPS.map((g) => (
+            <div className="nav-group" key={g.label}>
+              <span>{g.label}</span>
+              {g.items
+                .filter((i) => can(role, i.perm))
+                .map((i) => (
+                  <button key={i.id} className={page === i.id ? "on" : ""} onClick={() => go(i.id)}>
+                    {i.label}
+                  </button>
+                ))}
             </div>
+          ))}
+        </div>
+        <div className="nav-foot">
+          <div className="nav-foot-user">
+            {authUser.name}
+            <div className="muted">{authUser.roleLabel || authUser.role}</div>
           </div>
-          <button className="btn ghost small" type="button" onClick={logoutStaff} style={{ width: "100%" }}>
-            Sign out
+          <button className="btn ghost small nav-logout" type="button" onClick={logoutStaff}>
+            Logout
           </button>
         </div>
       </aside>
@@ -335,253 +346,258 @@ export default function App() {
           </div>
           <div className="row">
             <span className="muted">{state.notifications[0]?.title}</span>
-            <button className="btn ghost small" onClick={() => go("home")}>
+            <button className="btn ghost small" type="button" onClick={() => go("home")}>
               Public site
+            </button>
+            <button className="btn ghost small" type="button" onClick={logoutStaff}>
+              Logout
             </button>
           </div>
         </header>
         <div className="content">
-          {page === "desk" && (
-            <Dashboard
-              key={`desk-${(state.payments || []).length}-${(state.expenses || []).length}-${(state.bookings || []).length}`}
-              state={state}
-              go={go}
-              onClearBookings={handleClearAllBookings}
-              onLoadSample={() => {
-                if (
-                  !window.confirm(
-                    "Load sample management day?\n\nAdds sample hall/room bookings (different dates), Cash/UPI/Card/Bank payments, room cancel without refund, expenses, and credit balances."
-                  )
-                ) {
-                  return;
-                }
-                const out = loadSampleManagementDay();
-                if (out?.error) {
-                  window.alert(out.error);
-                  return;
-                }
-                setState(getState());
-                window.alert(
-                  "Sample day loaded.\n\nDashboard Today KPIs, expenses and collections are updated.\nOpen Reports → Income & expense (Today) for the full day report + credit."
-                );
-              }}
-            />
-          )}
-          {page === "calendar" && (
-            <Calendar key={presetDate || "calendar-today"} state={state} go={go} focusDate={presetDate} />
-          )}
-          {page === "venues" && <Venues state={state} onHall={(id, patch) => setState(updateHall(id, patch))} />}
-          {page === "rooms" && (
-            <Rooms
-              state={state}
-              onRoomType={(t) => {
-                const out = saveRoomType(t);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onRoom={(r) => {
-                const out = saveRoom(r);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onRemoveRoom={(id) => {
-                const out = removeRoom(id);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onStatus={(id, s) => setState(setRoomStatus(id, s))}
-              onHousekeeping={(id, s) => setState(setRoomHousekeeping(id, s))}
-              onCheckIn={(id) => {
-                const stay = state.roomReservations.find((s) => s.id === id);
-                const cov = stay ? coverage(state, stay.bookingId) : { ok: true };
-                if (!cov.ok && !window.confirm("Required hotel documents are missing. Check in anyway?")) return;
-                setState(checkInRoom(id));
-              }}
-              onCheckOut={(id) => setState(checkOutRoom(id))}
-              onTransfer={(id, room) => {
-                const out = transferRoom(id, room);
-                if (out.state) setState(out.state);
-                return out;
-              }}
-              go={go}
-            />
-          )}
-          {page === "reserve" && (
-            <Reservations
-              key={`${presetGuestId || "reserve"}-${presetDate || "today"}`}
-              state={state}
-              presetDate={presetDate}
-              presetGuest={state.guests.find((g) => g.id === presetGuestId)}
-              onSave={async (draft) => {
-                const out = createReservation(draft);
-                if (out.error) return out;
-                if (draft.pendingDocs?.length) {
-                  const docs = await attachMany(out.booking.id, out.booking.guestId, draft.pendingDocs);
-                  if (docs.error) window.alert(docs.error);
-                }
-                setState(getState());
-                go("billing", { bookingId: out.booking.id });
-                return out;
-              }}
-              onDocs={(id) => go("documents", { bookingId: id })}
-              onCancel={(id) => {
-                const bk = state.bookings.find((b) => b.id === id);
-                if (!bk || bk.status === "Cancelled") return;
-                const { totals } = bookingFolio(state, id);
-                const m = (n) => money(n, state.property.currency, state.property.locale);
-                if (
-                  !window.confirm(
-                    `Cancel booking ${bk.number}?\n\nThe record is kept under Reports → Cancellations. Calendar and room holds are released.${
-                      totals.paid > 0 ? `\n\nAmount collected: ${m(totals.paid)}` : ""
-                    }`
-                  )
-                ) {
-                  return;
-                }
-                let refund = 0;
-                if (totals.paid > 0 && window.confirm(`Record a refund of ${m(totals.paid)}?`)) {
-                  refund = totals.paid;
-                }
-                setState(cancelBooking(id, refund));
-              }}
-              onOpen={(id) => go("billing", { bookingId: id })}
-              go={go}
-            />
-          )}
-          {page === "guests" && (
-            <Guests
-              key={focusGuestId || "guests"}
-              state={state}
-              go={go}
-              focusId={focusGuestId}
-              onSave={(g) => {
-                const out = saveGuest(g);
-                setState(out.state);
-                return out;
-              }}
-              onRemove={(id) => setState(removeGuest(id))}
-            />
-          )}
-          {page === "documents" && (
-            <Documents
-              key={bookingId || "docs"}
-              state={state}
-              focusId={bookingId}
-              onBack={navStack.length ? goBack : undefined}
-              onAttach={async (payload) => {
-                const out = await attachDocument(payload);
-                if (out.state) setState(out.state);
-                return out;
-              }}
-              onRemove={async (id) => setState(await removeDocument(id))}
-              onVerify={(id, v) => setState(verifyDocument(id, v))}
-            />
-          )}
-          {page === "catering" && <Catering state={state} onAdd={(o) => setState(addCatering(o))} />}
-          {page === "vendors" && (
-            <Vendors
-              state={state}
-              onVendor={(v) => setState(addVendor(v))}
-              onPO={(p) => setState(addPO(p))}
-            />
-          )}
-          {page === "billing" && (
-            <Billing
-              key={bookingId || "list"}
-              state={state}
-              focusId={bookingId}
-              backLabel={navStack.length ? "Back" : "All payments"}
-              onBack={goBack}
-              onClose={() => setBookingId(null)}
-              onPay={(id, p) => setState(addPayment(id, p))}
-              onDiscount={(id, d) => setState(setFolioDiscount(id, d))}
-              onGstMode={(id, mode) => {
-                const out = setFolioGstMode(id, mode);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onCharge={(id, payload) => {
-                const out = addFolioCharge(id, payload);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onCancelRoom={(resId) => {
-                if (!window.confirm("Cancel this room stay only?\n\nHall booking and payments stay. Room charges drop from the bill. No refund is posted.")) {
-                  return;
-                }
-                const out = cancelRoomStay(resId);
-                if (out?.error) {
-                  window.alert(out.error);
-                  return;
-                }
-                setState(out);
-              }}
-              onIssue={(id, t) => {
-                const out = issueDocument(id, t);
-                setState(out.state);
-              }}
-              onDocs={(id) => go("documents", { bookingId: id })}
-            />
-          )}
-          {page === "expenses" && (
-            <Expenses
-              state={state}
-              onAdd={(payload) => {
-                const out = addExpense(payload);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onRemove={(id) => setState(removeExpense(id))}
-            />
-          )}
-          {page === "reports" && <Reports state={state} go={go} />}
-          {page === "assistant" && <Assistant state={state} />}
-          {page === "master" && (
-            <Master
-              state={state}
-              onRefresh={() => setState(getState())}
-              onProperty={(p) => setState(updateProperty(p))}
-              onHall={(h) => setState(saveHall(h))}
-              onRoomType={(t) => {
-                const out = saveRoomType(t);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onRoom={(r) => {
-                const out = saveRoom(r);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-              onRemoveRoom={(id) => {
-                const out = removeRoom(id);
-                if (out?.error) return out;
-                setState(out);
-                return out;
-              }}
-            />
-          )}
-          {page === "settings" && (
-            <Settings
-              state={state}
-              onProperty={(p) => setState(updateProperty(p))}
-              onPublishTerms={(sections) => setState(publishTermSets(sections))}
-              onUser={() => {}}
-              onReset={() => {
-                if (window.confirm("Reload the Palagummi demo property? Current local data will be replaced.")) {
-                  setState(resetDemo());
-                }
-              }}
-              onClearBookings={handleClearAllBookings}
-            />
-          )}
+          <Suspense fallback={<StaffPageFallback />}>
+            {page === "desk" && (
+              <Dashboard
+                key={`desk-${(state.payments || []).length}-${(state.expenses || []).length}-${(state.bookings || []).length}`}
+                state={state}
+                go={go}
+                onClearBookings={handleClearAllBookings}
+                onLoadSample={() => {
+                  if (
+                    !window.confirm(
+                      "Load sample management day?\n\nAdds sample hall/room bookings (different dates), Cash/UPI/Card/Bank payments, room cancel without refund, expenses, and credit balances."
+                    )
+                  ) {
+                    return;
+                  }
+                  const out = loadSampleManagementDay();
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
+                  setState(getState());
+                  window.alert(
+                    "Sample day loaded.\n\nDashboard Today KPIs, expenses and collections are updated.\nOpen Reports → Income & expense (Today) for the full day report + credit."
+                  );
+                }}
+              />
+            )}
+            {page === "calendar" && (
+              <Calendar key={presetDate || "calendar-today"} state={state} go={go} focusDate={presetDate} />
+            )}
+            {page === "venues" && <Venues state={state} onHall={(id, patch) => setState(updateHall(id, patch))} />}
+            {page === "rooms" && (
+              <Rooms
+                state={state}
+                onRoomType={(t) => {
+                  const out = saveRoomType(t);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onRoom={(r) => {
+                  const out = saveRoom(r);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onRemoveRoom={(id) => {
+                  const out = removeRoom(id);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onStatus={(id, s) => setState(setRoomStatus(id, s))}
+                onHousekeeping={(id, s) => setState(setRoomHousekeeping(id, s))}
+                onCheckIn={(id) => {
+                  const stay = state.roomReservations.find((s) => s.id === id);
+                  const cov = stay ? coverage(state, stay.bookingId) : { ok: true };
+                  if (!cov.ok && !window.confirm("Required hotel documents are missing. Check in anyway?")) return;
+                  setState(checkInRoom(id));
+                }}
+                onCheckOut={(id) => setState(checkOutRoom(id))}
+                onTransfer={(id, room) => {
+                  const out = transferRoom(id, room);
+                  if (out.state) setState(out.state);
+                  return out;
+                }}
+                go={go}
+              />
+            )}
+            {page === "reserve" && (
+              <Reservations
+                key={`${presetGuestId || "reserve"}-${presetDate || "today"}`}
+                state={state}
+                presetDate={presetDate}
+                presetGuest={state.guests.find((g) => g.id === presetGuestId)}
+                onSave={async (draft) => {
+                  const out = createReservation(draft);
+                  if (out.error) return out;
+                  if (draft.pendingDocs?.length) {
+                    const docs = await attachMany(out.booking.id, out.booking.guestId, draft.pendingDocs);
+                    if (docs.error) window.alert(docs.error);
+                  }
+                  setState(getState());
+                  go("billing", { bookingId: out.booking.id });
+                  return out;
+                }}
+                onDocs={(id) => go("documents", { bookingId: id })}
+                onCancel={(id) => {
+                  const bk = state.bookings.find((b) => b.id === id);
+                  if (!bk || bk.status === "Cancelled") return;
+                  const { totals } = bookingFolio(state, id);
+                  const m = (n) => money(n, state.property.currency, state.property.locale);
+                  if (
+                    !window.confirm(
+                      `Cancel booking ${bk.number}?\n\nThe record is kept under Reports → Cancellations. Calendar and room holds are released.${
+                        totals.paid > 0 ? `\n\nAmount collected: ${m(totals.paid)}` : ""
+                      }`
+                    )
+                  ) {
+                    return;
+                  }
+                  let refund = 0;
+                  if (totals.paid > 0 && window.confirm(`Record a refund of ${m(totals.paid)}?`)) {
+                    refund = totals.paid;
+                  }
+                  setState(cancelBooking(id, refund));
+                }}
+                onOpen={(id) => go("billing", { bookingId: id })}
+                go={go}
+              />
+            )}
+            {page === "guests" && (
+              <Guests
+                key={focusGuestId || "guests"}
+                state={state}
+                go={go}
+                focusId={focusGuestId}
+                onSave={(g) => {
+                  const out = saveGuest(g);
+                  setState(out.state);
+                  return out;
+                }}
+                onRemove={(id) => setState(removeGuest(id))}
+              />
+            )}
+            {page === "documents" && (
+              <Documents
+                key={bookingId || "docs"}
+                state={state}
+                focusId={bookingId}
+                onBack={navStack.length ? goBack : undefined}
+                onAttach={async (payload) => {
+                  const out = await attachDocument(payload);
+                  if (out.state) setState(out.state);
+                  return out;
+                }}
+                onRemove={async (id) => setState(await removeDocument(id))}
+                onVerify={(id, v) => setState(verifyDocument(id, v))}
+              />
+            )}
+            {page === "catering" && <Catering state={state} onAdd={(o) => setState(addCatering(o))} />}
+            {page === "vendors" && (
+              <Vendors
+                state={state}
+                onVendor={(v) => setState(addVendor(v))}
+                onPO={(p) => setState(addPO(p))}
+              />
+            )}
+            {page === "billing" && (
+              <Billing
+                key={bookingId || "list"}
+                state={state}
+                focusId={bookingId}
+                backLabel={navStack.length ? "Back" : "All payments"}
+                onBack={goBack}
+                onClose={() => setBookingId(null)}
+                onPay={(id, p) => setState(addPayment(id, p))}
+                onDiscount={(id, d) => setState(setFolioDiscount(id, d))}
+                onGstMode={(id, mode) => {
+                  const out = setFolioGstMode(id, mode);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onCharge={(id, payload) => {
+                  const out = addFolioCharge(id, payload);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onCancelRoom={(resId) => {
+                  if (!window.confirm("Cancel this room stay only?\n\nHall booking and payments stay. Room charges drop from the bill. No refund is posted.")) {
+                    return;
+                  }
+                  const out = cancelRoomStay(resId);
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
+                  setState(out);
+                }}
+                onIssue={(id, t) => {
+                  const out = issueDocument(id, t);
+                  setState(out.state);
+                }}
+                onDocs={(id) => go("documents", { bookingId: id })}
+              />
+            )}
+            {page === "expenses" && (
+              <Expenses
+                state={state}
+                onAdd={(payload) => {
+                  const out = addExpense(payload);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onRemove={(id) => setState(removeExpense(id))}
+              />
+            )}
+            {page === "reports" && <Reports state={state} go={go} />}
+            {page === "assistant" && <Assistant state={state} />}
+            {page === "master" && (
+              <Master
+                state={state}
+                onRefresh={() => setState(getState())}
+                onProperty={(p) => setState(updateProperty(p))}
+                onHall={(h) => setState(saveHall(h))}
+                onRoomType={(t) => {
+                  const out = saveRoomType(t);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onRoom={(r) => {
+                  const out = saveRoom(r);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onRemoveRoom={(id) => {
+                  const out = removeRoom(id);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+              />
+            )}
+            {page === "settings" && (
+              <Settings
+                state={state}
+                onProperty={(p) => setState(updateProperty(p))}
+                onPublishTerms={(sections) => setState(publishTermSets(sections))}
+                onUser={() => {}}
+                onReset={() => {
+                  if (window.confirm("Reload the Palagummi demo property? Current local data will be replaced.")) {
+                    setState(resetDemo());
+                  }
+                }}
+                onClearBookings={handleClearAllBookings}
+              />
+            )}
+          </Suspense>
         </div>
       </div>
     </div>

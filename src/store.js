@@ -191,7 +191,7 @@ function load() {
       const beforeTerms = p.terms || "";
       if (p.notifyWhatsApp == null) p.notifyWhatsApp = true;
       p.notifyPhone = "+91 72043 01779";
-      if (!p.phone || /98496\s*00555/.test(String(p.phone))) p.phone = "+91 72043 01779";
+      if (!p.phone) p.phone = "+91 98496 00555";
       if (!p.brandName) p.brandName = "Gayatri";
       if (!p.place) p.place = "Palagummi · Konaseema";
       if (!p.about) p.about = DEFAULT_ABOUT;
@@ -351,6 +351,27 @@ function load() {
       parsed.bookings = (parsed.bookings || []).map((b) => (b.hall ? { ...b, hall: rename(b.hall) } : b));
       parsed.enquiries = (parsed.enquiries || []).map((e) => (e.hall ? { ...e, hall: rename(e.hall) } : e));
       parsed.meta.heritageMiniSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.venueWebPhotosUniformSep2026) {
+      const photos = {
+        "hall-1": "/site/images/gallery/imperial-hall-ceremony.jpg",
+        "hall-2": "/site/images/venue-garden.jpg",
+        "hall-3": "/site/images/gallery/evening-buffet-crowd.jpg",
+      };
+      parsed.halls = (parsed.halls || []).map((h) => {
+        const webPhoto = photos[h.id];
+        return webPhoto ? { ...h, webPhoto } : h;
+      });
+      parsed.meta.venueWebPhotosUniformSep2026 = true;
+      persist(parsed);
+    }
+    if (!parsed.meta.visitPhone98496Sep2026) {
+      if (parsed.property) {
+        parsed.property.phone = "+91 98496 00555";
+        if (!parsed.property.notifyPhone) parsed.property.notifyPhone = "+91 72043 01779";
+      }
+      parsed.meta.visitPhone98496Sep2026 = true;
       persist(parsed);
     }
     if (!parsed.meta.roomInventorySep2026) {
