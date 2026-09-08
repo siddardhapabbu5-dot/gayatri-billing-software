@@ -1,38 +1,34 @@
 package com.gayatri.vhms;
 
 import java.net.URI;
-import java.util.HashMap;
-import java.util.Map;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 public class GayatriVhmsApplication {
   public static void main(String[] args) {
-    SpringApplication app = new SpringApplication(GayatriVhmsApplication.class);
-    Map<String, Object> fromRailway = railwayDatasourceOverrides();
-    if (!fromRailway.isEmpty()) {
-      app.setDefaultProperties(fromRailway);
-    }
-    app.run(args);
+    applyRailwayDatabaseUrl();
+    SpringApplication.run(GayatriVhmsApplication.class, args);
   }
 
   /**
-   * Railway Postgres exposes {@code DATABASE_URL} like
-   * {@code postgresql://user:pass@host:port/db}. Spring needs JDBC form.
-   * Also honours explicit {@code SPRING_DATASOURCE_*} if already set.
+   * Railway provides {@code DATABASE_URL=postgresql://user:pass@host:port/db}.
+   * Spring Boot needs JDBC + higher precedence than application.yml defaults
+   * (system properties beat packaged yaml).
    */
-  static Map<String, Object> railwayDatasourceOverrides() {
-    Map<String, Object> props = new HashMap<>();
-    if (notBlank(System.getenv("SPRING_DATASOURCE_URL"))) {
-      return props;
+  static void applyRailwayDatabaseUrl() {
+    if (notBlank(System.getenv("SPRING_DATASOURCE_URL"))
+        || notBlank(System.getProperty("spring.datasource.url"))) {
+      System.out.println("Gayatri: SPRING_DATASOURCE_URL already set");
+      return;
     }
     String raw = firstNonBlank(System.getenv("DATABASE_URL"), System.getenv("POSTGRES_URL"));
-    if (raw == null || raw.isBlank()) {
-      return props;
+    if (!notBlank(raw)) {
+      System.out.println("Gayatri: no DATABASE_URL env — using application.yml defaults");
+      return;
     }
     try {
-      String normalized = raw.replace("postgres://", "postgresql://");
+      String normalized = raw.trim().replace("postgres://", "postgresql://");
       URI uri = URI.create(normalized);
       String userInfo = uri.getUserInfo();
       String user = null;
@@ -54,18 +50,17 @@ public class GayatriVhmsApplication {
         db = db.substring(0, db.indexOf('?'));
       }
       String jdbc = "jdbc:postgresql://" + host + ":" + port + "/" + db;
-      props.put("spring.datasource.url", jdbc);
-      if (notBlank(user) && !notBlank(System.getenv("SPRING_DATASOURCE_USERNAME"))) {
-        props.put("spring.datasource.username", user);
+      System.setProperty("spring.datasource.url", jdbc);
+      if (notBlank(user)) {
+        System.setProperty("spring.datasource.username", user);
       }
-      if (pass != null && !notBlank(System.getenv("SPRING_DATASOURCE_PASSWORD"))) {
-        props.put("spring.datasource.password", pass);
+      if (pass != null) {
+        System.setProperty("spring.datasource.password", pass);
       }
-      System.out.println("Gayatri: using Railway DATABASE_URL → " + host + ":" + port + "/" + db);
+      System.out.println("Gayatri: DATABASE_URL applied → " + host + ":" + port + "/" + db);
     } catch (Exception ex) {
       System.err.println("Gayatri: could not parse DATABASE_URL: " + ex.getMessage());
     }
-    return props;
   }
 
   private static boolean notBlank(String s) {
