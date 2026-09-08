@@ -25,7 +25,8 @@ app:
     secret: ${APP_JWT_SECRET:GayatriConventionHallJwtSecretKeyChangeInProduction_2026_MustBeLongEnough256Bits!!}
     expiration-ms: ${APP_JWT_EXPIRATION_MS:86400000}
   cors:
-    allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5177,http://127.0.0.1:5177}
+    # "*" required on Railway: same-origin module/CSS requests send Origin and were 403'd
+    allowed-origins: ${APP_CORS_ORIGINS:*}
 
 logging:
   level:

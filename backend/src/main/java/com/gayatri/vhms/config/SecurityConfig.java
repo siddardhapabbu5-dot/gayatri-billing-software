@@ -64,7 +64,13 @@ public class SecurityConfig {
         .map(String::trim)
         .filter(s -> !s.isEmpty())
         .toList();
-    config.setAllowedOrigins(origins);
+    // Patterns (not exact origins): Vite adds crossorigin on /assets, so the browser
+    // sends Origin and Spring must allow the Railway host or JS/CSS return 403.
+    if (origins.isEmpty() || origins.contains("*")) {
+      config.setAllowedOriginPatterns(List.of("*"));
+    } else {
+      config.setAllowedOriginPatterns(origins);
+    }
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("*"));
     config.setAllowCredentials(true);
