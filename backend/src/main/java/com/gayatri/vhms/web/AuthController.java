@@ -71,6 +71,9 @@ class AdminUserController {
 class HealthController {
   @GetMapping("/api/health")
   public Map<String, String> health() {
-    return Map.of("status", "UP", "service", "gayatri-vhms-backend");
+    return Map.of(
+        "status", "UP",
+        "service", "gayatri-vhms-backend",
+        "build", "cors-off-v2");
   }
 }

@@ -1,8 +1,6 @@
 package com.gayatri.vhms.config;
 
 import com.gayatri.vhms.security.JwtAuthFilter;
-import java.util.Arrays;
-import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,9 +16,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity
@@ -43,8 +38,8 @@ public class SecurityConfig {
   @Bean
   SecurityFilterChain filterChain(HttpSecurity http, JwtAuthFilter jwtAuthFilter) throws Exception {
     http.csrf(csrf -> csrf.disable())
-        // Same-origin on Railway (UI + API one host). Enabling CORS on /** caused Vite
-        // module/CSS requests (crossorigin → Origin header) to get 403 and a blank page.
+        // Same-origin Railway (UI+API). Do not register a CorsConfigurationSource bean —
+        // Spring Boot would still install a CorsFilter and 403 Vite /assets with Origin.
         .cors(cors -> cors.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
@@ -56,30 +51,5 @@ public class SecurityConfig {
         )
         .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
-  }
-
-  /** Used if CORS is re-enabled later (e.g. Vercel UI → Railway API). Not active while cors is disabled. */
-  @Bean
-  CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
-    CorsConfiguration config = new CorsConfiguration();
-    List<String> origins = Arrays.stream(corsProperties.getAllowedOrigins().split(","))
-        .map(String::trim)
-        .filter(s -> !s.isEmpty())
-        .toList();
-    if (origins.isEmpty() || origins.contains("*")) {
-      config.setAllowedOriginPatterns(List.of("*"));
-    } else {
-      List<String> patterns = new java.util.ArrayList<>(origins);
-      patterns.add("https://*.up.railway.app");
-      patterns.add("http://localhost:*");
-      patterns.add("http://127.0.0.1:*");
-      config.setAllowedOriginPatterns(patterns);
-    }
-    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    config.setAllowedHeaders(List.of("*"));
-    config.setAllowCredentials(true);
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/api/**", config);
-    return source;
   }
 }
