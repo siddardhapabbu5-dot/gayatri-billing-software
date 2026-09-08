@@ -64,18 +64,21 @@ public class SecurityConfig {
         .map(String::trim)
         .filter(s -> !s.isEmpty())
         .toList();
-    // Patterns (not exact origins): Vite adds crossorigin on /assets, so the browser
-    // sends Origin and Spring must allow the Railway host or JS/CSS return 403.
     if (origins.isEmpty() || origins.contains("*")) {
       config.setAllowedOriginPatterns(List.of("*"));
     } else {
-      config.setAllowedOriginPatterns(origins);
+      List<String> patterns = new java.util.ArrayList<>(origins);
+      patterns.add("https://*.up.railway.app");
+      patterns.add("http://localhost:*");
+      patterns.add("http://127.0.0.1:*");
+      config.setAllowedOriginPatterns(patterns);
     }
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("*"));
     config.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", config);
+    // Only API needs CORS. Registering /** made Vite /assets/*.js return 403 when Origin was present.
+    source.registerCorsConfiguration("/api/**", config);
     return source;
   }
 }

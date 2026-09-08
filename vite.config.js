@@ -5,6 +5,13 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: "strip-crossorigin",
+      transformIndexHtml(html) {
+        // Same-origin SPA: crossorigin makes the browser send Origin and Spring CORS was 403'ing /assets.
+        return html.replace(/\s+crossorigin(?:="[^"]*")?/g, "");
+      },
+    },
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["pwa/icon-180.png", "site/images/logo-gold.png"],
