@@ -116,6 +116,7 @@ export function financialStatus(booking, totals, pays) {
     return "CANCELLED_NO_REFUND";
   }
   if (paid <= 0) return "NO_PAYMENT";
+  if (balance < 0) return "CREDIT";
   if (balance <= 0) return "PAID";
   if (refunded > 0 && net > 0) return "PARTIALLY_REFUNDED";
   if (paid > 0 && balance > 0) return "PARTIALLY_PAID";
@@ -127,6 +128,7 @@ export function financialStatusLabel(code) {
     NO_PAYMENT: "No payment",
     PARTIALLY_PAID: "Partially paid",
     PAID: "Paid",
+    CREDIT: "Guest credit",
     PARTIALLY_REFUNDED: "Partially refunded",
     FULLY_REFUNDED: "Fully refunded",
     CANCELLED_NO_REFUND: "Cancelled · no refund",

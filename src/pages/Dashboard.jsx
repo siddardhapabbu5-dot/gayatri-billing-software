@@ -50,15 +50,16 @@ function buildMonthCells(monthStartISO) {
 }
 
 /** Always-visible month calendar in the dashboard filter row. */
-function MonthCalendarInline({ value, onChange, today, bookedDays }) {
-  const viewMonth = `${value}-01`;
+function MonthCalendarInline({ monthValue, selectedDate, onSelectDate, onSelectMonth, today, bookedDays }) {
+  const viewMonth = `${monthValue}-01`;
   const cells = useMemo(() => buildMonthCells(viewMonth), [viewMonth]);
   const viewLabel = monthLabel(viewMonth);
   const booked = bookedDays || new Set();
 
   function shiftMonth(delta) {
     const d = parseISO(viewMonth);
-    onChange(startOfMonthISO(new Date(d.getFullYear(), d.getMonth() + delta, 1)).slice(0, 7));
+    const next = startOfMonthISO(new Date(d.getFullYear(), d.getMonth() + delta, 1));
+    onSelectMonth(next.slice(0, 7), next);
   }
 
   return (
@@ -81,14 +82,15 @@ function MonthCalendarInline({ value, onChange, today, bookedDays }) {
         {cells.map((iso, idx) => {
           if (!iso) return <span key={`e-${idx}`} className="dash-month-cal-empty" />;
           const isToday = iso === today;
+          const isSelected = iso === selectedDate;
           const hasBook = booked.has(iso);
           return (
             <button
               key={iso}
               type="button"
-              className={`dash-month-cal-day${isToday ? " today" : ""}${hasBook ? " booked" : ""}`}
+              className={`dash-month-cal-day${isSelected ? " on" : ""}${isToday ? " today" : ""}${hasBook ? " booked" : ""}`}
               title={hasBook ? "Has booking" : undefined}
-              onClick={() => onChange(iso.slice(0, 7))}
+              onClick={() => onSelectDate(iso)}
             >
               {Number(iso.slice(8, 10))}
             </button>
@@ -96,11 +98,11 @@ function MonthCalendarInline({ value, onChange, today, bookedDays }) {
         })}
       </div>
       <div className="dash-month-cal-foot">
-        <button type="button" className="btn ghost small" onClick={() => onChange(today.slice(0, 7))}>
-          This month
+        <button type="button" className="btn ghost small" onClick={() => onSelectDate(today)}>
+          Today
         </button>
         <span className="muted" style={{ fontSize: 12 }}>
-          {monthShort(viewMonth)}
+          {selectedDate ? formatDate(selectedDate) : monthShort(viewMonth)}
         </span>
       </div>
     </div>
@@ -163,6 +165,7 @@ export default function Dashboard({ state, go }) {
   const [from, setFrom] = useState(currentMonthStart);
   const [to, setTo] = useState(today);
   const [filterMonth, setFilterMonth] = useState(today.slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(today);
   const [filterAsset, setFilterAsset] = useState("all");
 
   const rangeFrom = from && to && from > to ? to : from || currentMonthStart;
@@ -173,18 +176,102 @@ export default function Dashboard({ state, go }) {
   const filterMonthTo = filterMonthEnd > today ? today : filterMonthEnd;
   const isCurrentFilterMonth = filterMonth === today.slice(0, 7);
 
+  function applyMonth(monthYm, focusDay) {
+    const start = `${monthYm}-01`;
+    const end = endOfMonthISO(start);
+    const cappedEnd = end > today ? today : end;
+    setFilterMonth(monthYm);
+    const day =
+      focusDay && focusDay.slice(0, 7) === monthYm
+        ? focusDay
+        : monthYm === today.slice(0, 7)
+          ? today
+          : start;
+    setSelectedDate(day > today ? today : day);
+    setFrom(start);
+    setTo(cappedEnd < start ? start : cappedEnd);
+  }
+
+  function applyDate(iso) {
+    const day = String(iso || "").slice(0, 10);
+    if (!day) return;
+    const monthYm = day.slice(0, 7);
+    const start = `${monthYm}-01`;
+    const end = endOfMonthISO(start);
+    const cappedEnd = end > today ? today : end;
+    setSelectedDate(day);
+    setFilterMonth(monthYm);
+    setFrom(start);
+    setTo(cappedEnd < start ? start : cappedEnd);
+  }
+
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
 
   const assetOptions = useMemo(() => {
-    const halls = (state.halls || []).map((h) => ({ id: `hall:${h.id}`, label: h.name }));
-    const retreat = { id: "retreat", label: "The Royal Family Retreat" };
+    const focus = selectedDate || today;
+    const halls = (state.halls || []).map((h) => {
+      const booked = (state.hallReservations || []).some(
+        (r) => r.hallId === h.id && r.status !== "Cancelled" && hallOccupiesDate(r, focus)
+      );
+      return {
+        id: `hall:${h.id}`,
+        label: h.name,
+        kind: "Hall",
+        detail: h.capacity ? `Capacity ${h.capacity}` : "Function hall",
+        status: booked ? "Booked" : "Free",
+        booked,
+      };
+    });
+    const retreatBooked = (state.bookings || []).some(
+      (b) =>
+        isActiveBooking(b) &&
+        bookingMatchesAsset(state, b.id, "retreat") &&
+        (b.eventDate || b.checkIn) <= focus &&
+        (b.checkOut || b.eventDate || b.checkIn) >= focus
+    );
+    const retreat = {
+      id: "retreat",
+      label: "The Royal Family Retreat",
+      kind: "Stay",
+      detail: "4 rooms + kitchen",
+      status: retreatBooked ? "Booked" : "Free",
+      booked: retreatBooked,
+    };
     const types = (state.roomTypes || [])
       .filter((t) => t.id !== "rt-retreat" && !/royal family retreat/i.test(t.name || ""))
-      .map((t) => ({ id: `roomType:${t.id}`, label: t.name }));
-    return [{ id: "all", label: "All" }, ...halls, retreat, ...types];
-  }, [state.halls, state.roomTypes]);
+      .map((t) => {
+        const rooms = (state.rooms || []).filter((r) => r.typeId === t.id);
+        const live = rooms.filter((r) => !["Out of order", "Maintenance"].includes(r.status));
+        const occupied = new Set(
+          (state.roomReservations || [])
+            .filter((r) => rooms.some((rm) => rm.id === r.roomId) && roomOccupiesDate(r, focus))
+            .map((r) => r.roomId)
+        ).size;
+        return {
+          id: `roomType:${t.id}`,
+          label: t.name,
+          kind: "Rooms",
+          detail: `${live.length} rooms`,
+          status: `${occupied} occupied`,
+          booked: occupied > 0,
+        };
+      });
+    return [
+      {
+        id: "all",
+        label: "All",
+        kind: "Overview",
+        detail: "Halls + rooms",
+        status: "Full property",
+        booked: false,
+      },
+      ...halls,
+      retreat,
+      ...types,
+    ];
+  }, [state, selectedDate, today]);
 
   const filteredBookingIds = useMemo(() => {
     if (filterAsset === "all") return null;
@@ -218,22 +305,24 @@ export default function Dashboard({ state, go }) {
   const roomScopeIds = useMemo(() => new Set(roomsInScope.map((r) => r.id)), [roomsInScope]);
 
   const occ = useMemo(() => {
-    if (filterAsset === "all") return occupancyStats(state, today);
+    const focus = selectedDate || today;
+    if (filterAsset === "all") return occupancyStats(state, focus);
     if (filterAsset.startsWith("roomType:")) {
       const live = roomsInScope.filter((r) => !["Out of order", "Maintenance"].includes(r.status));
       const occupied = new Set(
         (state.roomReservations || [])
-          .filter((r) => roomScopeIds.has(r.roomId) && roomOccupiesDate(r, today))
+          .filter((r) => roomScopeIds.has(r.roomId) && roomOccupiesDate(r, focus))
           .map((r) => r.roomId)
       ).size;
       return { occupied, live: live.length, occPct: live.length ? Math.round((occupied / live.length) * 100) : 0 };
     }
     return { occupied: 0, live: 0, occPct: 0 };
-  }, [state, today, filterAsset, roomsInScope, roomScopeIds]);
+  }, [state, today, selectedDate, filterAsset, roomsInScope, roomScopeIds]);
 
   const todayHalls = useMemo(() => {
+    const focus = selectedDate || today;
     let halls = (state.halls || []).filter((h) =>
-      (state.hallReservations || []).some((r) => r.hallId === h.id && hallOccupiesDate(r, today))
+      (state.hallReservations || []).some((r) => r.hallId === h.id && hallOccupiesDate(r, focus))
     );
     if (filterAsset.startsWith("hall:")) {
       const hallId = filterAsset.slice(5);
@@ -243,14 +332,19 @@ export default function Dashboard({ state, go }) {
         (b) =>
           isActiveBooking(b) &&
           bookingMatchesAsset(state, b.id, "retreat") &&
-          ((b.eventDate || b.checkIn) <= today && (b.checkOut || b.eventDate || b.checkIn) >= today)
+          ((b.eventDate || b.checkIn) <= focus && (b.checkOut || b.eventDate || b.checkIn) >= focus)
       );
       return retreatOn ? [{ id: "retreat", name: "The Royal Family Retreat" }] : [];
     } else if (filterAsset.startsWith("roomType:")) {
       return [];
     }
     return halls;
-  }, [state, today, filterAsset]);
+  }, [state, today, selectedDate, filterAsset]);
+
+  const dayIncome = useMemo(
+    () => paymentsIncome(state, selectedDate || today, selectedDate || today, filteredBookingIds),
+    [state, selectedDate, today, filteredBookingIds]
+  );
 
   const upcomingEvents = useMemo(() => {
     if (filterAsset.startsWith("roomType:")) {
@@ -329,12 +423,18 @@ export default function Dashboard({ state, go }) {
   const totalRooms = filterAsset.startsWith("hall:") || filterAsset === "retreat" ? 0 : roomsInScope.length;
   const availableToday = Math.max(0, occ.live - occ.occupied);
   const showRoomPanel = filterAsset === "all" || filterAsset.startsWith("roomType:");
+  const showRetreatPanel = filterAsset === "retreat";
+  const showHallPanel = filterAsset.startsWith("hall:");
+  const retreatBooked = showRetreatPanel && todayHalls.length > 0;
+  const hallBooked = showHallPanel && todayHalls.length > 0;
+  const selectedHall = showHallPanel
+    ? (state.halls || []).find((h) => h.id === filterAsset.slice(5))
+    : null;
 
   const monthIncome = useMemo(
     () => paymentsIncome(state, filterMonthStart, filterMonthTo, filteredBookingIds),
     [state, filterMonthStart, filterMonthTo, filteredBookingIds]
   );
-  const dayIncome = useMemo(() => paymentsIncome(state, today, today, filteredBookingIds), [state, today, filteredBookingIds]);
   const weekIncome = useMemo(
     () => paymentsIncome(state, weekStart, today, filteredBookingIds),
     [state, weekStart, today, filteredBookingIds]
@@ -348,6 +448,72 @@ export default function Dashboard({ state, go }) {
     [state, yearStart, today, filteredBookingIds]
   );
 
+  const cancelRefundStats = useMemo(() => {
+    const inMonth = (iso) => {
+      const day = String(iso || "").slice(0, 10);
+      return day && day >= filterMonthStart && day <= filterMonthEnd;
+    };
+    const bookingOk = (bookingId) => {
+      if (!bookingId) return filterAsset === "all";
+      if (filteredBookingIds) return filteredBookingIds.has(bookingId);
+      if (filterAsset !== "all") return bookingMatchesAsset(state, bookingId, filterAsset);
+      return true;
+    };
+
+    const cancelledRooms = (state.roomReservations || []).filter((r) => {
+      if (r.status !== "Cancelled") return false;
+      if (!bookingOk(r.bookingId)) return false;
+      const when = r.cancelledAt || r.checkIn;
+      return inMonth(when);
+    });
+    const roomsNoRefund = cancelledRooms.filter((r) => r.noRefund !== false);
+    const chargesDroppedNoRefund = roomsNoRefund.reduce((s, r) => s + Number(r.chargesDropped || 0), 0);
+
+    const cancelledBookings = (state.bookings || []).filter((b) => {
+      if (b.status !== "Cancelled" && b.status !== "Refunded") return false;
+      if (!bookingOk(b.id)) return false;
+      return inMonth(b.cancelledAt || b.eventDate || b.checkIn);
+    }).length;
+
+    const bookingIds = new Set((state.bookings || []).map((b) => b.id));
+    const refundPaid = (state.payments || [])
+      .filter((p) => {
+        if (p.type !== "Refund" && p.type !== "Deposit return") return false;
+        const st = String(p.status || "SUCCESS").toUpperCase();
+        if (st === "REVERSED" || st === "FAILED" || st === "REJECTED") return false;
+        if (p.bookingId && !bookingIds.has(p.bookingId)) return false;
+        if (!bookingOk(p.bookingId)) return false;
+        return inMonth(p.at || p.date);
+      })
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+
+    const refundPending = (state.refunds || [])
+      .filter((r) => {
+        if (String(r.status || "").toUpperCase() !== "PENDING") return false;
+        if (!bookingOk(r.bookingId)) return false;
+        return inMonth(r.at || r.date || r.createdAt);
+      })
+      .reduce((s, r) => s + Number(r.amount || 0), 0);
+
+    /** Money still with the hotel that guests have overpaid (not yet refunded). */
+    let refundMoneyWithHotel = 0;
+    for (const b of state.bookings || []) {
+      if (!bookingOk(b.id)) continue;
+      const { totals } = bookingFolio(state, b.id);
+      if (totals.balance < 0) refundMoneyWithHotel += Math.abs(totals.balance);
+    }
+
+    return {
+      roomsCancelled: cancelledRooms.length,
+      roomsNoRefund: roomsNoRefund.length,
+      chargesDroppedNoRefund,
+      cancelledBookings,
+      refundPaid,
+      refundPending,
+      refundMoneyWithHotel,
+    };
+  }, [state, filterMonthStart, filterMonthEnd, filterAsset, filteredBookingIds]);
+
   const monthCashAll = useMemo(
     () => cashbookReport(state, filterMonthStart, filterMonthTo),
     [state, filterMonthStart, filterMonthTo]
@@ -356,12 +522,15 @@ export default function Dashboard({ state, go }) {
 
   const assetLabel = assetOptions.find((a) => a.id === filterAsset)?.label || "All";
 
+  const focusDay = selectedDate || today;
+  const focusIsToday = focusDay === today;
+
   const hallHeadline =
     todayHalls.length === 0
       ? filterAsset.startsWith("roomType:")
         ? `${occ.occupied} occupied · ${availableToday} free`
         : filterAsset === "retreat"
-          ? "Not booked today"
+          ? "Not booked"
           : "No hall booked"
       : todayHalls.length === 1
         ? todayHalls[0].name
@@ -369,35 +538,35 @@ export default function Dashboard({ state, go }) {
   const hallSub =
     todayHalls.length === 0
       ? filterAsset.startsWith("roomType:")
-        ? `${assetLabel} · today`
+        ? `${assetLabel} · ${formatDate(focusDay)}`
         : filterAsset === "all"
-          ? "Free today · all halls"
-          : "Free today"
+          ? `Free · ${formatDate(focusDay)}`
+          : `Free · ${formatDate(focusDay)}`
       : todayHalls.length === 1
         ? filterAsset === "all"
-          ? "Event running · all halls"
-          : "Event running"
-        : `${todayHalls.length} events running`;
+          ? `Event · ${formatDate(focusDay)}`
+          : `Event · ${formatDate(focusDay)}`
+        : `${todayHalls.length} events · ${formatDate(focusDay)}`;
 
   const todayBookingCardTitle =
     filterAsset === "all"
-      ? "Today's all booking"
+      ? focusIsToday
+        ? "Today's all booking"
+        : `All booking · ${formatDate(focusDay)}`
       : filterAsset.startsWith("hall:")
-        ? `Today's ${assetLabel}`
+        ? `${assetLabel} · ${formatDate(focusDay)}`
         : filterAsset === "retreat"
-          ? "Today's Royal Family Retreat"
+          ? `The Royal Family Retreat · ${formatDate(focusDay)}`
           : filterAsset.startsWith("roomType:")
-            ? `Today's ${assetLabel}`
-            : `Today's ${assetLabel}`;
+            ? `${assetLabel} · ${formatDate(focusDay)}`
+            : `${assetLabel} · ${formatDate(focusDay)}`;
 
   function setThisMonth() {
-    setFrom(currentMonthStart);
-    setTo(today);
+    applyMonth(today.slice(0, 7), today);
   }
 
   function setTodayOnly() {
-    setFrom(today);
-    setTo(today);
+    applyDate(today);
   }
 
   return (
@@ -419,36 +588,31 @@ export default function Dashboard({ state, go }) {
           <div className="dash-filter-month">
             <span>Month calendar</span>
             <MonthCalendarInline
-              value={filterMonth}
-              onChange={setFilterMonth}
+              monthValue={filterMonth}
+              selectedDate={selectedDate}
+              onSelectDate={applyDate}
+              onSelectMonth={applyMonth}
               today={today}
               bookedDays={bookedDaysInFilterMonth}
             />
           </div>
           <div className="dash-filter-assets">
             <span className="dash-filter-label">Function hall / rooms</span>
-            <div className="dash-filter-chips">
+            <div className="dash-asset-grid">
               {assetOptions.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
-                  className={`dash-chip${filterAsset === opt.id ? " on" : ""}`}
+                  className={`dash-asset-card${filterAsset === opt.id ? " on" : ""}${opt.booked ? " booked" : ""}`}
                   onClick={() => setFilterAsset(opt.id)}
                 >
-                  {opt.label}
+                  <span className="dash-asset-kind">{opt.kind}</span>
+                  <span className="dash-asset-name">{opt.label}</span>
+                  <span className="dash-asset-detail">{opt.detail}</span>
+                  <span className={`dash-asset-status${opt.booked ? " busy" : ""}`}>{opt.status}</span>
                 </button>
               ))}
             </div>
-            <p className="muted dash-filter-note" style={{ marginTop: 10 }}>
-              Showing overview for <strong>{monthShort(filterMonthStart)}</strong>
-              {filterAsset !== "all" ? (
-                <>
-                  {" "}
-                  · <strong>{assetLabel}</strong>
-                </>
-              ) : null}
-              . Days with a booking mark are highlighted. Today / Period money below stay unfiltered.
-            </p>
           </div>
         </div>
       </div>
@@ -483,6 +647,39 @@ export default function Dashboard({ state, go }) {
         </button>
       </div>
 
+      <div className="panel dash-room-status">
+        <div className="panel-head">
+          <h3>Accounts · refunds · {monthShort(filterMonthStart)}</h3>
+          <button type="button" className="btn ghost small" onClick={() => go("billing")}>
+            Payment &amp; Invoice
+          </button>
+        </div>
+        <div className="dash-room-grid dash-refund-grid">
+          <div className="dash-room-stat rs-hold">
+            <span className="dash-ov-k">Guest credit with hotel</span>
+            <span className="dash-ov-v">{m(cancelRefundStats.refundMoneyWithHotel)}</span>
+            <span className="dash-ov-s">Extra money held (paid − bill). Use Refund to return.</span>
+          </div>
+          <div className="dash-room-stat rs-free">
+            <span className="dash-ov-k">Refunds paid out</span>
+            <span className="dash-ov-v">{m(cancelRefundStats.refundPaid)}</span>
+            <span className="dash-ov-s">Cash/UPI already returned to guests this month</span>
+          </div>
+          <div className="dash-room-stat rs-total">
+            <span className="dash-ov-k">Refunds awaiting approval</span>
+            <span className="dash-ov-v">{m(cancelRefundStats.refundPending)}</span>
+            <span className="dash-ov-s">Waiting for manager approval</span>
+          </div>
+          <div className="dash-room-stat rs-occ">
+            <span className="dash-ov-k">Rooms cancelled</span>
+            <span className="dash-ov-v">{cancelRefundStats.roomsCancelled}</span>
+            <span className="dash-ov-s">
+              Count only · {cancelRefundStats.roomsNoRefund} cancelled without posting a refund
+            </span>
+          </div>
+        </div>
+      </div>
+
       {showRoomPanel ? (
         <div className="panel dash-room-status">
           <div className="panel-head">
@@ -497,16 +694,76 @@ export default function Dashboard({ state, go }) {
               <span className="dash-ov-v">{totalRooms}</span>
             </div>
             <div className="dash-room-stat rs-occ">
-              <span className="dash-ov-k">Occupied today</span>
+              <span className="dash-ov-k">Occupied</span>
               <span className="dash-ov-v">{occ.occupied}</span>
             </div>
             <div className="dash-room-stat rs-free">
-              <span className="dash-ov-k">Available today</span>
+              <span className="dash-ov-k">Available</span>
               <span className="dash-ov-v">{availableToday}</span>
             </div>
             <div className="dash-room-stat rs-in">
-              <span className="dash-ov-k">Check-ins today</span>
+              <span className="dash-ov-k">Check-ins</span>
               <span className="dash-ov-v">{checkInsToday}</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showRetreatPanel ? (
+        <div className="panel dash-room-status">
+          <div className="panel-head">
+            <h3>The Royal Family Retreat</h3>
+            <button type="button" className="btn ghost small" onClick={() => go("reserve")}>
+              Book retreat
+            </button>
+          </div>
+          <div className="dash-room-grid">
+            <div className={`dash-room-stat ${retreatBooked ? "rs-occ" : "rs-free"}`}>
+              <span className="dash-ov-k">Status · {formatDate(focusDay)}</span>
+              <span className="dash-ov-v">{retreatBooked ? "Booked" : "Free"}</span>
+            </div>
+            <div className="dash-room-stat rs-total">
+              <span className="dash-ov-k">Package</span>
+              <span className="dash-ov-v" style={{ fontSize: 16 }}>
+                4 rooms + kitchen
+              </span>
+            </div>
+            <div className="dash-room-stat rs-in">
+              <span className="dash-ov-k">This month bookings</span>
+              <span className="dash-ov-v">{monthBookings}</span>
+            </div>
+            <div className="dash-room-stat rs-total">
+              <span className="dash-ov-k">Day revenue</span>
+              <span className="dash-ov-v">{m(dayIncome)}</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showHallPanel ? (
+        <div className="panel dash-room-status">
+          <div className="panel-head">
+            <h3>{selectedHall?.name || assetLabel}</h3>
+            <button type="button" className="btn ghost small" onClick={() => go("calendar")}>
+              Calendar
+            </button>
+          </div>
+          <div className="dash-room-grid">
+            <div className={`dash-room-stat ${hallBooked ? "rs-occ" : "rs-free"}`}>
+              <span className="dash-ov-k">Status · {formatDate(focusDay)}</span>
+              <span className="dash-ov-v">{hallBooked ? "Booked" : "Free"}</span>
+            </div>
+            <div className="dash-room-stat rs-total">
+              <span className="dash-ov-k">Capacity</span>
+              <span className="dash-ov-v">{selectedHall?.capacity || "—"}</span>
+            </div>
+            <div className="dash-room-stat rs-in">
+              <span className="dash-ov-k">This month bookings</span>
+              <span className="dash-ov-v">{monthBookings}</span>
+            </div>
+            <div className="dash-room-stat rs-total">
+              <span className="dash-ov-k">Day revenue</span>
+              <span className="dash-ov-v">{m(dayIncome)}</span>
             </div>
           </div>
         </div>
@@ -520,7 +777,7 @@ export default function Dashboard({ state, go }) {
           <div className="dash-report-item">
             <span className="dash-ov-k">Day wise</span>
             <span className="dash-ov-v">{m(dayIncome)}</span>
-            <span className="dash-ov-s">Revenue · {formatDate(today)}</span>
+            <span className="dash-ov-s">Revenue · {formatDate(focusDay)}</span>
           </div>
           <div className="dash-report-item">
             <span className="dash-ov-k">Week wise</span>
@@ -685,11 +942,31 @@ export default function Dashboard({ state, go }) {
         <div className="dash-period-filters">
           <label>
             From
-            <input type="date" value={rangeFrom} max={rangeTo} onChange={(e) => setFrom(e.target.value || currentMonthStart)} />
+            <input
+              type="date"
+              value={rangeFrom}
+              max={rangeTo}
+              onChange={(e) => {
+                const v = e.target.value || currentMonthStart;
+                setFrom(v);
+                setFilterMonth(v.slice(0, 7));
+                setSelectedDate(v);
+              }}
+            />
           </label>
           <label>
             To
-            <input type="date" value={rangeTo} min={rangeFrom} max={today} onChange={(e) => setTo(e.target.value || today)} />
+            <input
+              type="date"
+              value={rangeTo}
+              min={rangeFrom}
+              max={today}
+              onChange={(e) => {
+                const v = e.target.value || today;
+                setTo(v);
+                if (v.slice(0, 7) === filterMonth) setSelectedDate(v);
+              }}
+            />
           </label>
           <button className="btn ghost small" type="button" onClick={setThisMonth}>
             This month

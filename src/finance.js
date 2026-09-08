@@ -37,13 +37,14 @@ export function chargeLabel(id) {
 }
 
 export function paymentStatus(totals, booking) {
-  if (booking && ["Cancelled", "Refunded"].includes(booking.status)) return "Cancelled";
-  const total = Number(totals?.total || 0);
+  // Whole-booking cancel only — room cancel or credit refund must not look like "Cancelled".
+  if (booking?.status === "Cancelled") return "Cancelled";
   const paid = Number(totals?.paid || 0);
   const balance = Number(totals?.balance || 0);
   if (totals?.closed) return "Cancelled";
-  if (total <= 0) return "—";
-  if (balance <= 0) return "Paid";
+  if (Number(totals?.total || 0) <= 0 && paid <= 0) return "—";
+  if (balance < 0) return "Credit";
+  if (balance === 0 && paid > 0) return "Paid";
   if (paid > 0) return "Partially Paid";
   return "Pending";
 }

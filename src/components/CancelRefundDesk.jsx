@@ -44,8 +44,8 @@ export function BookingFinanceBar({ state, bookingId }) {
         <strong>{m(sum.netPaid)}</strong>
       </div>
       <div>
-        <span className="muted">Balance due</span>
-        <strong>{m(sum.balance)}</strong>
+        <span className="muted">{sum.balance < 0 ? "Guest credit" : "Balance due"}</span>
+        <strong>{m(Math.abs(sum.balance))}</strong>
       </div>
       <div>
         <span className="muted">Invoice</span>

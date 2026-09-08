@@ -279,6 +279,24 @@ function load() {
     if (!Array.isArray(parsed.agreements)) parsed.agreements = [];
     if (!Array.isArray(parsed.refunds)) parsed.refunds = [];
     if (!Array.isArray(parsed.expenses)) parsed.expenses = [];
+    // Credit refund used to wrongly set booking status "Refunded" (shown as Cancelled).
+    // Restore live bookings that still have an active hall/room stay.
+    let healedRefunded = false;
+    for (const bk of parsed.bookings || []) {
+      if (bk.status !== "Refunded") continue;
+      const liveStay =
+        (parsed.roomReservations || []).some(
+          (r) => r.bookingId === bk.id && !["Cancelled", "Checked out"].includes(r.status)
+        ) ||
+        (parsed.hallReservations || []).some(
+          (r) => r.bookingId === bk.id && r.status !== "Cancelled"
+        );
+      if (liveStay) {
+        bk.status = "Confirmed";
+        healedRefunded = true;
+      }
+    }
+    if (healedRefunded) persist(parsed);
     parsed.rooms = (parsed.rooms || []).map((r) => ({
       ...r,
       status: occupancyOf(r),
@@ -1266,10 +1284,7 @@ export function addPayment(folioId, payload) {
   };
   pay.receiptNo = inv.number;
   state.invoices.unshift(inv);
-  if (pay.type === "Refund") {
-    const bk = state.bookings.find((b) => b.id === folio?.bookingId);
-    if (bk && bk.status !== "Cancelled") bk.status = "Refunded";
-  }
+  // Standalone refund is money only — do not mark a live booking Cancelled/Refunded.
   const { totals } = bookingFolio(state, folio?.bookingId);
   if (totals.balance <= 0 && folio && folio.status !== "Cancelled") folio.status = "Settled";
   audit(
@@ -1707,7 +1722,7 @@ export function processRefund(bookingId, payload = {}) {
     row.paymentId = pay.id;
     row.receiptNo = inv.number;
     state.invoices.unshift(inv);
-    if (bk.status !== "Cancelled") bk.status = "Refunded";
+    // Money refund only — booking stays open unless user cancelled the whole booking.
   }
   state.refunds.unshift(row);
   audit(state, needsApproval ? "Refund requested" : "Refund completed", row.number, `${row.method} ${amount}`, {
@@ -1724,16 +1739,28 @@ export function cancelRoomStay(resId) {
   if (!res || res.status === "Cancelled") return { error: "Room stay not found" };
   const bookingId = res.bookingId;
   const room = state.rooms.find((r) => r.id === res.roomId);
+  const folio = state.folios.find((f) => f.bookingId === bookingId);
+  const roomNo = room?.number || "";
+  let chargesDropped = 0;
+  if (folio && roomNo) {
+    const dropped = (state.folioLines || []).filter(
+      (l) =>
+        l.folioId === folio.id &&
+        l.category === "room" &&
+        String(l.description || "").includes(roomNo)
+    );
+    chargesDropped = dropped.reduce((s, l) => s + Number(l.amount || 0), 0);
+  }
   res.status = "Cancelled";
   res.cancelledAt = new Date().toISOString();
+  res.noRefund = true;
+  res.chargesDropped = chargesDropped;
   if (!liveStaysForRoom(state, res.roomId, bookingId)) {
     state.rooms = state.rooms.map((r) =>
       r.id === res.roomId && ["Occupied", "Reserved"].includes(r.status) ? { ...r, status: "Available" } : r
     );
   }
-  const folio = state.folios.find((f) => f.bookingId === bookingId);
   if (folio) {
-    const roomNo = room?.number || "";
     state.folioLines = (state.folioLines || []).filter((l) => {
       if (l.folioId !== folio.id) return true;
       if (l.category !== "room") return true;
@@ -1743,7 +1770,12 @@ export function cancelRoomStay(resId) {
     if (folio.status === "Settled") folio.status = "Open";
   }
   const bk = state.bookings.find((b) => b.id === bookingId);
-  audit(state, "Room stay cancelled", bk?.number || bookingId, `Room ${room?.number || res.roomId} · no refund`);
+  audit(
+    state,
+    "Room stay cancelled",
+    bk?.number || bookingId,
+    `Room ${room?.number || res.roomId} · no refund · charges dropped ${chargesDropped}`
+  );
   return persist(state);
 }
 

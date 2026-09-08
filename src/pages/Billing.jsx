@@ -23,6 +23,19 @@ function payKind(p) {
   return "Settlement";
 }
 
+function livePays(pays) {
+  return (pays || []).filter((p) => {
+    const st = String(p.status || "SUCCESS").toUpperCase();
+    return st !== "REVERSED" && st !== "FAILED" && st !== "REJECTED";
+  });
+}
+
+function sumPayType(pays, type) {
+  return livePays(pays)
+    .filter((p) => p.type === type)
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+}
+
 function stayFor(state, booking) {
   const rooms = (state.roomReservations || []).filter((r) => r.bookingId === booking.id && r.status !== "Cancelled");
   const halls = (state.hallReservations || []).filter((r) => r.bookingId === booking.id && r.status !== "Cancelled");
@@ -47,17 +60,32 @@ function stayFor(state, booking) {
 }
 
 function ledger(pays, totals) {
-  const advance = pays
+  const live = (pays || []).filter((p) => {
+    const st = String(p.status || "SUCCESS").toUpperCase();
+    return st !== "REVERSED" && st !== "FAILED" && st !== "REJECTED";
+  });
+  const advance = live
     .filter((p) => p.type === "Advance")
     .reduce((s, p) => s + Number(p.amount || 0), 0);
-  const settled = pays.filter((p) => p.type !== "Advance" && p.type !== "Refund");
-  let settlement = "";
-  if (totals.balance <= 0 && settled.length) {
-    settlement = settled.map((p) => p.method).filter(Boolean).join(", ");
-  } else if (totals.balance <= 0 && advance > 0 && !settled.length) {
-    settlement = "Advance";
-  }
-  return { advance, settlement };
+  const refunds = live
+    .filter((p) => p.type === "Refund" || p.type === "Deposit return")
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const collections = live
+    .filter((p) => !["Refund", "Deposit return", "Deposit"].includes(p.type))
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const paidNet = collections - refunds;
+  const methods = [
+    ...new Set(
+      live
+        .filter((p) => !["Refund", "Deposit return", "Deposit"].includes(p.type))
+        .map((p) => p.method)
+        .filter(Boolean)
+    ),
+  ];
+  let settlement = methods.join(", ");
+  if (!settlement && refunds > 0) settlement = "Refunded";
+  if (!settlement && totals.balance <= 0 && advance > 0) settlement = "Advance";
+  return { advance, refunds, collections, paidNet, settlement };
 }
 
 function partyMatch(state, booking, pays, q) {
@@ -132,7 +160,8 @@ export default function Billing({
         .filter(({ b, pays, totals, stay }) => {
           if (!partyMatch(state, b, pays, partyQuery)) return false;
           if (balanceFilter === "due" && !(totals.balance > 0)) return false;
-          if (balanceFilter === "settled" && totals.balance > 0) return false;
+          if (balanceFilter === "refund" && !(totals.balance < 0)) return false;
+          if (balanceFilter === "settled" && totals.balance !== 0) return false;
           if (kindFilter === "hall" && stay.kind === "room") return false;
           if (kindFilter === "room" && stay.kind === "function") return false;
           if (modeFilter !== "all") {
@@ -345,18 +374,25 @@ export default function Billing({
                 </>
               )}
               <tr><td colSpan={3}><strong>Total</strong></td><td><strong>{m(totals.total)}</strong></td></tr>
-              <tr><td colSpan={3}>Advance paid</td><td>{m(pays.filter((p) => p.type === "Advance").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
-              <tr><td colSpan={3}>Final payment</td><td>{m(pays.filter((p) => p.type === "Final").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
-              <tr><td colSpan={3}>Other collections</td><td>{m(pays.filter((p) => !["Advance", "Final", "Refund", "Deposit return"].includes(p.type)).reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
-              <tr><td colSpan={3}>Refunds</td><td>{m(pays.filter((p) => p.type === "Refund" || p.type === "Deposit return").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
+              <tr><td colSpan={3}>Advance paid</td><td>{m(sumPayType(pays, "Advance"))}</td></tr>
+              <tr><td colSpan={3}>Final payment</td><td>{m(sumPayType(pays, "Final"))}</td></tr>
+              <tr><td colSpan={3}>Other collections</td><td>{m(livePays(pays).filter((p) => !["Advance", "Final", "Refund", "Deposit return", "Deposit"].includes(p.type)).reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
+              <tr><td colSpan={3}>Refunds</td><td>{m(livePays(pays).filter((p) => p.type === "Refund" || p.type === "Deposit return").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
               <tr><td colSpan={3}>Paid (all, net)</td><td>{m(totals.paid)}</td></tr>
               {Number(totals.deposit) > 0 && (
                 <tr><td colSpan={3}>Security deposit held</td><td>{m(totals.deposit)}</td></tr>
               )}
               <tr className={totals.balance > 0 ? "due-row" : ""}>
-                <td colSpan={3}><strong>Remaining to collect</strong></td>
+                <td colSpan={3}>
+                  <strong>{totals.balance < 0 ? "Guest credit with hotel" : "Remaining to collect"}</strong>
+                </td>
                 <td>
-                  <strong>{m(totals.balance)}</strong>
+                  <strong>{totals.balance < 0 ? m(Math.abs(totals.balance)) : m(totals.balance)}</strong>
+                  {totals.balance < 0 && (
+                    <div className="muted" style={{ fontWeight: 400, fontSize: 12 }}>
+                      Received {m(totals.paid)} − bill {m(totals.total)}. Use Refund if returning money.
+                    </div>
+                  )}
                   {(booking.status === "Cancelled" || booking.status === "Refunded") && (
                     <div className="muted" style={{ fontWeight: 400, fontSize: 12 }}>Booking cancelled — closed</div>
                   )}
@@ -404,6 +440,14 @@ export default function Billing({
               <strong>{paymentStatus(totals, booking)} · {m(totals.balance)}</strong>
               <p className="muted" style={{ margin: "4px 0 0" }}>
                 Total {m(totals.total)} − advance and payments {m(totals.paid)}. Use Payments → Save settlement when the guest pays the rest.
+              </p>
+            </div>
+          ) : totals.balance < 0 ? (
+            <div>
+              <div className="muted">Payment status · Guest credit</div>
+              <strong>{paymentStatus(totals, booking)} · {m(Math.abs(totals.balance))}</strong>
+              <p className="muted" style={{ margin: "4px 0 0" }}>
+                Bill {m(totals.total)} · received {m(totals.paid)}. Credit is money with hotel after bill dropped (cancel room / discount) — process Refund to return it, or keep as credit.
               </p>
             </div>
           ) : (
@@ -697,7 +741,8 @@ export default function Billing({
             Balance
             <select value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)}>
               <option value="all">All parties</option>
-              <option value="due">Balance due</option>
+              <option value="due">To collect</option>
+              <option value="refund">To refund</option>
               <option value="settled">Fully settled</option>
             </select>
           </label>
@@ -724,7 +769,7 @@ export default function Billing({
           </label>
         </div>
         <p className="muted" style={{ margin: "10px 0 0" }}>
-          Click a row to open the bill. Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
+          Click a row to open the bill. <strong>To collect</strong> = customer still owes. <strong>To refund</strong> = hotel should return (or keep as credit). Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
         </p>
       </div>
       <div className="panel">
@@ -734,13 +779,15 @@ export default function Billing({
               <th>Party / booking no.</th>
               <th>Gayatri GST</th>
               <th>Customer GST</th>
-              <th>Room number</th>
+              <th>Room / hall</th>
               <th>Date from</th>
               <th>Date to</th>
               <th>Total amount</th>
+              <th>Paid</th>
               <th>Advance</th>
               <th>Last paid</th>
-              <th>Balance</th>
+              <th>To collect</th>
+              <th>To refund</th>
               <th>Status</th>
               <th>GST</th>
               <th>Settlement</th>
@@ -749,7 +796,7 @@ export default function Billing({
           <tbody>
             {!rows.length && (
               <tr>
-                <td colSpan={13} className="muted">
+                <td colSpan={15} className="muted">
                   {partyQuery ? "No party matches that booking no. / name / phone / ref." : "No active bills."}
                 </td>
               </tr>
@@ -757,7 +804,16 @@ export default function Billing({
             {rows.map(({ b, pays, totals, stay }) => {
               const g = state.guests.find((x) => x.id === b.guestId);
               const { advance, settlement } = ledger(pays, totals);
-              const lastPay = pays.filter((p) => p.at).sort((a, c) => String(c.at).localeCompare(String(a.at)))[0];
+              const lastPay = pays
+                .filter((p) => {
+                  const st = String(p.status || "SUCCESS").toUpperCase();
+                  return p.at && st !== "REVERSED" && st !== "FAILED" && st !== "REJECTED";
+                })
+                .sort((a, c) => String(c.at).localeCompare(String(a.at)))[0];
+              const bal = Number(totals.balance) || 0;
+              const paidShown = Number(totals.paid) || 0;
+              const toCollect = bal > 0 ? bal : 0;
+              const toRefund = bal < 0 ? Math.abs(bal) : 0;
               return (
                 <tr key={b.id} className="clickable" onClick={() => setOpen(b.id)}>
                   <td>
@@ -771,12 +827,20 @@ export default function Billing({
                   <td>{formatDateDMY(stay.from)}</td>
                   <td>{formatDateDMY(stay.to)}</td>
                   <td>{m(totals.total)}</td>
+                  <td title={toRefund > 0 ? `Bill ${m(totals.total)} · received ${m(paidShown)}` : undefined}>
+                    {m(paidShown)}
+                  </td>
                   <td>{m(advance)}</td>
                   <td>{lastPay ? formatDateTime(lastPay.at) : "—"}</td>
-                  <td>{m(Math.max(0, totals.balance))}</td>
+                  <td className={toCollect > 0 ? "due-row" : undefined} title={toCollect > 0 ? "Collect from customer" : undefined}>
+                    {toCollect > 0 ? m(toCollect) : "—"}
+                  </td>
+                  <td title={toRefund > 0 ? "Return to customer (Refund)" : undefined}>
+                    {toRefund > 0 ? m(toRefund) : "—"}
+                  </td>
                   <td>{paymentStatus(totals, b)}</td>
                   <td>{totals.gstMode === "without" ? "Without GST" : "With GST"}</td>
-                  <td>{settlement || ""}</td>
+                  <td>{settlement || "—"}</td>
                 </tr>
               );
             })}

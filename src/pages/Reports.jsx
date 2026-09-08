@@ -323,23 +323,55 @@ export default function Reports({ state, go }) {
     } else if (reportTab === "cashbook") {
       body = [
         ["Opening balance", book.opening],
-        ["Room income", book.room],
-        ["Function hall income", book.hall],
-        ["Food income", book.food],
-        ["Other income", book.otherIncome],
+        ["Collections (gross in)", book.incomeGross],
+        ["Customer refunds (out)", book.refundTotal],
+        ["Room income (net share)", book.room],
+        ["Function hall income (net share)", book.hall],
+        ["Food income (net share)", book.food],
+        ["Other income (net share)", book.otherIncome],
         ["Advances received", book.advance],
-        ["Total income", book.incomeTotal],
+        ["Net income (collections − refunds)", book.incomeTotal],
         [],
         ...Object.entries(book.expenseByCat).map(([k, v]) => [expenseLabel(k), v]),
         ["Total expenses", book.expenseTotal],
-        ["Net income", book.net],
+        ["Net after expenses", book.net],
         ["Closing balance", book.closing],
         [],
-        ["Cash", book.rails.cash],
-        ["UPI", book.rails.upi],
-        ["Card", book.rails.card],
-        ["Bank", book.rails.bank],
+        ["Cash (net)", book.rails.cash],
+        ["UPI (net)", book.rails.upi],
+        ["Card (net)", book.rails.card],
+        ["Bank (net)", book.rails.bank],
         ["Credit / Pending (all open)", book.creditPending],
+        [],
+        ["FULL PAYMENT & REFUND REGISTER"],
+        [
+          "Date",
+          "Date-time",
+          "In/Out",
+          "Kind",
+          "Mode",
+          "Amount",
+          "Guest",
+          "Phone",
+          "Bill no",
+          "Receipt",
+          "Ref / UTR",
+          "Notes",
+        ],
+        ...(book.ledger || []).map((r) => [
+          formatDateDMY(r.day),
+          r.at ? formatDateTime(r.at) : "",
+          r.flow,
+          r.kind,
+          r.method,
+          r.amount,
+          r.guest,
+          r.phone,
+          r.billNo,
+          r.receiptNo,
+          r.ref,
+          r.notes,
+        ]),
       ];
     } else if (kind === "all") {
       body = [
@@ -367,7 +399,7 @@ export default function Reports({ state, go }) {
           reportTab === "cancellations"
             ? `${allCancelled.length} cancellation record(s) on file. Filter by cancellation date.`
             : reportTab === "cashbook"
-              ? "Opening + Income − Expenses = Closing. Day / week / month / 6-month / year or custom range."
+              ? "Full cash register: every collection and refund line (e.g. Sriram paid + cash refund). Day / week / month or custom range."
               : reportTab === "outstanding"
                 ? "Customers with balance still to collect."
                 : reportTab === "gst"
@@ -590,14 +622,65 @@ export default function Reports({ state, go }) {
         <>
           <div className="kpis">
             <Kpi k="Opening balance" v={m(book.opening)} s="Before range start" tone="a" />
-            <Kpi k="Total income" v={m(book.incomeTotal)} s={`${book.paymentCount} payment(s)`} tone="b" />
-            <Kpi k="Total expenses" v={m(book.expenseTotal)} s={`${book.expenses.length} entry(ies)`} tone="e" />
-            <Kpi k="Net income" v={m(book.net)} s="Income − expenses" tone="c" />
-            <Kpi k="Closing balance" v={m(book.closing)} s="Opening + net" tone="d" />
+            <Kpi k="Collections in" v={m(book.incomeGross)} s={`${book.paymentCount} receipt(s)`} tone="b" />
+            <Kpi k="Refunds out" v={m(book.refundTotal)} s={`${book.refundCount} refund(s)`} tone="e" />
+            <Kpi k="Net money in" v={m(book.incomeTotal)} s="Collections − refunds" tone="c" />
+            <Kpi k="Expenses" v={m(book.expenseTotal)} s={`${book.expenses.length} entry(ies)`} tone="e" />
+            <Kpi k="Closing balance" v={m(book.closing)} s="Opening + net − expenses" tone="d" />
+          </div>
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <div className="panel-head">
+              <h3>Full payment &amp; refund register</h3>
+              <span className="muted">{(book.ledger || []).length} line(s) · {rangeLabel}</span>
+            </div>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Every cash movement in this period — collection and refund separately (not only net). Example: collection ₹10,266 then refund ₹2,950 both appear.
+            </p>
+            <table className="report-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>In / Out</th>
+                  <th>Kind</th>
+                  <th>Mode</th>
+                  <th>Guest</th>
+                  <th>Bill no</th>
+                  <th className="num">Amount</th>
+                  <th>Receipt / Ref</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!(book.ledger || []).length && (
+                  <tr>
+                    <td colSpan={9} className="muted">No payments, refunds or expenses in this range.</td>
+                  </tr>
+                )}
+                {(book.ledger || []).map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      {formatDateDMY(r.day)}
+                      {r.at ? <div className="muted">{formatDateTime(r.at)}</div> : null}
+                    </td>
+                    <td>{r.flow}</td>
+                    <td>{r.kind}</td>
+                    <td>{r.method || "—"}</td>
+                    <td>
+                      {r.guest}
+                      {r.phone ? <div className="muted">{r.phone}</div> : null}
+                    </td>
+                    <td>{r.billNo || "—"}</td>
+                    <td className="num">{m(r.amount)}</td>
+                    <td>{[r.receiptNo, r.ref].filter(Boolean).join(" · ") || "—"}</td>
+                    <td>{r.notes || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <div className="g2">
             <div className="panel">
-              <h3>Income ({rangeLabel})</h3>
+              <h3>Income share ({rangeLabel})</h3>
               <table>
                 <tbody>
                   <tr><td>Room income</td><td>{m(book.room)}</td></tr>
@@ -605,7 +688,7 @@ export default function Reports({ state, go }) {
                   <tr><td>Food income</td><td>{m(book.food)}</td></tr>
                   <tr><td>Other income</td><td>{m(book.otherIncome)}</td></tr>
                   <tr><td>Advances received</td><td>{m(book.advance)}</td></tr>
-                  <tr><td><strong>Total income</strong></td><td><strong>{m(book.incomeTotal)}</strong></td></tr>
+                  <tr><td><strong>Net after refunds</strong></td><td><strong>{m(book.incomeTotal)}</strong></td></tr>
                 </tbody>
               </table>
             </div>
@@ -620,13 +703,13 @@ export default function Reports({ state, go }) {
                     <tr key={k}><td>{expenseLabel(k)}</td><td>{m(v)}</td></tr>
                   ))}
                   <tr><td><strong>Total expenses</strong></td><td><strong>{m(book.expenseTotal)}</strong></td></tr>
-                  <tr><td><strong>Net income</strong></td><td><strong>{m(book.net)}</strong></td></tr>
+                  <tr><td><strong>Net after expenses</strong></td><td><strong>{m(book.net)}</strong></td></tr>
                 </tbody>
               </table>
             </div>
           </div>
           <div className="panel" style={{ marginTop: 12 }}>
-            <h3>Collections by rail</h3>
+            <h3>Collections by rail (net of refunds)</h3>
             <div className="kpis">
               {Object.entries(byCashRails).map(([k, v]) => (
                 <Kpi key={k} k={k} v={m(v)} s={rangeLabel} tone="a" />
@@ -638,9 +721,9 @@ export default function Reports({ state, go }) {
             </p>
           </div>
           <div className="panel" style={{ marginTop: 12 }}>
-            <h3>Credit & balance sheet (day)</h3>
+            <h3>Credit &amp; balance sheet (day)</h3>
             <p className="muted" style={{ marginTop: 0 }}>
-              Credit = customer outstanding (money still to collect). Closing cash = Opening + Income − Expenses.
+              Collections and refunds are listed separately above. Closing cash = Opening + collections − refunds − expenses.
             </p>
             <div className="g2">
               <table>
@@ -650,6 +733,8 @@ export default function Reports({ state, go }) {
                   <tr><td>+ UPI collections</td><td>{m(book.balanceSheet.collections.upi)}</td></tr>
                   <tr><td>+ Card collections</td><td>{m(book.balanceSheet.collections.card)}</td></tr>
                   <tr><td>+ Bank collections</td><td>{m(book.balanceSheet.collections.bank)}</td></tr>
+                  <tr><td>− Cash refunds</td><td>{m(book.balanceSheet.refunds.cash)}</td></tr>
+                  <tr><td>− UPI refunds</td><td>{m(book.balanceSheet.refunds.upi)}</td></tr>
                   <tr><td>− Expenses</td><td>{m(book.balanceSheet.expenses)}</td></tr>
                   <tr><td><strong>Closing cash</strong></td><td><strong>{m(book.balanceSheet.closingCash)}</strong></td></tr>
                 </tbody>
@@ -658,6 +743,7 @@ export default function Reports({ state, go }) {
                 <tbody>
                   <tr><td>Credit / receivables (all open bills)</td><td>{m(book.balanceSheet.creditReceivable)}</td></tr>
                   <tr><td>Advances in this period</td><td>{m(book.advance)}</td></tr>
+                  <tr><td>Refunds total (all modes)</td><td>{m(book.balanceSheet.refundTotal)}</td></tr>
                   <tr><td><strong>Closing cash + credit</strong></td><td><strong>{m(book.balanceSheet.netWorthProxy)}</strong></td></tr>
                 </tbody>
               </table>

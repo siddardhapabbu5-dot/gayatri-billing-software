@@ -178,8 +178,8 @@ export function bookingFolio(state, bookingId) {
         : state.property.taxPercent;
   if (!folio) return { folio, lines, pays, totals: emptyTotals() };
   const totals = folioTotals(folio, lines, pays, tax);
-  // Cancelled / refunded bookings are closed — nothing left to collect.
-  if (booking && ["Cancelled", "Refunded"].includes(booking.status)) {
+  // Whole booking cancel only — room cancel / credit refund stays open on the bill.
+  if (booking && booking.status === "Cancelled") {
     return {
       folio,
       lines,
@@ -380,9 +380,93 @@ export function cashbookReport(state, from, to) {
   const closing = opening + net;
 
   const creditPending = (state.bookings || [])
-    .filter((b) => b.status !== "Cancelled" && b.status !== "Refunded")
+    .filter((b) => b.status !== "Cancelled")
     .map((b) => bookingFolio(state, b.id).totals)
     .reduce((s, t) => s + Math.max(0, t.balance || 0), 0);
+
+  const bookingOf = (id) => (state.bookings || []).find((b) => b.id === id);
+  const guestOf = (bookingId) => {
+    const bk = bookingOf(bookingId);
+    return state.guests.find((g) => g.id === bk?.guestId);
+  };
+
+  const payKindLabel = (p) => {
+    if (p.type === "Advance") return "Advance";
+    if (p.type === "Final") return "Final";
+    if (p.type === "Refund" || p.type === "Deposit return") return "Refund";
+    if (p.type === "Deposit") return "Deposit";
+    return "Settlement";
+  };
+
+  const ledger = [
+    ...pays.map((p) => {
+      const g = guestOf(p.bookingId);
+      const bk = bookingOf(p.bookingId);
+      return {
+        id: p.id,
+        day: payDay(p),
+        at: p.at || "",
+        flow: "In",
+        kind: payKindLabel(p),
+        method: p.method || "",
+        amount: Number(p.amount) || 0,
+        guest: g?.name || "Guest",
+        phone: g?.phone || "",
+        billNo: bk?.number || "",
+        bookingId: p.bookingId || "",
+        ref: p.ref || "",
+        notes: p.notes || "",
+        receiptNo: p.receiptNo || "",
+      };
+    }),
+    ...refunds.map((p) => {
+      const g = guestOf(p.bookingId);
+      const bk = bookingOf(p.bookingId);
+      return {
+        id: p.id,
+        day: payDay(p),
+        at: p.at || "",
+        flow: "Out",
+        kind: "Refund",
+        method: p.method || "",
+        amount: Number(p.amount) || 0,
+        guest: g?.name || "Guest",
+        phone: g?.phone || "",
+        billNo: bk?.number || "",
+        bookingId: p.bookingId || "",
+        ref: p.ref || "",
+        notes: p.notes || "",
+        receiptNo: p.receiptNo || "",
+      };
+    }),
+    ...expenses.map((e) => ({
+      id: e.id,
+      day: String(e.date || "").slice(0, 10),
+      at: e.date || "",
+      flow: "Out",
+      kind: "Expense",
+      method: e.method || e.paidBy || "",
+      amount: Number(e.amount) || 0,
+      guest: e.description || expenseLabelSafe(e.category),
+      phone: "",
+      billNo: "",
+      bookingId: "",
+      ref: e.ref || "",
+      notes: e.notes || e.category || "",
+      receiptNo: "",
+    })),
+  ].sort((a, b) => String(a.at || a.day).localeCompare(String(b.at || b.day)));
+
+  const refundRails = { cash: 0, upi: 0, card: 0, bank: 0, other: 0 };
+  for (const p of refunds) {
+    const rail = railOf(p.method);
+    refundRails[rail] = (refundRails[rail] || 0) + (Number(p.amount) || 0);
+  }
+  const collectionRails = { cash: 0, upi: 0, card: 0, bank: 0, other: 0 };
+  for (const p of pays) {
+    const rail = railOf(p.method);
+    collectionRails[rail] = (collectionRails[rail] || 0) + (Number(p.amount) || 0);
+  }
 
   return {
     from,
@@ -409,18 +493,26 @@ export function cashbookReport(state, from, to) {
     creditPending,
     expenses,
     expenseByCat,
+    pays,
+    refunds,
+    ledger,
     paymentCount: pays.length,
     refundCount: refunds.length,
-    /** Credit / balance-sheet style snapshot for management day report */
     balanceSheet: {
       opening,
-      collections: incomeGross,
-      refunds: refundTotal,
+      collections: collectionRails,
+      refunds: refundRails,
+      refundTotal,
       expenses: expenseTotal,
-      closing,
-      total: incomeTotal,
+      closingCash: closing,
+      creditReceivable: creditPending,
+      netWorthProxy: closing + creditPending,
     },
   };
+}
+
+function expenseLabelSafe(id) {
+  return id || "Expense";
 }
 
 export function outstandingCustomers(state) {
@@ -745,17 +837,29 @@ export function buildFolioLinesFromDraft(state, draft) {
     const room = state.rooms.find((x) => x.id === r.roomId);
     const type = state.roomTypes.find((t) => t.id === room?.typeId);
     const nights = nightsBetween(r.checkIn, r.checkOut);
-    const extra = (r.extraBed || 0) * (type?.extraBed || 0) * nights;
+    const beds = Number(r.extraBed) || 0;
+    const bedRate = Number(type?.extraBed) || 0;
+    const extra = beds * bedRate * nights;
     const base = (type?.baseRate || 0) * nights;
-    const amount = applyPricing(base, r.checkIn, state.pricingRules) + extra;
+    const roomAmount = applyPricing(base, r.checkIn, state.pricingRules);
     lines.push({
       id: uid("ln"),
       category: "room",
       description: `Room ${room?.number} (${type?.name}) · ${nights} night(s)`,
       qty: nights,
       unitPrice: type?.baseRate || 0,
-      amount,
+      amount: roomAmount,
     });
+    if (extra > 0) {
+      lines.push({
+        id: uid("ln"),
+        category: "room",
+        description: `Extra bed · Room ${room?.number} · ${beds} × ${nights} night(s)`,
+        qty: beds * nights,
+        unitPrice: bedRate,
+        amount: extra,
+      });
+    }
   }
   for (const s of draft.services || []) {
     if (!s.qty) continue;

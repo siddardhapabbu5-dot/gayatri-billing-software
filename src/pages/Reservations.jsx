@@ -306,21 +306,36 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
       setPeekRoom(id);
       return;
     }
+    const already = draft.rooms.some((r) => r.roomId === id);
     setDraft((d) => {
-      if (d.rooms.length === 1 && d.rooms[0].roomId === id) return d;
+      if (already) {
+        return { ...d, rooms: d.rooms.filter((r) => r.roomId !== id) };
+      }
       return {
         ...d,
-        rooms: [{
-          roomId: id,
-          checkIn: d.checkIn || d.eventDate,
-          checkOut: d.checkOut || addDays(d.checkIn || d.eventDate, 1),
-          adults: 2,
-          children: 0,
-          extraBed: 0,
-        }],
+        rooms: [
+          ...d.rooms,
+          {
+            roomId: id,
+            checkIn: d.checkIn || d.eventDate,
+            checkOut: d.checkOut || addDays(d.checkIn || d.eventDate, 1),
+            adults: 2,
+            children: 0,
+            extraBed: 0,
+          },
+        ],
       };
     });
-    setPeekRoom(id);
+    if (already) {
+      setPeekRoom((cur) => {
+        if (cur !== id) return cur;
+        const remaining = draft.rooms.filter((r) => r.roomId !== id);
+        return remaining[0]?.roomId || null;
+      });
+    } else {
+      setPeekRoom(id);
+    }
+    setError("");
   }
 
   function patchRoom(id, patch) {
@@ -596,8 +611,8 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
           <div className="panel">
             <h3>Room stay</h3>
             <p className="muted">
-              Room check-in / check-out can be different days from the hall event date.
-              Occupied or Reserved only if a guest is already booked for these dates. Then click a free room.
+              Click rooms to select more than one (tap again to remove). Shared check-in / check-out apply to all selected rooms.
+              Occupied or Reserved only if a guest is already booked for these dates.
               Check-in / check-out: {roomCheckInOutText(pol)}.
             </p>
             <div className="fields">
@@ -619,6 +634,15 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                 />
               </label>
             </div>
+            <p className="muted" style={{ margin: "0 0 8px" }}>
+              Selected: <strong>{draft.rooms.length}</strong> room{draft.rooms.length === 1 ? "" : "s"}
+              {draft.rooms.length
+                ? ` · ${draft.rooms
+                    .map((row) => state.rooms.find((r) => r.id === row.roomId)?.number)
+                    .filter(Boolean)
+                    .join(", ")}`
+                : ""}
+            </p>
             <div className="chips">
               {state.rooms.map((r) => {
                 const checkIn = draft.checkIn || draft.eventDate;
@@ -639,15 +663,20 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
                 );
               })}
             </div>
-            {peekRoom && draft.rooms.some((r) => r.roomId === peekRoom) && (
-              <RoomStayEditor
-                state={state}
-                row={draft.rooms.find((r) => r.roomId === peekRoom)}
-                currency={cur}
-                locale={loc}
-                onChange={(patch) => patchRoom(peekRoom, patch)}
-                onRemove={() => dropRoom(peekRoom)}
-              />
+            {draft.rooms.length > 0 && (
+              <div className="room-multi-list" style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                {draft.rooms.map((row) => (
+                  <RoomStayEditor
+                    key={row.roomId}
+                    state={state}
+                    row={row}
+                    currency={cur}
+                    locale={loc}
+                    onChange={(patch) => patchRoom(row.roomId, patch)}
+                    onRemove={() => dropRoom(row.roomId)}
+                  />
+                ))}
+              </div>
             )}
             {peekRoom && !draft.rooms.some((r) => r.roomId === peekRoom) && (
               <RoomGuestPeek
