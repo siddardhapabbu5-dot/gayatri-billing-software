@@ -98,12 +98,19 @@ export default function Rooms({
         <div className="room-board-layout">
           <div className="room-board-main">
             <div className="kpis room-board-kpis">
-              {OCC.slice(0, 4).map((s) => (
-                <div className="kpi" key={s}>
+              {OCC.map((s) => (
+                <div className={`kpi${s === "Maintenance" ? " tone-maint" : ""}`} key={s}>
                   <div className="k">{OCC_LABEL[s] || s}</div>
                   <div className="v">{state.rooms.filter((r) => occupancyOf(r) === s).length}</div>
                 </div>
               ))}
+            </div>
+            <div className="room-status-legend" aria-label="Room status colours">
+              <span><i className="lg-ok" /> Available</span>
+              <span><i className="lg-book" /> Booked</span>
+              <span><i className="lg-occ" /> Occupied</span>
+              <span><i className="lg-ooo" /> Out of order</span>
+              <span><i className="lg-maint" /> Maintenance (orange stripes)</span>
             </div>
             <div className="room-floors">
               {floorGroups.map(({ floor, rooms }) => {

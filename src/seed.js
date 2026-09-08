@@ -32,7 +32,7 @@ export const ROLES = {
   },
   housekeeping: {
     label: "Housekeeping",
-    permissions: ["dashboard", "rooms", "calendar"],
+    permissions: ["rooms", "calendar"],
   },
   accounts: {
     label: "Accounts",

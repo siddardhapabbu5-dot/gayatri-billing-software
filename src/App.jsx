@@ -142,6 +142,30 @@ function can(role, perm) {
   return list.includes("*") || list.includes(perm);
 }
 
+function permForPage(pageId) {
+  for (const g of GROUPS) {
+    const hit = g.items.find((i) => i.id === pageId);
+    if (hit) return hit.perm;
+  }
+  return "dashboard";
+}
+
+/** First staff page this role is allowed to open (Housekeeping has no Dashboard). */
+function homeStaffPage(role) {
+  const r = String(role || "").toLowerCase();
+  const preferred = ["desk", "rooms", "calendar", "reserve", "billing", "reports"];
+  for (const id of preferred) {
+    if (can(r, permForPage(id))) return id;
+  }
+  for (const g of GROUPS) {
+    for (const i of g.items) {
+      if (i.id === "home" || i.id === "portal") continue;
+      if (can(r, i.perm)) return i.id;
+    }
+  }
+  return "rooms";
+}
+
 const STAFF_PAGES = new Set(
   GROUPS.flatMap((g) => g.items.map((i) => i.id)).filter((id) => id !== "home" && id !== "portal")
 );
@@ -254,13 +278,25 @@ export default function App() {
   }, []);
 
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
-  const role = authUser?.role || user.role;
+  const role = String(authUser?.role || user.role || "").toLowerCase();
+
+  // Block deep-links to pages this role cannot open (menu alone is not enough).
+  useEffect(() => {
+    if (!authUser) return;
+    if (page === "home" || page === "portal") return;
+    const need = permForPage(page);
+    if (!can(role, need)) {
+      go(homeStaffPage(role));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- guard on page/role only
+  }, [authUser, page, role]);
 
   function enterStaff() {
     if (getToken() && getAuthUser()) {
-      setAuthUser(getAuthUser());
+      const u = getAuthUser();
+      setAuthUser(u);
       setStaffGate(false);
-      go("desk");
+      go(homeStaffPage(u.role));
       return;
     }
     setPendingStaffPage("desk");
@@ -379,7 +415,9 @@ export default function App() {
             setAuthUser(u);
             setStaffGate(false);
             setState(applyAuthUser(u));
-            go(pendingStaffPage || "desk");
+            const want = pendingStaffPage || "desk";
+            const dest = can(u.role, permForPage(want)) ? want : homeStaffPage(u.role);
+            go(dest);
           }}
         />
       </>
@@ -413,7 +451,9 @@ export default function App() {
           onSuccess={(u) => {
             setAuthUser(u);
             setState(applyAuthUser(u));
-            go(pendingStaffPage || "desk");
+            const want = pendingStaffPage || "desk";
+            const dest = can(u.role, permForPage(want)) ? want : homeStaffPage(u.role);
+            go(dest);
           }}
         />
       </>

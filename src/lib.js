@@ -272,7 +272,7 @@ export function statusTone(status) {
     Quoted: "warn",
     Dirty: "due",
     Cleaning: "due",
-    Maintenance: "due",
+    Maintenance: "maint",
     "Out of order": "due",
     Overdue: "due",
     Cancelled: "muted",

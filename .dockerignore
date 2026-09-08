@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.github
+apk-out
+backend/target
+**/.DS_Store
+*.md
+!backend/RAILWAY.md
+.env
+.env.*
+scripts
+agent-tools
+.cursor

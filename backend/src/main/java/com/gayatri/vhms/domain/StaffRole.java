@@ -13,13 +13,13 @@ public enum StaffRole {
   ADMIN(Set.of("*")),
   MANAGER(Set.of(
       "dashboard", "calendar", "venues", "rooms", "reservations", "guests",
-      "events", "catering", "vendors", "billing", "reports", "documents", "settings.property"
+      "events", "catering", "vendors", "billing", "reports", "documents", "expenses", "settings.property"
   )),
   FRONTDESK(Set.of(
-      "dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents"
+      "dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"
   )),
-  HOUSEKEEPING(Set.of("dashboard", "rooms", "calendar")),
-  ACCOUNTS(Set.of("dashboard", "billing", "reports", "vendors"));
+  HOUSEKEEPING(Set.of("rooms", "calendar")),
+  ACCOUNTS(Set.of("dashboard", "billing", "reports", "vendors", "expenses"));
 
   private final Set<String> permissions;
 

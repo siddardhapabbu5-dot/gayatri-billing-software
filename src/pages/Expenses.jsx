@@ -334,8 +334,9 @@ export default function Expenses({
               )}
               {rows.map((r) => {
                 const st = expenseStatus(r);
+                const isMaint = r.category === "maintenance";
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id} className={isMaint ? "exp-row-maint" : undefined}>
                     <td>{formatDateDMY(r.date)}</td>
                     <td>{r.givenBy || state.property?.name || "Hotel"}</td>
                     <td>
@@ -343,7 +344,11 @@ export default function Expenses({
                       {r.description ? <div className="muted">{r.description}</div> : null}
                     </td>
                     <td>
-                      {expenseLabel(r.category)}
+                      {isMaint ? (
+                        <span className="pill maint">{expenseLabel(r.category)}</span>
+                      ) : (
+                        expenseLabel(r.category)
+                      )}
                       <div className="muted">{r.department}</div>
                     </td>
                     <td className="num">{m(Number(r.amount || 0))}</td>

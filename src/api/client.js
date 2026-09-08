@@ -1,7 +1,16 @@
-/** JWT + REST client for Gayatri Spring Boot API (proxied via Vite /api). */
+/** JWT + REST client for Gayatri Spring Boot API (proxied via Vite /api in local; absolute URL in production). */
 
 const TOKEN_KEY = "gayatri-vhms-jwt";
 const USER_KEY = "gayatri-vhms-auth-user";
+
+/** Empty in local (Vite proxies /api → :8080). Set VITE_API_BASE on Vercel/Netlify to Railway URL, e.g. https://xxx.up.railway.app */
+const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
+
+function apiUrl(path) {
+  const p = path.startsWith("/") ? path : `/api/${path}`;
+  if (API_BASE && p.startsWith("/api")) return `${API_BASE}${p}`;
+  return p;
+}
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -34,7 +43,7 @@ export async function api(path, options = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(path.startsWith("/") ? path : `/api/${path}`, {
+  const res = await fetch(apiUrl(path.startsWith("/") ? path : `/api/${path}`), {
     ...options,
     headers,
   });

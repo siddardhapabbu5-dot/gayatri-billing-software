@@ -14,6 +14,19 @@ import { expenseLabel } from "../finance";
 import { addDays, downloadCsv, formatDateDMY, formatDateTime, money, startOfMonthISO, todayISO } from "../lib";
 import { Kpi, PageHead, Pill } from "../ui";
 
+function endOfMonthISO(ymOrDay) {
+  const base = String(ymOrDay || "").slice(0, 10);
+  const y = Number(base.slice(0, 4));
+  const mo = Number(base.slice(5, 7));
+  if (!y || !mo) return todayISO();
+  return todayISO(new Date(y, mo, 0));
+}
+
+function monthTitle(iso) {
+  const d = new Date(`${String(iso).slice(0, 7)}-01T12:00:00`);
+  return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
 function cancellationAt(state, booking) {
   if (booking.cancelledAt) return booking.cancelledAt;
   const hit = (state.audit || []).find((a) => a.entity === booking.number && a.action === "Booking cancelled");
@@ -206,6 +219,8 @@ export default function Reports({ state, go }) {
         ? "week"
         : from === monthStart && to === today
           ? "month"
+          : from === monthStart && to === (endOfMonthISO(monthStart) > today ? today : endOfMonthISO(monthStart))
+            ? "fullMonth"
           : from === sixMonthStart && to === today
             ? "six"
             : from === yearStart && to === today
@@ -225,6 +240,11 @@ export default function Reports({ state, go }) {
     } else if (which === "month") {
       setFrom(monthStart);
       setTo(today);
+    } else if (which === "fullMonth") {
+      const start = from && from.slice(0, 7) === monthStart.slice(0, 7) ? monthStart : `${(from || monthStart).slice(0, 7)}-01`;
+      const end = endOfMonthISO(start);
+      setFrom(start);
+      setTo(end > today ? today : end);
     } else if (which === "six") {
       setFrom(sixMonthStart);
       setTo(today);
@@ -237,6 +257,12 @@ export default function Reports({ state, go }) {
     }
   }
 
+  function openMonthlyAudit() {
+    setReportTab("audit");
+    setFrom(monthStart);
+    setTo(today);
+  }
+
   function saveExcel() {
     const stamp = from && to ? `${from}_to_${to}` : "all";
     const head = [
@@ -247,6 +273,8 @@ export default function Reports({ state, go }) {
           ? "Cancellations report"
           : reportTab === "cashbook"
             ? "Daily income & expense / cashbook"
+            : reportTab === "audit"
+              ? "Monthly audit pack"
             : reportTab === "outstanding"
               ? "Customer outstanding"
               : reportTab === "gst"
@@ -373,6 +401,210 @@ export default function Reports({ state, go }) {
           r.notes,
         ]),
       ];
+    } else if (reportTab === "audit") {
+      const outTotal = outstanding.reduce((s, r) => s + r.balance, 0);
+      const canRefund = cancelled.reduce((s, row) => s + row.refundTotal, 0);
+      const canBilled = cancelled.reduce((s, row) => s + row.totals.total, 0);
+      const ledgerIn = (book.ledger || []).filter((r) => r.flow === "In");
+      const ledgerRefund = (book.ledger || []).filter((r) => r.flow === "Out" && r.kind === "Refund");
+      const ledgerExp = (book.ledger || []).filter((r) => r.flow === "Out" && r.kind === "Expense");
+      body = [
+        ["GAYATRI CONVENTION — MONTHLY AUDIT PACK (with details)"],
+        ["Property", state.property.name],
+        ["Address", (state.property.address || []).join(", ")],
+        ["Period", rangeLabel],
+        ["Month", monthTitle(from || monthStart)],
+        ["Prepared on", formatDateDMY(today)],
+        [],
+        ["HOW TO READ THIS FILE"],
+        ["1", "Sections A–H are SUMMARY totals for the selected period."],
+        ["2", "DETAIL sheets below list every line that makes up those totals — use them to cross-check."],
+        ["3", "In = guest money received. Out Refund = money returned to guest. Out Expense = hotel spending (diesel etc.)."],
+        ["4", "Closing = Opening + Collections − Refunds − Expenses."],
+        ["5", "Advance / Final are kinds of collection — already included in Cash/UPI totals (not extra)."],
+        ["6", "Outstanding is money still to collect on open bills (not yet in Closing)."],
+        ["7", "Print sign-off section H and get Owner signature each month."],
+        [],
+        ["========== A. CASH POSITION (SUMMARY) =========="],
+        ["Explain", "Hotel money movement for this period only."],
+        ["Line", "Amount", "Meaning"],
+        ["Opening balance", book.opening, "Money already in books before period start"],
+        ["+ Collections in", book.incomeGross, "All guest payments received (Cash/UPI/Card/Bank)"],
+        ["− Guest refunds", book.refundTotal, "Money returned to guests"],
+        ["= Net collections", book.incomeTotal, "Collections − refunds"],
+        ["− Expenses", book.expenseTotal, "Hotel costs from Expense entry (diesel, tea, etc.)"],
+        ["= Closing balance", book.closing, "What remains after expenses"],
+        ["Check formula", `${book.opening} + ${book.incomeGross} - ${book.refundTotal} - ${book.expenseTotal} = ${book.closing}`, "Must match Closing"],
+        [],
+        ["========== B. COLLECTIONS BY MODE (SUMMARY) =========="],
+        ["Explain", "How guests paid. Figures are after refunds on that mode."],
+        ["Mode", "Amount", "Cross-check"],
+        ["Cash", book.rails?.cash || 0, "Sum DETAIL register Mode=Cash (In − Refund)"],
+        ["UPI", book.rails?.upi || 0, "Sum DETAIL register Mode=UPI (In − Refund)"],
+        ["Card", book.rails?.card || 0, "Sum DETAIL register Mode=Card (In − Refund)"],
+        ["Bank", book.rails?.bank || 0, "Sum DETAIL register Mode=Bank (In − Refund)"],
+        [],
+        ["========== C. COLLECTIONS BY KIND (SUMMARY) =========="],
+        ["Explain", "Stage of bill payment. Already inside mode totals — do not add again to Closing."],
+        ["Kind", "Amount", "Meaning"],
+        ["Advance", book.byKind?.advance ?? book.advance ?? 0, "Early booking advance"],
+        ["Final", book.byKind?.final || 0, "Final / closing payment on bill"],
+        ["Settlement", book.byKind?.settlement || 0, "Other settlement payments"],
+        [],
+        ["========== D. INCOME SHARE (SUMMARY) =========="],
+        ["Explain", "Guest net collections split by bill purpose (room vs hall)."],
+        ["Share", "Amount"],
+        ["Room", book.room],
+        ["Function hall", book.hall],
+        ["Food", book.food],
+        ["Other", book.otherIncome],
+        ["Net collections (check)", book.incomeTotal, "Should equal room+hall+food+other"],
+        [],
+        ["========== E. EXPENSES BY TYPE (SUMMARY) =========="],
+        ["Explain", "Hotel spending. Detail lines are in DETAIL — EXPENSE LINES below."],
+        ["Expense type", "Amount"],
+        ...Object.entries(book.expenseByCat).map(([k, v]) => [expenseLabel(k), v]),
+        ["Total expenses", book.expenseTotal],
+        [],
+        ["========== F. OUTSTANDING — TO COLLECT (DETAIL) =========="],
+        ["Explain", "Open bills where guest still owes. Not deducted from Closing until collected."],
+        ["Customers", outstanding.length],
+        ["Total balance due", outTotal],
+        ["Customer", "Phone", "Bill total", "Paid", "Balance due", "Bill nos"],
+        ...outstanding.map((r) => [
+          r.name,
+          r.phone,
+          r.bill,
+          r.paid,
+          r.balance,
+          (r.bookings || []).map((b) => b.number).join(" · "),
+        ]),
+        [],
+        ["========== G. CANCELLATIONS IN PERIOD (DETAIL) =========="],
+        ["Explain", "Bookings cancelled in this period and any refunds linked."],
+        ["Count", cancelled.length],
+        ["Billed before cancel", canBilled],
+        ["Refunds on cancel", canRefund],
+        ["Guest", "Bill no", "Event date", "Cancelled on", "Type", "Billed", "Collected", "Refund", "Reason"],
+        ...cancelled.map((row) => [
+          row.guest?.name || "Guest",
+          row.b.number,
+          formatDateDMY(row.b.eventDate),
+          row.cancelledAt ? formatDateTime(row.cancelledAt) : "—",
+          row.b.type,
+          row.totals.total,
+          row.totals.paid,
+          row.refundTotal,
+          row.reason || row.detail || "",
+        ]),
+        [],
+        ["========== DETAIL — FULL MONEY REGISTER (source of truth) =========="],
+        ["Explain", "Every In/Out line in the period. Sum In = Collections. Sum Out Refund = Refunds. Sum Out Expense = Expenses."],
+        ["Lines in period", (book.ledger || []).length],
+        ["In lines", ledgerIn.length],
+        ["Refund out lines", ledgerRefund.length],
+        ["Expense out lines", ledgerExp.length],
+        [
+          "Date",
+          "Date-time",
+          "In/Out",
+          "Kind",
+          "Mode",
+          "Amount",
+          "Guest / Taken by",
+          "Phone",
+          "Bill no",
+          "Receipt",
+          "Ref / UTR",
+          "Notes",
+          "Cross-check tip",
+        ],
+        ...(book.ledger || []).map((r) => [
+          formatDateDMY(r.day),
+          r.at ? formatDateTime(r.at) : "",
+          r.flow,
+          r.kind,
+          r.method,
+          r.amount,
+          r.guest,
+          r.phone,
+          r.billNo,
+          r.receiptNo,
+          r.ref,
+          r.notes,
+          r.flow === "In"
+            ? "Add to Collections"
+            : r.kind === "Refund"
+              ? "Add to Guest refunds"
+              : r.kind === "Expense"
+                ? "Add to Expenses"
+                : "",
+        ]),
+        [],
+        ["========== DETAIL — COLLECTION LINES ONLY (In) =========="],
+        ["Date", "Kind", "Mode", "Amount", "Guest", "Bill no", "Receipt", "Ref", "Notes"],
+        ...ledgerIn.map((r) => [
+          formatDateDMY(r.day),
+          r.kind,
+          r.method,
+          r.amount,
+          r.guest,
+          r.billNo,
+          r.receiptNo,
+          r.ref,
+          r.notes,
+        ]),
+        ["TOTAL COLLECTIONS (must match A + Collections in)", book.incomeGross],
+        [],
+        ["========== DETAIL — REFUND LINES ONLY (Out · Refund) =========="],
+        ["Date", "Mode", "Amount", "Guest", "Bill no", "Receipt", "Notes"],
+        ...ledgerRefund.map((r) => [
+          formatDateDMY(r.day),
+          r.method,
+          r.amount,
+          r.guest,
+          r.billNo,
+          r.receiptNo,
+          r.notes,
+        ]),
+        ["TOTAL REFUNDS (must match A − Guest refunds)", book.refundTotal],
+        [],
+        ["========== DETAIL — EXPENSE LINES ONLY (Out · Expense) =========="],
+        ["Explain", "Same as Expense entry list for this period."],
+        ["Date", "Mode", "Amount", "Taken by / shop", "Notes / type"],
+        ...ledgerExp.map((r) => [
+          formatDateDMY(r.day),
+          r.method,
+          r.amount,
+          r.guest,
+          r.notes,
+        ]),
+        ...((book.expenses || []).length
+          ? [
+              [],
+              ["Expense entry fields"],
+              ["Date", "Given by", "Taken by", "Department", "Type", "Amount", "Mode", "Status", "Note"],
+              ...(book.expenses || []).map((e) => [
+                formatDateDMY(e.date),
+                e.givenBy || "",
+                e.paidTo || "",
+                e.department || "",
+                expenseLabel(e.category),
+                Number(e.amount || 0),
+                e.method || "",
+                e.status || "",
+                e.description || "",
+              ]),
+            ]
+          : []),
+        ["TOTAL EXPENSES (must match A − Expenses)", book.expenseTotal],
+        [],
+        ["========== H. SIGN-OFF =========="],
+        ["Prepared by (desk)", "", "Date", ""],
+        ["Checked by (manager)", "", "Date", ""],
+        ["Approved by (owner)", "", "Date", ""],
+        ["Remarks", ""],
+      ];
     } else if (kind === "all") {
       body = [
         ...csvLines("HALL (hall hire)", report.function, viewRows(report, "function")),
@@ -382,7 +614,12 @@ export default function Reports({ state, go }) {
     } else {
       body = csvLines(kindTitle, summary, rows);
     }
-    downloadCsv(`Gayatri-${reportTab}-${stamp}.csv`, [...head, ...body]);
+    downloadCsv(
+      reportTab === "audit"
+        ? `Gayatri-Monthly-Audit-${stamp}.csv`
+        : `Gayatri-${reportTab}-${stamp}.csv`,
+      [...head, ...body]
+    );
   }
 
   const cancelRefundTotal = cancelled.reduce((s, row) => s + row.refundTotal, 0);
@@ -400,6 +637,8 @@ export default function Reports({ state, go }) {
             ? `${allCancelled.length} cancellation record(s) on file. Filter by cancellation date.`
             : reportTab === "cashbook"
               ? "Full cash register: every collection and refund line (e.g. Sriram paid + cash refund). Day / week / month or custom range."
+              : reportTab === "audit"
+                ? "Month-end audit with full details. Download Excel for summary A–H + every collection, refund and expense line to cross-check."
               : reportTab === "outstanding"
                 ? "Customers with balance still to collect."
                 : reportTab === "gst"
@@ -426,6 +665,9 @@ export default function Reports({ state, go }) {
       </div>
 
       <div className="chips no-print" style={{ marginBottom: 10 }}>
+        <button type="button" className={`chip${reportTab === "audit" ? " on" : ""}`} onClick={openMonthlyAudit}>
+          Monthly audit
+        </button>
         <button type="button" className={`chip${reportTab === "cashbook" ? " on" : ""}`} onClick={() => setReportTab("cashbook")}>
           Income & expense
         </button>
@@ -463,6 +705,7 @@ export default function Reports({ state, go }) {
               ["today", "Today"],
               ["week", "This week"],
               ["month", "This month"],
+              ["fullMonth", "Full month"],
               ["six", "6 months"],
               ["year", "This year"],
               ["all", "All dates"],
@@ -501,7 +744,171 @@ export default function Reports({ state, go }) {
         )}
       </div>
 
-      {reportTab === "gst" ? (
+      {reportTab === "audit" ? (
+        <>
+          <div className="panel audit-cover">
+            <p className="muted" style={{ margin: 0 }}>
+              Gayatri Convention · Monthly audit
+            </p>
+            <h2 style={{ margin: "4px 0 8px", fontFamily: "var(--serif)", fontSize: 28 }}>
+              {monthTitle(from || monthStart)}
+            </h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Period {rangeLabel} · Prepared {formatDateDMY(today)} · Use <strong>This month</strong> or set From/To for a closed month
+            </p>
+          </div>
+
+          <div className="kpis kpis-one-row" style={{ marginTop: 12 }}>
+            <Kpi k="Opening" v={m(book.opening)} s="Start of period" tone="a" />
+            <Kpi k="Collections" v={m(book.incomeGross)} s={`${book.paymentCount} in`} tone="b" />
+            <Kpi k="Refunds" v={m(book.refundTotal)} s={`${book.refundCount} out`} tone="e" />
+            <Kpi k="Net collections" v={m(book.incomeTotal)} s="In − refunds" tone="c" />
+            <Kpi k="Expenses" v={m(book.expenseTotal)} s={`${book.expenses.length} entries`} tone="e" />
+            <Kpi k="Closing" v={m(book.closing)} s="After expenses" tone="d" />
+          </div>
+
+          <p className="cashbook-formula">
+            {m(book.opening)} + {m(book.incomeGross)} − {m(book.refundTotal)} − {m(book.expenseTotal)} ={" "}
+            <strong>{m(book.closing)}</strong>
+            <span className="muted"> · A. Cash position</span>
+          </p>
+
+          <div className="g2" style={{ marginBottom: 12 }}>
+            <div className="panel">
+              <h3>B. Collections by mode</h3>
+              <table>
+                <tbody>
+                  <tr><td>Cash</td><td className="num">{m(book.rails?.cash || 0)}</td></tr>
+                  <tr><td>UPI</td><td className="num">{m(book.rails?.upi || 0)}</td></tr>
+                  <tr><td>Card</td><td className="num">{m(book.rails?.card || 0)}</td></tr>
+                  <tr><td>Bank</td><td className="num">{m(book.rails?.bank || 0)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="panel">
+              <h3>C. Collections by kind</h3>
+              <table>
+                <tbody>
+                  <tr><td>Advance</td><td className="num">{m(book.byKind?.advance ?? book.advance ?? 0)}</td></tr>
+                  <tr><td>Final</td><td className="num">{m(book.byKind?.final || 0)}</td></tr>
+                  <tr><td>Settlement</td><td className="num">{m(book.byKind?.settlement || 0)}</td></tr>
+                </tbody>
+              </table>
+              <p className="muted" style={{ marginBottom: 0 }}>
+                Kind is already inside mode totals — not extra money.
+              </p>
+            </div>
+          </div>
+
+          <div className="g2" style={{ marginBottom: 12 }}>
+            <div className="panel">
+              <h3>D. Income share</h3>
+              <table>
+                <tbody>
+                  <tr><td>Room</td><td className="num">{m(book.room)}</td></tr>
+                  <tr><td>Function hall</td><td className="num">{m(book.hall)}</td></tr>
+                  <tr><td>Food</td><td className="num">{m(book.food)}</td></tr>
+                  <tr><td>Other</td><td className="num">{m(book.otherIncome)}</td></tr>
+                  <tr>
+                    <td><strong>Net collections</strong></td>
+                    <td className="num"><strong>{m(book.incomeTotal)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="panel">
+              <h3>E. Expenses</h3>
+              <table>
+                <tbody>
+                  {!Object.keys(book.expenseByCat).length && (
+                    <tr><td colSpan={2} className="muted">No expenses in this period.</td></tr>
+                  )}
+                  {Object.entries(book.expenseByCat).map(([k, v]) => (
+                    <tr key={k}><td>{expenseLabel(k)}</td><td className="num">{m(v)}</td></tr>
+                  ))}
+                  <tr>
+                    <td><strong>Total expenses</strong></td>
+                    <td className="num"><strong>{m(book.expenseTotal)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="g2" style={{ marginBottom: 12 }}>
+            <div className="panel">
+              <h3>F. Outstanding (to collect)</h3>
+              <p className="muted">{outstanding.length} customer(s) · {m(outstandingTotal)}</p>
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th className="num">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!outstanding.length && (
+                    <tr><td colSpan={2} className="muted">No outstanding.</td></tr>
+                  )}
+                  {outstanding.slice(0, 12).map((r) => (
+                    <tr key={r.guestId || r.name}>
+                      <td>
+                        {r.name}
+                        {r.phone ? <div className="muted">{r.phone}</div> : null}
+                      </td>
+                      <td className="num">{m(r.balance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="panel">
+              <h3>G. Cancellations (period)</h3>
+              <table>
+                <tbody>
+                  <tr><td>Records</td><td className="num">{cancelled.length}</td></tr>
+                  <tr><td>Billed before cancel</td><td className="num">{m(cancelBilledTotal)}</td></tr>
+                  <tr><td>Refunds on cancel</td><td className="num">{m(cancelRefundTotal)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="panel audit-signoff">
+            <h3>H. Month-end sign-off</h3>
+            <table className="audit-sign-table">
+              <tbody>
+                <tr>
+                  <td>Prepared by (desk)</td>
+                  <td className="audit-sign-line">________________________</td>
+                  <td>Date</td>
+                  <td className="audit-sign-line">____________</td>
+                </tr>
+                <tr>
+                  <td>Checked by (manager)</td>
+                  <td className="audit-sign-line">________________________</td>
+                  <td>Date</td>
+                  <td className="audit-sign-line">____________</td>
+                </tr>
+                <tr>
+                  <td>Approved by (owner)</td>
+                  <td className="audit-sign-line">________________________</td>
+                  <td>Date</td>
+                  <td className="audit-sign-line">____________</td>
+                </tr>
+                <tr>
+                  <td>Remarks</td>
+                  <td colSpan={3} className="audit-sign-line">________________________________________________</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="muted no-print" style={{ marginBottom: 0 }}>
+              Print / PDF or Download Excel each month and keep a signed copy for your records.
+              Excel includes <strong>HOW TO READ</strong>, summary A–H, and full detail lines for collections, refunds and expenses.
+            </p>
+          </div>
+        </>
+      ) : reportTab === "gst" ? (
         <>
           <div className="kpis">
             <Kpi k="With GST bills" v={String(gst.with.count)} s={rangeLabel} tone="b" />

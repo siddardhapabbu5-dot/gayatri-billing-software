@@ -75,7 +75,14 @@ function marksOn(state, iso) {
     const res = (state.roomReservations || []).find((r) => r.roomId === room.id && roomOccupiesDate(r, iso));
     if (!res) {
       const closed = ["Maintenance", "Out of order"].includes(room.status);
-      return { room, res: null, guest: null, label: closed ? "Closed" : "Free", busy: false };
+      return {
+        room,
+        res: null,
+        guest: null,
+        label: room.status === "Maintenance" ? "Maintenance" : room.status === "Out of order" ? "Out of order" : "Free",
+        busy: false,
+        closed,
+      };
     }
     const booking = state.bookings.find((b) => b.id === res.bookingId);
     const guest = state.guests.find((g) => g.id === res.guestId || g.id === booking?.guestId);
@@ -294,6 +301,8 @@ function DayPanel({ state, iso, marks, go }) {
   const busyRooms = marks.rooms.filter((r) => r.busy);
   const freeHalls = marks.halls.filter((h) => !h.booked).length;
   const freeRooms = marks.rooms.filter((r) => !r.busy && r.label === "Free").length;
+  const maintRooms = marks.rooms.filter((r) => r.label === "Maintenance");
+  const oooRooms = marks.rooms.filter((r) => r.label === "Out of order");
 
   return (
     <div className="panel cal-detail">
@@ -362,6 +371,28 @@ function DayPanel({ state, iso, marks, go }) {
           <p className="muted" style={{ margin: "8px 0 0" }}>
             {freeRooms} other room{freeRooms === 1 ? "" : "s"} free
           </p>
+        )}
+        {(maintRooms.length > 0 || oooRooms.length > 0) && (
+          <div className="cal-closed-list" style={{ marginTop: 12 }}>
+            {maintRooms.map(({ room }) => (
+              <div key={room.id} className="cal-row cal-row-maint">
+                <div>
+                  <strong>Room {room.number}</strong>
+                  <div className="who">Under maintenance — not for sale</div>
+                </div>
+                <Pill status="Maintenance">Maintenance</Pill>
+              </div>
+            ))}
+            {oooRooms.map(({ room }) => (
+              <div key={room.id} className="cal-row">
+                <div>
+                  <strong>Room {room.number}</strong>
+                  <div className="who">Out of order</div>
+                </div>
+                <Pill status="Out of order">Out of order</Pill>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
