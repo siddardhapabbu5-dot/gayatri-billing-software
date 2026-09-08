@@ -70,3 +70,18 @@ export function downloadBlob(row, fileName) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
+
+/** Open blob in a new tab for viewing (no download). */
+export function openBlob(row) {
+  const blob = row?.blob;
+  if (!blob) return false;
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank", "noopener,noreferrer");
+  if (!win) {
+    URL.revokeObjectURL(url);
+    return false;
+  }
+  // Keep object URL alive while the tab loads; revoke later.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return true;
+}

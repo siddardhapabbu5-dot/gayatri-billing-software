@@ -766,45 +766,45 @@ export default function Dashboard({ state, go }) {
         </div>
         <div className="dash-report-grid">
           <div className="dash-report-item">
-            <span className="dash-ov-k">Day wise</span>
+            <span className="dash-ov-k">Day · net collections</span>
             <span className="dash-ov-v">{m(dayIncome)}</span>
             <span className="dash-ov-s">
-              Net · {formatDate(focusDay)}
+              Collections − refunds · {formatDate(focusDay)}
               {dayBook.refundTotal > 0
                 ? ` · in ${m(dayBook.incomeGross)} − refunds ${m(dayBook.refundTotal)}`
                 : " · = Reports cashbook that day"}
             </span>
           </div>
           <div className="dash-report-item">
-            <span className="dash-ov-k">Week wise</span>
+            <span className="dash-ov-k">Week · net collections</span>
             <span className="dash-ov-v">{m(weekIncome)}</span>
             <span className="dash-ov-s">
-              Mon–today · {formatDate(weekStart)} – {formatDate(today)}
+              Collections − refunds · Mon–today · {formatDate(weekStart)} – {formatDate(today)}
               {weekBook.refundTotal > 0 ? ` · refunds ${m(weekBook.refundTotal)}` : ""}
             </span>
           </div>
           <div className="dash-report-item">
-            <span className="dash-ov-k">Month wise</span>
+            <span className="dash-ov-k">Month · net collections</span>
             <span className="dash-ov-v">{m(monthIncome)}</span>
             <span className="dash-ov-s">
-              {monthLabel(filterMonthStart)}
+              Collections − refunds · {monthLabel(filterMonthStart)}
               {isCurrentFilterMonth ? " · up to today" : ""}
               {monthCashAll.refundTotal > 0 ? ` · refunds ${m(monthCashAll.refundTotal)}` : ""}
             </span>
           </div>
           <div className="dash-report-item">
-            <span className="dash-ov-k">6 months wise</span>
+            <span className="dash-ov-k">6 months · net collections</span>
             <span className="dash-ov-v">{m(sixIncome)}</span>
             <span className="dash-ov-s">
-              {formatDate(sixMonthStart)} – {formatDate(today)}
+              Collections − refunds · {formatDate(sixMonthStart)} – {formatDate(today)}
               {sixBook.refundTotal > 0 ? ` · refunds ${m(sixBook.refundTotal)}` : ""}
             </span>
           </div>
           <div className="dash-report-item">
-            <span className="dash-ov-k">Yearly wise</span>
+            <span className="dash-ov-k">Year · net collections</span>
             <span className="dash-ov-v">{m(yearIncome)}</span>
             <span className="dash-ov-s">
-              {today.slice(0, 4)} · {formatDate(yearStart)} – {formatDate(today)}
+              Collections − refunds · {today.slice(0, 4)} · {formatDate(yearStart)} – {formatDate(today)}
               {yearBook.refundTotal > 0 ? ` · refunds ${m(yearBook.refundTotal)}` : ""}
             </span>
           </div>
@@ -812,7 +812,10 @@ export default function Dashboard({ state, go }) {
             <span className="dash-ov-k">{filterAsset === "all" ? "Net profit (selected month)" : "Revenue (selection)"}</span>
             <span className="dash-ov-v">{m(monthNet)}</span>
             <span className="dash-ov-s">
-              {filterAsset === "all" ? "After expenses" : "Net collections for selection"} · {monthLabel(filterMonthStart)}
+              {filterAsset === "all"
+                ? "Net collections − expenses · after diesel & other costs"
+                : "Net collections for selection"}{" "}
+              · {monthLabel(filterMonthStart)}
             </span>
           </div>
         </div>

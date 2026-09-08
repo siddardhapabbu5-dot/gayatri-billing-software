@@ -12,6 +12,7 @@ export const EXPENSE_CATEGORIES = [
   { id: "maintenance", label: "Maintenance" },
   { id: "salaries", label: "Salaries / wages" },
   { id: "transport", label: "Transportation" },
+  { id: "purchase", label: "Purchase / material" },
   { id: "other", label: "Other expenses" },
 ];
 

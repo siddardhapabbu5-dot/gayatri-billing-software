@@ -395,6 +395,63 @@ a { color: inherit; }
 .kpi.tone-c { border-top: 3px solid #2563eb; }
 .kpi.tone-d { border-top: 3px solid var(--accent-2); }
 .kpi.tone-e { border-top: 3px solid var(--due); }
+.kpis-cashbook-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.kpis-cashbook-row .kpi {
+  padding: 10px 10px;
+  min-width: 0;
+}
+.kpis-cashbook-row .kpi .k {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.kpis-cashbook-row .kpi .v {
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpis-cashbook-row .kpi .s {
+  font-size: 11px;
+}
+.kpis-one-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 14px;
+}
+.kpis-one-row .kpi {
+  flex: 1 1 0;
+  min-width: 120px;
+  padding: 10px 10px;
+}
+.kpis-one-row .kpi .k {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.kpis-one-row .kpi .v {
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpis-one-row .kpi .s {
+  font-size: 11px;
+}
+.cashbook-formula {
+  margin: -4px 0 14px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.cashbook-formula strong { font-size: 17px; }
 
 .panel { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px; }
 .panel h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
@@ -1551,10 +1608,14 @@ tr.clickable.is-selected td { background: #edf7f6; }
   .shell { grid-template-columns: 1fr; }
   .nav { height: auto; position: relative; }
   .kpis, .dash-kpis, .room-grid, .fields, .g2, .g3, .g4, .split, .ai, .dash-main, .dash-mid, .dash-bot { grid-template-columns: 1fr 1fr; }
+  .kpis.kpis-cashbook-row { grid-template-columns: repeat(6, minmax(110px, 1fr)); overflow-x: auto; }
+  .kpis.kpis-one-row { display: flex; flex-wrap: nowrap; }
   .cal-easy { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .kpis, .dash-kpis, .room-grid, .fields, .g2, .g3, .g4, .split, .ai, .dash-main, .dash-mid, .dash-bot, .cal-easy { grid-template-columns: 1fr; }
+  .kpis.kpis-cashbook-row { grid-template-columns: repeat(6, minmax(110px, 1fr)); overflow-x: auto; }
+  .kpis.kpis-one-row { display: flex; flex-wrap: nowrap; }
   .content { padding: 12px; }
   .dash-filter-row-cal { flex-direction: column; }
   .dash-month-cal-inline { width: 100%; }

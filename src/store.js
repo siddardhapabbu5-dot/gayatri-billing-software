@@ -1526,12 +1526,13 @@ export function addExpense(payload) {
   const state = load();
   if (!Array.isArray(state.expenses)) state.expenses = [];
   const user = state.users.find((u) => u.id === state.session?.userId);
+  const amount = Number(payload.amount) || 0;
   const row = {
     id: uid("exp"),
     date: String(payload.date || "").slice(0, 10) || todayISO(),
     department: payload.department || "Common",
     category: payload.category || "other",
-    amount: Number(payload.amount) || 0,
+    amount,
     method: payload.method || "Cash",
     description: String(payload.description || "").trim(),
     paidTo: String(payload.paidTo || "").trim(),
@@ -1544,31 +1545,31 @@ export function addExpense(payload) {
     at: new Date().toISOString(),
     createdBy: state.session?.userId || "",
   };
-  if (row.amount <= 0) return { error: "Enter an amount greater than zero" };
+  if (row.amount <= 0) return { error: "Enter amount greater than zero" };
   if (!row.paidTo) return { error: "Enter who took the money (shop / person / vendor)" };
   state.expenses.unshift(row);
-  audit(state, "Expense recorded", row.category, `${row.paidTo} · ${row.department} · ${row.amount}`);
+  audit(state, "Expense recorded", row.category, `${row.paidTo} · ${row.amount}`);
   return persist(state);
 }
 
 export function updateExpense(id, payload) {
   const state = load();
-  const row = (state.expenses || []).find((e) => e.id === id);
+  const row = (state.expenses || []).find((e) => String(e.id) === String(id));
   if (!row) return { error: "Expense not found" };
   const amount = Number(payload.amount);
-  if (!(amount > 0)) return { error: "Enter an amount greater than zero" };
+  if (!(amount > 0)) return { error: "Enter amount greater than zero" };
   const paidTo = String(payload.paidTo || "").trim();
   if (!paidTo) return { error: "Enter who took the money (shop / person / vendor)" };
   row.date = String(payload.date || row.date).slice(0, 10);
   row.department = payload.department || row.department;
   row.category = payload.category || row.category;
   row.amount = amount;
+  delete row.billAmount;
   row.method = payload.method || row.method;
   row.description = String(payload.description || "").trim();
   row.paidTo = paidTo;
   row.givenBy = String(payload.givenBy || "").trim() || row.givenBy;
   row.updatedAt = new Date().toISOString();
-  // Editing after verify → back to pending if receipt exists
   if (row.receiptId && row.status === "Verified") {
     row.status = "Pending verify";
     row.verifiedAt = "";
@@ -1580,7 +1581,7 @@ export function updateExpense(id, payload) {
 
 export async function attachExpenseReceipt(expenseId, file) {
   const state = load();
-  const row = (state.expenses || []).find((e) => e.id === expenseId);
+  const row = (state.expenses || []).find((e) => String(e.id) === String(expenseId));
   if (!row) return { error: "Expense not found" };
   if (!file) return { error: "Choose a receipt file" };
   const max = 8 * 1024 * 1024;
@@ -1599,7 +1600,7 @@ export async function attachExpenseReceipt(expenseId, file) {
 
 export function setExpenseVerified(expenseId, verified = true) {
   const state = load();
-  const row = (state.expenses || []).find((e) => e.id === expenseId);
+  const row = (state.expenses || []).find((e) => String(e.id) === String(expenseId));
   if (!row) return { error: "Expense not found" };
   if (!row.receiptId) return { error: "Upload a receipt before verifying" };
   const user = state.users.find((u) => u.id === state.session?.userId);
@@ -1618,9 +1619,9 @@ export function setExpenseVerified(expenseId, verified = true) {
 
 export async function removeExpense(id) {
   const state = load();
-  const row = (state.expenses || []).find((e) => e.id === id);
+  const row = (state.expenses || []).find((e) => String(e.id) === String(id));
   if (row?.receiptId) await deleteBlob(row.receiptId).catch(() => {});
-  state.expenses = (state.expenses || []).filter((e) => e.id !== id);
+  state.expenses = (state.expenses || []).filter((e) => String(e.id) !== String(id));
   if (row) audit(state, "Expense removed", row.category, String(row.amount));
   return persist(state);
 }

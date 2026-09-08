@@ -12,3 +12,6 @@ public/site/images/gallery/videos/*.mp4
 # Spring Boot
 backend/target/
 backend/.mvn/wrapper/maven-wrapper.jar
+
+# Android build + signing key — never commit
+apk-out/

@@ -620,7 +620,7 @@ export default function Reports({ state, go }) {
         </>
       ) : reportTab === "cashbook" ? (
         <>
-          <div className="kpis">
+          <div className="kpis kpis-cashbook-row">
             <Kpi k="Opening balance" v={m(book.opening)} s="Before range start" tone="a" />
             <Kpi k="Collections in" v={m(book.incomeGross)} s={`${book.paymentCount} receipt(s)`} tone="b" />
             <Kpi k="Refunds out" v={m(book.refundTotal)} s={`${book.refundCount} refund(s)`} tone="e" />
@@ -628,6 +628,11 @@ export default function Reports({ state, go }) {
             <Kpi k="Expenses" v={m(book.expenseTotal)} s={`${book.expenses.length} entry(ies)`} tone="e" />
             <Kpi k="Closing balance" v={m(book.closing)} s="Opening + net − expenses" tone="d" />
           </div>
+          <p className="cashbook-formula" title="Where money is reduced">
+            {m(book.opening)} + {m(book.incomeGross)} − {m(book.refundTotal)} − {m(book.expenseTotal)} ={" "}
+            <strong>{m(book.closing)}</strong>
+            <span className="muted"> · Opening + Collections − Refunds − Expenses = Closing</span>
+          </p>
           <div className="panel" style={{ marginBottom: 12 }}>
             <div className="panel-head">
               <h3>Full payment &amp; refund register</h3>
@@ -678,39 +683,34 @@ export default function Reports({ state, go }) {
               </tbody>
             </table>
           </div>
-          <div className="g2">
-            <div className="panel">
-              <h3>Income share ({rangeLabel})</h3>
-              <table>
-                <tbody>
-                  <tr><td>Room income</td><td>{m(book.room)}</td></tr>
-                  <tr><td>Function hall income</td><td>{m(book.hall)}</td></tr>
-                  <tr><td>Food income</td><td>{m(book.food)}</td></tr>
-                  <tr><td>Other income</td><td>{m(book.otherIncome)}</td></tr>
-                  <tr><td>Advances received</td><td>{m(book.advance)}</td></tr>
-                  <tr><td><strong>Net after refunds</strong></td><td><strong>{m(book.incomeTotal)}</strong></td></tr>
-                </tbody>
-              </table>
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <h3>Income share ({rangeLabel})</h3>
+            <div className="kpis kpis-one-row">
+              <Kpi k="Room" v={m(book.room)} s={rangeLabel} tone="a" />
+              <Kpi k="Function hall" v={m(book.hall)} s={rangeLabel} tone="b" />
+              <Kpi k="Food" v={m(book.food)} s={rangeLabel} tone="c" />
+              <Kpi k="Other" v={m(book.otherIncome)} s={rangeLabel} tone="a" />
+              <Kpi k="Advances (of collections)" v={m(book.advance)} s="Already in net" tone="c" />
+              <Kpi k="Net after refunds" v={m(book.incomeTotal)} s="Room + hall + food + other" tone="d" />
             </div>
-            <div className="panel">
-              <h3>Expenses ({rangeLabel})</h3>
-              <table>
-                <tbody>
-                  {!Object.keys(book.expenseByCat).length && (
-                    <tr><td colSpan={2} className="muted">No expenses — add via Expense entry.</td></tr>
-                  )}
-                  {Object.entries(book.expenseByCat).map(([k, v]) => (
-                    <tr key={k}><td>{expenseLabel(k)}</td><td>{m(v)}</td></tr>
-                  ))}
-                  <tr><td><strong>Total expenses</strong></td><td><strong>{m(book.expenseTotal)}</strong></td></tr>
-                  <tr><td><strong>Net after expenses</strong></td><td><strong>{m(book.net)}</strong></td></tr>
-                </tbody>
-              </table>
+          </div>
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <h3>Expenses ({rangeLabel})</h3>
+            <div className="kpis kpis-one-row">
+              {Object.keys(book.expenseByCat).length
+                ? Object.entries(book.expenseByCat).map(([k, v]) => (
+                    <Kpi key={k} k={expenseLabel(k)} v={m(v)} s={rangeLabel} tone="e" />
+                  ))
+                : (
+                  <Kpi k="No expenses" v={m(0)} s="Add via Expense entry" tone="e" />
+                )}
+              <Kpi k="Total expenses" v={m(book.expenseTotal)} s={`${book.expenses.length} entry(ies)`} tone="e" />
+              <Kpi k="Net after expenses" v={m(book.net)} s="Income − expenses" tone="d" />
             </div>
           </div>
           <div className="panel" style={{ marginTop: 12 }}>
             <h3>Collections by rail (net of refunds)</h3>
-            <div className="kpis">
+            <div className="kpis kpis-one-row">
               {Object.entries(byCashRails).map(([k, v]) => (
                 <Kpi key={k} k={k} v={m(v)} s={rangeLabel} tone="a" />
               ))}

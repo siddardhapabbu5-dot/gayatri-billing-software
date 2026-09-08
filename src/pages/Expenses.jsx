@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EXPENSE_CATEGORIES, EXPENSE_DEPARTMENTS, PAY_MODES, expenseLabel } from "../finance";
-import { downloadBlob, getBlob } from "../fileStore";
+import { getBlob, openBlob } from "../fileStore";
 import { downloadCsv, formatDateDMY, money, todayISO } from "../lib";
 import { PageHead } from "../ui";
 
@@ -60,6 +60,16 @@ export default function Expenses({
 
   const total = rows.reduce((s, e) => s + Number(e.amount || 0), 0);
 
+  // If the row being edited was removed / storage reloaded, switch to "new" so Save still works.
+  useEffect(() => {
+    if (!editId) return;
+    const stillThere = (state.expenses || []).some((e) => String(e.id) === String(editId));
+    if (!stillThere) {
+      setEditId(null);
+      setError("That expense was removed — fill and Save expense to record it again.");
+    }
+  }, [editId, state.expenses]);
+
   function resetForm() {
     setEditId(null);
     setAmount("");
@@ -100,7 +110,12 @@ export default function Expenses({
       givenBy,
       description,
     };
-    const out = editId ? onUpdate?.(editId, payload) : onAdd?.(payload);
+    let out = editId ? onUpdate?.(editId, payload) : onAdd?.(payload);
+    // Stale edit id (deleted row / refresh) → save as a new expense instead of blocking.
+    if (editId && out?.error === "Expense not found") {
+      setEditId(null);
+      out = onAdd?.(payload);
+    }
     if (out?.error) {
       setError(out.error);
       return;
@@ -131,19 +146,18 @@ export default function Expenses({
   async function viewReceipt(row) {
     if (!row.receiptId) return;
     const blobRow = await getBlob(row.receiptId);
-    if (!blobRow) {
+    if (!blobRow?.blob) {
       window.alert("Receipt file not found on this computer.");
       return;
     }
-    downloadBlob(blobRow, row.receiptName || "expense-receipt");
+    if (!openBlob(blobRow)) {
+      window.alert("Allow pop-ups to view the receipt in a new tab.");
+    }
   }
 
   return (
     <>
-      <PageHead
-        title="Expense entry"
-        sub="Edit · upload receipt · verify. Hotel pays out; Taken by = who received ₹."
-      >
+      <PageHead title="Expense entry" sub="Record money given for hotel / hall expenses. Upload receipt, then Verify.">
         <button
           className="btn ghost"
           type="button"
@@ -156,7 +170,7 @@ export default function Expenses({
                 r.paidTo || "—",
                 r.department,
                 expenseLabel(r.category),
-                r.amount,
+                Number(r.amount || 0),
                 r.method,
                 expenseStatus(r),
                 r.receiptName || "",
@@ -229,7 +243,7 @@ export default function Expenses({
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="₹"
+                placeholder="Money given"
               />
             </label>
             <label>
@@ -245,7 +259,7 @@ export default function Expenses({
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional — e.g. Generator diesel"
+                placeholder="e.g. Pressure cooker advance"
               />
             </label>
           </div>
@@ -332,7 +346,7 @@ export default function Expenses({
                       {expenseLabel(r.category)}
                       <div className="muted">{r.department}</div>
                     </td>
-                    <td className="num">{m(r.amount)}</td>
+                    <td className="num">{m(Number(r.amount || 0))}</td>
                     <td>{r.method}</td>
                     <td>
                       <span className={statusClass(st)}>{st}</span>
@@ -385,7 +399,9 @@ export default function Expenses({
                           className="btn ghost small danger"
                           type="button"
                           onClick={() => {
-                            if (window.confirm("Remove this expense?")) onRemove?.(r.id);
+                            if (!window.confirm("Remove this expense?")) return;
+                            if (String(editId) === String(r.id)) resetForm();
+                            onRemove?.(r.id);
                           }}
                         >
                           Remove
