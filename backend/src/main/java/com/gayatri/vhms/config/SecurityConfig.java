@@ -10,7 +10,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -44,7 +43,9 @@ public class SecurityConfig {
   @Bean
   SecurityFilterChain filterChain(HttpSecurity http, JwtAuthFilter jwtAuthFilter) throws Exception {
     http.csrf(csrf -> csrf.disable())
-        .cors(Customizer.withDefaults())
+        // Same-origin on Railway (UI + API one host). Enabling CORS on /** caused Vite
+        // module/CSS requests (crossorigin → Origin header) to get 403 and a blank page.
+        .cors(cors -> cors.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/health", "/api/auth/login", "/api/auth/roles").permitAll()
@@ -57,6 +58,7 @@ public class SecurityConfig {
     return http.build();
   }
 
+  /** Used if CORS is re-enabled later (e.g. Vercel UI → Railway API). Not active while cors is disabled. */
   @Bean
   CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
     CorsConfiguration config = new CorsConfiguration();
@@ -77,7 +79,6 @@ public class SecurityConfig {
     config.setAllowedHeaders(List.of("*"));
     config.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    // Only API needs CORS. Registering /** made Vite /assets/*.js return 403 when Origin was present.
     source.registerCorsConfiguration("/api/**", config);
     return source;
   }
