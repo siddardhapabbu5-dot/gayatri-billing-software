@@ -784,6 +784,152 @@ export async function clearAllBookings() {
   return persist(state);
 }
 
+/**
+ * Recreate the desk cases we worked on (Sriram / Siddhu / Siddardha) with
+ * payment + refund history. Safe to re-run — replaces only these three phones.
+ */
+export function loadDeskCaseBookings() {
+  const CASE_PHONES = new Set(["7204301777", "7204301778", "7204301779"]);
+  let state = load();
+
+  const dropIds = (state.guests || [])
+    .filter((g) => CASE_PHONES.has(String(g.phone || "").replace(/\s/g, "")))
+    .map((g) => g.id);
+  const dropBookings = (state.bookings || []).filter((b) => dropIds.includes(b.guestId)).map((b) => b.id);
+  for (const id of dropBookings) {
+    const folioIds = (state.folios || []).filter((f) => f.bookingId === id).map((f) => f.id);
+    state.folioLines = (state.folioLines || []).filter((l) => !folioIds.includes(l.folioId));
+    state.folios = (state.folios || []).filter((f) => f.bookingId !== id);
+    state.payments = (state.payments || []).filter((p) => p.bookingId !== id);
+    state.refunds = (state.refunds || []).filter((r) => r.bookingId !== id);
+    state.invoices = (state.invoices || []).filter((i) => i.bookingId !== id);
+    state.agreements = (state.agreements || []).filter((a) => a.bookingId !== id);
+    state.documents = (state.documents || []).filter((d) => d.bookingId !== id);
+    purgeBooking(state, id);
+  }
+  persist(state);
+  state = load();
+
+  const byNo = (n) => state.rooms.find((r) => String(r.number) === String(n));
+  const hall = state.halls.find((h) => /imperial/i.test(h.name)) || state.halls[0];
+  const r101 = byNo(101);
+  const r205 = byNo(205);
+  const r306 = byNo(306);
+  const r307 = byNo(307);
+  if (!r101 || !r205 || !r306 || !r307 || !hall) {
+    return { error: "Need rooms 101, 205, 306, 307 and Imperial Ballroom in master data." };
+  }
+
+  const payAt = "2026-09-08T12:00:00.000+05:30";
+
+  // 1) Siddardha — hall, Without GST, fully paid
+  {
+    const draft = {
+      guest: { name: "siddardha pabbu", phone: "7204301779", email: "", nationality: "India" },
+      type: "Wedding",
+      source: "Direct",
+      eventDate: "2026-09-08",
+      guestsExpected: 1000,
+      gstMode: "without",
+      halls: [
+        {
+          hallId: hall.id,
+          date: "2026-09-08",
+          slotType: "full-day",
+          start: "2026-09-08T10:00:00",
+          end: "2026-09-09T06:00:00",
+        },
+      ],
+      rooms: [],
+      lines: [
+        {
+          category: "hall",
+          description: `${hall.name} · full-day · 2026-09-08`,
+          qty: 1,
+          unitPrice: 450000,
+          amount: 450000,
+        },
+      ],
+      advance: 300000,
+      paymentMode: "Cash",
+      paymentDate: "2026-09-08",
+      finalPayment: 100000,
+      finalPaymentMode: "UPI",
+      finalPaymentDate: "2026-09-08",
+      agreeHall: true,
+    };
+    const out = createReservation(draft);
+    if (out?.error) return out;
+    const folio = getState().folios.find((f) => f.bookingId === out.booking.id);
+    addPayment(folio.id, { amount: 50000, method: "Bank transfer", type: "Payment", at: payAt });
+  }
+
+  // 2) Siddhu — rooms 101+205, advance 10k, balance due 2036
+  {
+    const draft = {
+      guest: { name: "Siddhu", phone: "7204301778", email: "", nationality: "India" },
+      type: "Stay",
+      source: "Direct",
+      eventDate: "2026-09-08",
+      guestsExpected: 4,
+      gstMode: "with",
+      halls: [],
+      rooms: [
+        { roomId: r101.id, checkIn: "2026-09-08", checkOut: "2026-09-09", adults: 2, children: 0, extraBed: 0 },
+        { roomId: r205.id, checkIn: "2026-09-08", checkOut: "2026-09-09", adults: 2, children: 0, extraBed: 2 },
+      ],
+      advance: 10000,
+      paymentMode: "Card",
+      paymentDate: "2026-09-08",
+      agreeRoom: true,
+    };
+    draft.lines = buildFolioLinesFromDraft(getState(), draft);
+    const out = createReservation(draft);
+    if (out?.error) return out;
+  }
+
+  // 3) Sriram — 306+307 + extra beds, collected 10266 then cash refund 2950
+  {
+    const draft = {
+      guest: { name: "Sriram", phone: "7204301777", email: "", nationality: "India" },
+      type: "Stay",
+      source: "Direct",
+      eventDate: "2026-09-09",
+      guestsExpected: 4,
+      gstMode: "with",
+      halls: [],
+      rooms: [
+        { roomId: r306.id, checkIn: "2026-09-09", checkOut: "2026-09-10", adults: 2, children: 0, extraBed: 0 },
+        { roomId: r307.id, checkIn: "2026-09-09", checkOut: "2026-09-10", adults: 2, children: 0, extraBed: 2 },
+      ],
+      advance: 0,
+      agreeRoom: true,
+    };
+    draft.lines = buildFolioLinesFromDraft(getState(), draft);
+    const out = createReservation(draft);
+    if (out?.error) return out;
+    const folio = getState().folios.find((f) => f.bookingId === out.booking.id);
+    addPayment(folio.id, {
+      amount: 10266,
+      method: "Cash",
+      type: "Payment",
+      at: payAt,
+      notes: "Settlement including later-cancelled room share",
+    });
+    const rf = processRefund(out.booking.id, {
+      amount: 2950,
+      method: "Cash",
+      date: "2026-09-08",
+      reason: "Room cancel credit · cash refund",
+      skipApproval: true,
+    });
+    if (rf?.error) return rf;
+  }
+
+  audit(load(), "Desk cases loaded", "Sriram · Siddhu · Siddardha", "Payment + refund history restored");
+  return getState();
+}
+
 function recordAgreement(state, { bookingId, guestId, sections, source }) {
   const agreed = (sections || []).filter(Boolean);
   if (!agreed.length) return;
@@ -1379,6 +1525,7 @@ export function removeFolioCharge(lineId) {
 export function addExpense(payload) {
   const state = load();
   if (!Array.isArray(state.expenses)) state.expenses = [];
+  const user = state.users.find((u) => u.id === state.session?.userId);
   const row = {
     id: uid("exp"),
     date: String(payload.date || "").slice(0, 10) || todayISO(),
@@ -1387,18 +1534,92 @@ export function addExpense(payload) {
     amount: Number(payload.amount) || 0,
     method: payload.method || "Cash",
     description: String(payload.description || "").trim(),
+    paidTo: String(payload.paidTo || "").trim(),
+    givenBy: String(payload.givenBy || "").trim() || user?.name || state.property?.name || "Hotel",
+    receiptId: "",
+    receiptName: "",
+    status: "No receipt",
+    verifiedAt: "",
+    verifiedBy: "",
     at: new Date().toISOString(),
     createdBy: state.session?.userId || "",
   };
   if (row.amount <= 0) return { error: "Enter an amount greater than zero" };
+  if (!row.paidTo) return { error: "Enter who took the money (shop / person / vendor)" };
   state.expenses.unshift(row);
-  audit(state, "Expense recorded", row.category, `${row.department} · ${row.amount}`);
+  audit(state, "Expense recorded", row.category, `${row.paidTo} · ${row.department} · ${row.amount}`);
   return persist(state);
 }
 
-export function removeExpense(id) {
+export function updateExpense(id, payload) {
   const state = load();
   const row = (state.expenses || []).find((e) => e.id === id);
+  if (!row) return { error: "Expense not found" };
+  const amount = Number(payload.amount);
+  if (!(amount > 0)) return { error: "Enter an amount greater than zero" };
+  const paidTo = String(payload.paidTo || "").trim();
+  if (!paidTo) return { error: "Enter who took the money (shop / person / vendor)" };
+  row.date = String(payload.date || row.date).slice(0, 10);
+  row.department = payload.department || row.department;
+  row.category = payload.category || row.category;
+  row.amount = amount;
+  row.method = payload.method || row.method;
+  row.description = String(payload.description || "").trim();
+  row.paidTo = paidTo;
+  row.givenBy = String(payload.givenBy || "").trim() || row.givenBy;
+  row.updatedAt = new Date().toISOString();
+  // Editing after verify → back to pending if receipt exists
+  if (row.receiptId && row.status === "Verified") {
+    row.status = "Pending verify";
+    row.verifiedAt = "";
+    row.verifiedBy = "";
+  }
+  audit(state, "Expense updated", row.id, `${row.paidTo} · ${row.amount}`);
+  return persist(state);
+}
+
+export async function attachExpenseReceipt(expenseId, file) {
+  const state = load();
+  const row = (state.expenses || []).find((e) => e.id === expenseId);
+  if (!row) return { error: "Expense not found" };
+  if (!file) return { error: "Choose a receipt file" };
+  const max = 8 * 1024 * 1024;
+  if (file.size > max) return { error: "Receipt must be under 8 MB" };
+  if (row.receiptId) await deleteBlob(row.receiptId).catch(() => {});
+  const receiptId = uid("exprec");
+  await putBlob(receiptId, file);
+  row.receiptId = receiptId;
+  row.receiptName = file.name || "receipt";
+  row.status = "Pending verify";
+  row.verifiedAt = "";
+  row.verifiedBy = "";
+  audit(state, "Expense receipt uploaded", row.id, row.receiptName);
+  return persist(state);
+}
+
+export function setExpenseVerified(expenseId, verified = true) {
+  const state = load();
+  const row = (state.expenses || []).find((e) => e.id === expenseId);
+  if (!row) return { error: "Expense not found" };
+  if (!row.receiptId) return { error: "Upload a receipt before verifying" };
+  const user = state.users.find((u) => u.id === state.session?.userId);
+  if (verified) {
+    row.status = "Verified";
+    row.verifiedAt = new Date().toISOString();
+    row.verifiedBy = user?.name || "Staff";
+  } else {
+    row.status = "Pending verify";
+    row.verifiedAt = "";
+    row.verifiedBy = "";
+  }
+  audit(state, verified ? "Expense verified" : "Expense verify cleared", row.id, row.paidTo || row.category);
+  return persist(state);
+}
+
+export async function removeExpense(id) {
+  const state = load();
+  const row = (state.expenses || []).find((e) => e.id === id);
+  if (row?.receiptId) await deleteBlob(row.receiptId).catch(() => {});
   state.expenses = (state.expenses || []).filter((e) => e.id !== id);
   if (row) audit(state, "Expense removed", row.category, String(row.amount));
   return persist(state);

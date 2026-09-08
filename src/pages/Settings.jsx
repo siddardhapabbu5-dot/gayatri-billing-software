@@ -20,7 +20,7 @@ const TABS = [
   ["system", "Users & audit"],
 ];
 
-export default function Settings({ state, onProperty, onPublishTerms, onUser, onReset, onClearBookings }) {
+export default function Settings({ state, onProperty, onPublishTerms, onUser, onReset, onClearBookings, onLoadDeskCases }) {
   const p = state.property;
   const [tab, setTab] = useState("terms");
   const [sec, setSec] = useState("hall");
@@ -320,6 +320,25 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
               {onClearBookings ? (
                 <button className="btn danger small" style={{ marginTop: 8, marginRight: 8 }} type="button" onClick={onClearBookings}>
                   Clear all bookings (dashboard zero)
+                </button>
+              ) : null}
+              {onLoadDeskCases ? (
+                <button
+                  className="btn small"
+                  style={{ marginTop: 8, marginRight: 8 }}
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "Load Sriram / Siddhu / Siddardha desk cases?\n\nReplaces only those three guests (phones 7204301777–779) with payment + refund history."
+                      )
+                    ) {
+                      return;
+                    }
+                    onLoadDeskCases();
+                  }}
+                >
+                  Load Sriram / Siddhu cases
                 </button>
               ) : null}
               <button className="btn danger small" style={{ marginTop: 8 }} type="button" onClick={onReset}>Reload demo property data</button>

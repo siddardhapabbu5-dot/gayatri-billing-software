@@ -30,10 +30,6 @@ function bookingDay(b) {
   return String(b?.eventDate || b?.checkIn || "").slice(0, 10);
 }
 
-function payDay(p) {
-  return String(p.at || p.date || "").slice(0, 10);
-}
-
 function buildMonthCells(monthStartISO) {
   const start = parseISO(monthStartISO);
   const y = start.getFullYear();
@@ -132,33 +128,12 @@ function bookingMatchesAsset(state, bookingId, asset) {
   return true;
 }
 
-function paymentsIncome(state, from, to, bookingIdSet) {
-  const bookingIds = new Set((state.bookings || []).map((b) => b.id));
-  return (state.payments || [])
-    .filter((p) => p.type !== "Deposit")
-    .filter((p) => {
-      const st = String(p.status || "SUCCESS").toUpperCase();
-      if (st === "REVERSED" || st === "FAILED" || st === "REJECTED") return false;
-      if (p.bookingId && !bookingIds.has(p.bookingId)) return false;
-      const day = payDay(p);
-      if (!day) return false;
-      if (from && day < from) return false;
-      if (to && day > to) return false;
-      if (bookingIdSet && !bookingIdSet.has(p.bookingId)) return false;
-      return true;
-    })
-    .reduce((s, p) => {
-      const amt = Number(p.amount || 0);
-      if (p.type === "Refund" || p.type === "Deposit return") return s - amt;
-      return s + amt;
-    }, 0);
-}
-
 export default function Dashboard({ state, go }) {
   const today = todayISO();
   const currentMonthStart = startOfMonthISO(new Date(`${today}T12:00:00`));
   const yearStart = `${today.slice(0, 4)}-01-01`;
-  const weekStart = addDays(today, -6);
+  // Align ranges with Reports → cashbook presets (Week / 6 months / Year).
+  const weekStart = addDays(today, -((new Date(`${today}T12:00:00`).getDay() + 6) % 7));
   const sixMonthStart = monthsAgoISO(today, 5);
   const next30 = addDays(today, 30);
 
@@ -195,14 +170,11 @@ export default function Dashboard({ state, go }) {
   function applyDate(iso) {
     const day = String(iso || "").slice(0, 10);
     if (!day) return;
-    const monthYm = day.slice(0, 7);
-    const start = `${monthYm}-01`;
-    const end = endOfMonthISO(start);
-    const cappedEnd = end > today ? today : end;
+    // Day click / Today → Period KPIs for that day only (not whole month).
     setSelectedDate(day);
-    setFilterMonth(monthYm);
-    setFrom(start);
-    setTo(cappedEnd < start ? start : cappedEnd);
+    setFilterMonth(day.slice(0, 7));
+    setFrom(day);
+    setTo(day);
   }
 
   const cur = state.property.currency;
@@ -287,8 +259,14 @@ export default function Dashboard({ state, go }) {
     : openAll;
   const due = open.reduce((s, x) => s + x.totals.balance, 0);
 
-  const todayBook = useMemo(() => cashbookReport(state, today, today), [state, today]);
-  const periodBook = useMemo(() => cashbookReport(state, rangeFrom, rangeTo), [state, rangeFrom, rangeTo]);
+  const todayBook = useMemo(
+    () => cashbookReport(state, today, today, filteredBookingIds),
+    [state, today, filteredBookingIds]
+  );
+  const periodBook = useMemo(
+    () => cashbookReport(state, rangeFrom, rangeTo, filteredBookingIds),
+    [state, rangeFrom, rangeTo, filteredBookingIds]
+  );
   const rangeLabel = `${formatDate(rangeFrom)} – ${formatDate(rangeTo)}`;
 
   const roomsInScope = useMemo(() => {
@@ -341,10 +319,13 @@ export default function Dashboard({ state, go }) {
     return halls;
   }, [state, today, selectedDate, filterAsset]);
 
-  const dayIncome = useMemo(
-    () => paymentsIncome(state, selectedDate || today, selectedDate || today, filteredBookingIds),
-    [state, selectedDate, today, filteredBookingIds]
+  const focusDayForMoney = selectedDate || today;
+  const dayBook = useMemo(
+    () => cashbookReport(state, focusDayForMoney, focusDayForMoney, filteredBookingIds),
+    [state, focusDayForMoney, filteredBookingIds]
   );
+  // Same figure as Reports → cashbook for that single day (collections − refunds).
+  const dayIncome = dayBook.incomeTotal;
 
   const upcomingEvents = useMemo(() => {
     if (filterAsset.startsWith("roomType:")) {
@@ -431,22 +412,21 @@ export default function Dashboard({ state, go }) {
     ? (state.halls || []).find((h) => h.id === filterAsset.slice(5))
     : null;
 
-  const monthIncome = useMemo(
-    () => paymentsIncome(state, filterMonthStart, filterMonthTo, filteredBookingIds),
-    [state, filterMonthStart, filterMonthTo, filteredBookingIds]
-  );
-  const weekIncome = useMemo(
-    () => paymentsIncome(state, weekStart, today, filteredBookingIds),
+  const weekBook = useMemo(
+    () => cashbookReport(state, weekStart, today, filteredBookingIds),
     [state, weekStart, today, filteredBookingIds]
   );
-  const sixIncome = useMemo(
-    () => paymentsIncome(state, sixMonthStart, today, filteredBookingIds),
+  const sixBook = useMemo(
+    () => cashbookReport(state, sixMonthStart, today, filteredBookingIds),
     [state, sixMonthStart, today, filteredBookingIds]
   );
-  const yearIncome = useMemo(
-    () => paymentsIncome(state, yearStart, today, filteredBookingIds),
+  const yearBook = useMemo(
+    () => cashbookReport(state, yearStart, today, filteredBookingIds),
     [state, yearStart, today, filteredBookingIds]
   );
+  const weekIncome = weekBook.incomeTotal;
+  const sixIncome = sixBook.incomeTotal;
+  const yearIncome = yearBook.incomeTotal;
 
   const cancelRefundStats = useMemo(() => {
     const inMonth = (iso) => {
@@ -515,10 +495,11 @@ export default function Dashboard({ state, go }) {
   }, [state, filterMonthStart, filterMonthEnd, filterAsset, filteredBookingIds]);
 
   const monthCashAll = useMemo(
-    () => cashbookReport(state, filterMonthStart, filterMonthTo),
-    [state, filterMonthStart, filterMonthTo]
+    () => cashbookReport(state, filterMonthStart, filterMonthTo, filteredBookingIds),
+    [state, filterMonthStart, filterMonthTo, filteredBookingIds]
   );
-  const monthNet = filterAsset === "all" ? monthCashAll.net : monthIncome;
+  const monthIncome = monthCashAll.incomeTotal;
+  const monthNet = filterAsset === "all" ? monthCashAll.net : monthCashAll.incomeTotal;
 
   const assetLabel = assetOptions.find((a) => a.id === filterAsset)?.label || "All";
 
@@ -658,7 +639,7 @@ export default function Dashboard({ state, go }) {
           <div className="dash-room-stat rs-hold">
             <span className="dash-ov-k">Guest credit with hotel</span>
             <span className="dash-ov-v">{m(cancelRefundStats.refundMoneyWithHotel)}</span>
-            <span className="dash-ov-s">Extra money held (paid − bill). Use Refund to return.</span>
+            <span className="dash-ov-s">Open bills · extra held (paid − bill). Same as Payment &amp; Invoice “To refund”.</span>
           </div>
           <div className="dash-room-stat rs-free">
             <span className="dash-ov-k">Refunds paid out</span>
@@ -733,8 +714,13 @@ export default function Dashboard({ state, go }) {
               <span className="dash-ov-v">{monthBookings}</span>
             </div>
             <div className="dash-room-stat rs-total">
-              <span className="dash-ov-k">Day revenue</span>
+              <span className="dash-ov-k">Day revenue (net)</span>
               <span className="dash-ov-v">{m(dayIncome)}</span>
+              <span className="dash-ov-s">
+                {dayBook.refundTotal > 0
+                  ? `In ${m(dayBook.incomeGross)} − refunds ${m(dayBook.refundTotal)}`
+                  : "Same as Reports day cashbook"}
+              </span>
             </div>
           </div>
         </div>
@@ -762,8 +748,13 @@ export default function Dashboard({ state, go }) {
               <span className="dash-ov-v">{monthBookings}</span>
             </div>
             <div className="dash-room-stat rs-total">
-              <span className="dash-ov-k">Day revenue</span>
+              <span className="dash-ov-k">Day revenue (net)</span>
               <span className="dash-ov-v">{m(dayIncome)}</span>
+              <span className="dash-ov-s">
+                {dayBook.refundTotal > 0
+                  ? `In ${m(dayBook.incomeGross)} − refunds ${m(dayBook.refundTotal)}`
+                  : "Same as Reports day cashbook"}
+              </span>
             </div>
           </div>
         </div>
@@ -777,33 +768,51 @@ export default function Dashboard({ state, go }) {
           <div className="dash-report-item">
             <span className="dash-ov-k">Day wise</span>
             <span className="dash-ov-v">{m(dayIncome)}</span>
-            <span className="dash-ov-s">Revenue · {formatDate(focusDay)}</span>
+            <span className="dash-ov-s">
+              Net · {formatDate(focusDay)}
+              {dayBook.refundTotal > 0
+                ? ` · in ${m(dayBook.incomeGross)} − refunds ${m(dayBook.refundTotal)}`
+                : " · = Reports cashbook that day"}
+            </span>
           </div>
           <div className="dash-report-item">
             <span className="dash-ov-k">Week wise</span>
             <span className="dash-ov-v">{m(weekIncome)}</span>
-            <span className="dash-ov-s">Revenue · last 7 days</span>
+            <span className="dash-ov-s">
+              Mon–today · {formatDate(weekStart)} – {formatDate(today)}
+              {weekBook.refundTotal > 0 ? ` · refunds ${m(weekBook.refundTotal)}` : ""}
+            </span>
           </div>
           <div className="dash-report-item">
             <span className="dash-ov-k">Month wise</span>
             <span className="dash-ov-v">{m(monthIncome)}</span>
-            <span className="dash-ov-s">Revenue · {monthLabel(filterMonthStart)}</span>
+            <span className="dash-ov-s">
+              {monthLabel(filterMonthStart)}
+              {isCurrentFilterMonth ? " · up to today" : ""}
+              {monthCashAll.refundTotal > 0 ? ` · refunds ${m(monthCashAll.refundTotal)}` : ""}
+            </span>
           </div>
           <div className="dash-report-item">
             <span className="dash-ov-k">6 months wise</span>
             <span className="dash-ov-v">{m(sixIncome)}</span>
-            <span className="dash-ov-s">Revenue · since {formatDate(sixMonthStart)}</span>
+            <span className="dash-ov-s">
+              {formatDate(sixMonthStart)} – {formatDate(today)}
+              {sixBook.refundTotal > 0 ? ` · refunds ${m(sixBook.refundTotal)}` : ""}
+            </span>
           </div>
           <div className="dash-report-item">
             <span className="dash-ov-k">Yearly wise</span>
             <span className="dash-ov-v">{m(yearIncome)}</span>
-            <span className="dash-ov-s">Revenue · {today.slice(0, 4)}</span>
+            <span className="dash-ov-s">
+              {today.slice(0, 4)} · {formatDate(yearStart)} – {formatDate(today)}
+              {yearBook.refundTotal > 0 ? ` · refunds ${m(yearBook.refundTotal)}` : ""}
+            </span>
           </div>
           <div className="dash-report-net">
             <span className="dash-ov-k">{filterAsset === "all" ? "Net profit (selected month)" : "Revenue (selection)"}</span>
             <span className="dash-ov-v">{m(monthNet)}</span>
             <span className="dash-ov-s">
-              {filterAsset === "all" ? "After expenses" : "Payments for selection"} · {monthLabel(filterMonthStart)}
+              {filterAsset === "all" ? "After expenses" : "Net collections for selection"} · {monthLabel(filterMonthStart)}
             </span>
           </div>
         </div>
@@ -888,8 +897,8 @@ export default function Dashboard({ state, go }) {
         </div>
         <div className="kpi tone-e">
           <div className="k">Pending payments</div>
-          <div className="v">{m(openAll.reduce((s, x) => s + x.totals.balance, 0))}</div>
-          <div className="s">{openAll.length} open bills · not dated</div>
+          <div className="v">{m(due)}</div>
+          <div className="s">{open.length} open bills · to collect{filterAsset !== "all" ? ` · ${assetLabel}` : ""}</div>
         </div>
       </div>
 
@@ -971,8 +980,44 @@ export default function Dashboard({ state, go }) {
           <button className="btn ghost small" type="button" onClick={setThisMonth}>
             This month
           </button>
+          <button
+            className="btn ghost small"
+            type="button"
+            onClick={() => {
+              setFrom(weekStart);
+              setTo(today);
+              setSelectedDate(today);
+              setFilterMonth(today.slice(0, 7));
+            }}
+          >
+            This week
+          </button>
           <button className="btn ghost small" type="button" onClick={setTodayOnly}>
             Today
+          </button>
+          <button
+            className="btn ghost small"
+            type="button"
+            onClick={() => {
+              setFrom(sixMonthStart);
+              setTo(today);
+              setSelectedDate(today);
+              setFilterMonth(today.slice(0, 7));
+            }}
+          >
+            6 months
+          </button>
+          <button
+            className="btn ghost small"
+            type="button"
+            onClick={() => {
+              setFrom(yearStart);
+              setTo(today);
+              setSelectedDate(today);
+              setFilterMonth(today.slice(0, 7));
+            }}
+          >
+            Year
           </button>
         </div>
       </div>

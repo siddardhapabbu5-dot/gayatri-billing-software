@@ -282,14 +282,18 @@ function livePayment(p) {
   return st !== "REVERSED" && st !== "FAILED" && st !== "REJECTED";
 }
 
-/** Cashbook: Opening + Income − Customer refunds − Expenses = Closing (cash basis). */
-export function cashbookReport(state, from, to) {
+/** Cashbook: Opening + Income − Customer refunds − Expenses = Closing (cash basis).
+ *  Optional bookingIdSet scopes collections/refunds to those bookings (Dashboard hall/room filter).
+ *  Expenses stay property-wide.
+ */
+export function cashbookReport(state, from, to, bookingIdSet = null) {
   const bookingIds = new Set((state.bookings || []).map((b) => b.id));
   const tied = (p) => !p.bookingId || bookingIds.has(p.bookingId);
+  const scoped = (p) => !bookingIdSet || (p.bookingId && bookingIdSet.has(p.bookingId));
   const isRefund = (p) => p.type === "Refund" || p.type === "Deposit return";
   const isDeposit = (p) => p.type === "Deposit";
-  const incomeAll = (state.payments || []).filter((p) => livePayment(p) && tied(p) && !isRefund(p) && !isDeposit(p));
-  const refundAll = (state.payments || []).filter((p) => livePayment(p) && tied(p) && isRefund(p));
+  const incomeAll = (state.payments || []).filter((p) => livePayment(p) && tied(p) && scoped(p) && !isRefund(p) && !isDeposit(p));
+  const refundAll = (state.payments || []).filter((p) => livePayment(p) && tied(p) && scoped(p) && isRefund(p));
   const expsAll = state.expenses || [];
 
   const sumIncomeBefore = (before) => {
@@ -447,12 +451,12 @@ export function cashbookReport(state, from, to) {
       kind: "Expense",
       method: e.method || e.paidBy || "",
       amount: Number(e.amount) || 0,
-      guest: e.description || expenseLabelSafe(e.category),
+      guest: e.paidTo || e.description || expenseLabelSafe(e.category),
       phone: "",
       billNo: "",
       bookingId: "",
       ref: e.ref || "",
-      notes: e.notes || e.category || "",
+      notes: [e.givenBy ? `Given by ${e.givenBy}` : "", e.description || e.category || ""].filter(Boolean).join(" · "),
       receiptNo: "",
     })),
   ].sort((a, b) => String(a.at || a.day).localeCompare(String(b.at || b.day)));

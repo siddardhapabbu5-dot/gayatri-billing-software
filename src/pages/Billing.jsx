@@ -64,28 +64,48 @@ function ledger(pays, totals) {
     const st = String(p.status || "SUCCESS").toUpperCase();
     return st !== "REVERSED" && st !== "FAILED" && st !== "REJECTED";
   });
-  const advance = live
+  const collectRows = live.filter((p) => !["Refund", "Deposit return", "Deposit"].includes(p.type));
+  const refundRows = live.filter((p) => p.type === "Refund" || p.type === "Deposit return");
+  const advance = collectRows
     .filter((p) => p.type === "Advance")
     .reduce((s, p) => s + Number(p.amount || 0), 0);
-  const refunds = live
-    .filter((p) => p.type === "Refund" || p.type === "Deposit return")
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
-  const collections = live
-    .filter((p) => !["Refund", "Deposit return", "Deposit"].includes(p.type))
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const refunds = refundRows.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const collections = collectRows.reduce((s, p) => s + Number(p.amount || 0), 0);
   const paidNet = collections - refunds;
-  const methods = [
-    ...new Set(
-      live
-        .filter((p) => !["Refund", "Deposit return", "Deposit"].includes(p.type))
-        .map((p) => p.method)
-        .filter(Boolean)
-    ),
-  ];
+
+  const sumByMode = (rows) => {
+    const map = {};
+    for (const p of rows) {
+      const mode = String(p.method || "Other").trim() || "Other";
+      map[mode] = (map[mode] || 0) + Number(p.amount || 0);
+    }
+    return map;
+  };
+  const collectByMode = sumByMode(collectRows);
+  const refundByMode = sumByMode(refundRows);
+
+  const methods = Object.keys(collectByMode);
   let settlement = methods.join(", ");
   if (!settlement && refunds > 0) settlement = "Refunded";
   if (!settlement && totals.balance <= 0 && advance > 0) settlement = "Advance";
-  return { advance, refunds, collections, paidNet, settlement };
+
+  return {
+    advance,
+    refunds,
+    collections,
+    paidNet,
+    settlement,
+    collectByMode,
+    refundByMode,
+    collectRows,
+    refundRows,
+  };
+}
+
+function formatModeAmounts(byMode, m) {
+  const entries = Object.entries(byMode || {}).filter(([, v]) => v > 0);
+  if (!entries.length) return "—";
+  return entries.map(([mode, amt]) => `${mode} ${m(amt)}`).join(" · ");
 }
 
 function partyMatch(state, booking, pays, q) {
@@ -377,7 +397,25 @@ export default function Billing({
               <tr><td colSpan={3}>Advance paid</td><td>{m(sumPayType(pays, "Advance"))}</td></tr>
               <tr><td colSpan={3}>Final payment</td><td>{m(sumPayType(pays, "Final"))}</td></tr>
               <tr><td colSpan={3}>Other collections</td><td>{m(livePays(pays).filter((p) => !["Advance", "Final", "Refund", "Deposit return", "Deposit"].includes(p.type)).reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
-              <tr><td colSpan={3}>Refunds</td><td>{m(livePays(pays).filter((p) => p.type === "Refund" || p.type === "Deposit return").reduce((s, p) => s + Number(p.amount || 0), 0))}</td></tr>
+              {(() => {
+                const L = ledger(pays, totals);
+                return (
+                  <>
+                    <tr>
+                      <td colSpan={3}>Customer paid by mode</td>
+                      <td>{formatModeAmounts(L.collectByMode, m)}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3}>Refund amount</td>
+                      <td>{L.refunds > 0 ? m(L.refunds) : "—"}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3}>Hotel refund by mode</td>
+                      <td>{L.refunds > 0 ? formatModeAmounts(L.refundByMode, m) : "—"}</td>
+                    </tr>
+                  </>
+                );
+              })()}
               <tr><td colSpan={3}>Paid (all, net)</td><td>{m(totals.paid)}</td></tr>
               {Number(totals.deposit) > 0 && (
                 <tr><td colSpan={3}>Security deposit held</td><td>{m(totals.deposit)}</td></tr>
@@ -404,23 +442,33 @@ export default function Billing({
             <table style={{ marginTop: 16 }}>
               <thead>
                 <tr>
-                  <th>Payment date</th>
+                  <th>Date</th>
+                  <th>In / Out</th>
                   <th>Kind</th>
                   <th>Mode</th>
                   <th>Amount</th>
+                  <th>Receipt / Ref</th>
+                  <th>Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {[...pays]
                   .sort((a, b) => String(a.at).localeCompare(String(b.at)))
-                  .map((p) => (
-                  <tr key={p.id}>
-                    <td>{formatDateTime(p.at)}</td>
-                    <td>{payKind(p)}</td>
-                    <td>{p.method}{p.ref ? ` · ${p.ref}` : ""}</td>
-                    <td>{m(p.amount)}</td>
-                  </tr>
-                ))}
+                  .map((p) => {
+                    const st = String(p.status || "SUCCESS").toUpperCase();
+                    const isOut = p.type === "Refund" || p.type === "Deposit return";
+                    return (
+                      <tr key={p.id} className={st === "REVERSED" ? "muted" : undefined}>
+                        <td>{formatDateTime(p.at)}</td>
+                        <td>{isOut ? "Out" : "In"}</td>
+                        <td>{payKind(p)}{st === "REVERSED" ? " · reversed" : ""}</td>
+                        <td>{p.method || "—"}</td>
+                        <td>{m(p.amount)}</td>
+                        <td>{[p.receiptNo, p.ref].filter(Boolean).join(" · ") || "—"}</td>
+                        <td>{p.notes || "—"}</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           )}
@@ -769,7 +817,9 @@ export default function Billing({
           </label>
         </div>
         <p className="muted" style={{ margin: "10px 0 0" }}>
-          Click a row to open the bill. <strong>To collect</strong> = customer still owes. <strong>To refund</strong> = hotel should return (or keep as credit). Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
+          <strong>Customer paid (mode)</strong> = how guest paid (Cash / UPI / Card / Bank + amount).{" "}
+          <strong>Hotel refund (mode)</strong> = refund amount and how hotel returned it.{" "}
+          Open the bill for full line register. Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
         </p>
       </div>
       <div className="panel">
@@ -783,27 +833,30 @@ export default function Billing({
               <th>Date from</th>
               <th>Date to</th>
               <th>Total amount</th>
-              <th>Paid</th>
+              <th>Collected</th>
+              <th>Customer paid (mode)</th>
+              <th>Paid (net)</th>
               <th>Advance</th>
+              <th>Refund amount</th>
+              <th>Hotel refund (mode)</th>
               <th>Last paid</th>
               <th>To collect</th>
               <th>To refund</th>
               <th>Status</th>
               <th>GST</th>
-              <th>Settlement</th>
             </tr>
           </thead>
           <tbody>
             {!rows.length && (
               <tr>
-                <td colSpan={15} className="muted">
+                <td colSpan={18} className="muted">
                   {partyQuery ? "No party matches that booking no. / name / phone / ref." : "No active bills."}
                 </td>
               </tr>
             )}
             {rows.map(({ b, pays, totals, stay }) => {
               const g = state.guests.find((x) => x.id === b.guestId);
-              const { advance, settlement } = ledger(pays, totals);
+              const { advance, collections, refunds, paidNet, collectByMode, refundByMode } = ledger(pays, totals);
               const lastPay = pays
                 .filter((p) => {
                   const st = String(p.status || "SUCCESS").toUpperCase();
@@ -811,7 +864,6 @@ export default function Billing({
                 })
                 .sort((a, c) => String(c.at).localeCompare(String(a.at)))[0];
               const bal = Number(totals.balance) || 0;
-              const paidShown = Number(totals.paid) || 0;
               const toCollect = bal > 0 ? bal : 0;
               const toRefund = bal < 0 ? Math.abs(bal) : 0;
               return (
@@ -827,20 +879,25 @@ export default function Billing({
                   <td>{formatDateDMY(stay.from)}</td>
                   <td>{formatDateDMY(stay.to)}</td>
                   <td>{m(totals.total)}</td>
-                  <td title={toRefund > 0 ? `Bill ${m(totals.total)} · received ${m(paidShown)}` : undefined}>
-                    {m(paidShown)}
+                  <td>{m(collections)}</td>
+                  <td title="Modes customer used to pay hotel">{formatModeAmounts(collectByMode, m)}</td>
+                  <td title={refunds > 0 ? `Collected ${m(collections)} − refunds ${m(refunds)}` : undefined}>
+                    {m(paidNet)}
                   </td>
                   <td>{m(advance)}</td>
+                  <td>{refunds > 0 ? m(refunds) : "—"}</td>
+                  <td title="How hotel returned money to customer">
+                    {refunds > 0 ? formatModeAmounts(refundByMode, m) : "—"}
+                  </td>
                   <td>{lastPay ? formatDateTime(lastPay.at) : "—"}</td>
                   <td className={toCollect > 0 ? "due-row" : undefined} title={toCollect > 0 ? "Collect from customer" : undefined}>
                     {toCollect > 0 ? m(toCollect) : "—"}
                   </td>
-                  <td title={toRefund > 0 ? "Return to customer (Refund)" : undefined}>
+                  <td title={toRefund > 0 ? "Still to return to customer" : undefined}>
                     {toRefund > 0 ? m(toRefund) : "—"}
                   </td>
                   <td>{paymentStatus(totals, b)}</td>
                   <td>{totals.gstMode === "without" ? "Without GST" : "With GST"}</td>
-                  <td>{settlement || "—"}</td>
                 </tr>
               );
             })}

@@ -24,6 +24,7 @@ import {
   createReservation,
   getState,
   issueDocument,
+  loadDeskCaseBookings,
   processCancellation,
   processRefund,
   approveRefund,
@@ -48,6 +49,9 @@ import {
   verifyDocument,
   addExpense,
   removeExpense,
+  updateExpense,
+  attachExpenseReceipt,
+  setExpenseVerified,
   addFolioCharge,
 } from "./store";
 
@@ -205,6 +209,22 @@ export default function App() {
     window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`);
     void handleClearAllBookings();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL clear
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("loadDesk") !== "1") return;
+    params.delete("loadDesk");
+    const qs = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`);
+    const out = loadDeskCaseBookings();
+    if (out?.error) {
+      window.alert(out.error);
+      return;
+    }
+    setState(getState());
+    window.alert("Loaded desk cases: Sriram, Siddhu, Siddardha (with payment + refund history).");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL load
   }, []);
 
   useEffect(() => {
@@ -673,7 +693,28 @@ export default function App() {
                   setState(out);
                   return out;
                 }}
-                onRemove={(id) => setState(removeExpense(id))}
+                onUpdate={(id, payload) => {
+                  const out = updateExpense(id, payload);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onRemove={async (id) => {
+                  const out = await removeExpense(id);
+                  setState(out);
+                }}
+                onAttachReceipt={async (id, file) => {
+                  const out = await attachExpenseReceipt(id, file);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
+                onVerify={(id, verified) => {
+                  const out = setExpenseVerified(id, verified);
+                  if (out?.error) return out;
+                  setState(out);
+                  return out;
+                }}
               />
             )}
             {page === "reports" && <Reports state={state} go={go} />}
@@ -716,6 +757,15 @@ export default function App() {
                   }
                 }}
                 onClearBookings={handleClearAllBookings}
+                onLoadDeskCases={() => {
+                  const out = loadDeskCaseBookings();
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
+                  setState(getState());
+                  window.alert("Loaded: Sriram, Siddhu, Siddardha.");
+                }}
               />
             )}
           </Suspense>
