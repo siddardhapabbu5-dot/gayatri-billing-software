@@ -3494,6 +3494,26 @@ html.lux-page .to-top span {
   html.lux-page .slide-arrow.next {
     right: calc(12px + env(safe-area-inset-right, 0px));
   }
+
+  /* Keep page content clear of docked bottom arrows */
+  html.lux-page .locations.venues-page,
+  html.lux-page .rooms-page,
+  html.lux-page .organize {
+    padding-bottom: calc(5.85rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.lux-page .venues-reserve-bar {
+    margin-bottom: calc(3.4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  html.lux-page .booking-form .book-agree {
+    padding-inline: 3.1rem;
+    margin-bottom: 0.85rem;
+  }
+
+  html.lux-page .booking-form .btn.full {
+    margin-bottom: 0.35rem;
+  }
 }
 
 @media (max-width: 900px) {
@@ -4302,7 +4322,7 @@ html.lux-page .rooms-empty {
 
   html.lux-page .rooms-page {
     padding-top: 13.25rem !important;
-    padding-bottom: 5.75rem !important;
+    padding-bottom: calc(6.1rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   html.lux-page .gallery-mosaic {
@@ -4326,6 +4346,28 @@ html.lux-page .rooms-empty {
 
   html.lux-page .slide-arrow.next {
     right: calc(0.85rem + env(safe-area-inset-right, 0px));
+  }
+
+  html.lux-page .locations.venues-page,
+  html.lux-page .organize,
+  html.lux-page .gallery {
+    padding-bottom: calc(6.1rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.lux-page .venues-reserve-bar {
+    margin-bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.lux-page .rooms-rate-grid {
+    padding-bottom: 1.25rem;
+  }
+
+  html.lux-page .booking-form .book-agree {
+    padding-inline: 3.15rem !important;
+  }
+
+  html.lux-page .hero .petals {
+    opacity: 0.32;
   }
 
   html.lux-page .lightbox-nav {
