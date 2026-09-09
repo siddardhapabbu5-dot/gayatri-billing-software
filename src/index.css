@@ -22,7 +22,6 @@ button { cursor: pointer; }
 a { color: inherit; }
 
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; min-height: 100dvh; }
-.shell.is-nav-min { grid-template-columns: 72px 1fr; }
 
 .staff-login {
   position: relative;
@@ -381,79 +380,6 @@ a { color: inherit; }
   background: rgba(255,255,255,.12) !important;
 }
 .nav-foot select { width: 100%; background: var(--nav-2); border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 6px; margin-top: 6px; }
-
-.nav-min-btn {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  padding: 6px 8px;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 3px;
-  background: rgba(255,255,255,.06);
-  color: #d7e2e6;
-  font: inherit;
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-.nav-min-btn:hover {
-  background: rgba(255,255,255,.12);
-  color: #fff;
-}
-.nav-label-short { display: none; }
-.nav-label-full { display: inline; }
-
-.nav.is-min {
-  padding-left: 8px;
-  padding-right: 8px;
-}
-.nav.is-min .brand {
-  padding: 4px 0 10px;
-}
-.nav.is-min .brand-logo {
-  max-width: 44px;
-}
-.nav.is-min .brand h1,
-.nav.is-min .nav-group > span,
-.nav.is-min .nav-foot-user,
-.nav.is-min .nav-label-full {
-  display: none;
-}
-.nav.is-min .nav-label-short {
-  display: inline;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-.nav.is-min .nav-min-btn {
-  margin-top: 8px;
-  padding: 6px 0;
-  font-size: 14px;
-  letter-spacing: 0;
-}
-.nav.is-min .nav-group {
-  margin-top: 10px;
-}
-.nav.is-min a {
-  text-align: center;
-  padding: 8px 4px;
-}
-.nav.is-min .nav-logout {
-  padding-left: 0;
-  padding-right: 0;
-  font-size: 10px;
-  letter-spacing: 0.02em;
-}
-
-.topbar-lead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.nav-expand-btn {
-  flex: 0 0 auto;
-}
 
 .workspace { min-width: 0; min-height: 0; }
 .topbar {
@@ -1780,9 +1706,6 @@ tr.clickable.is-selected td { background: #edf7f6; }
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
   }
-  .shell.is-nav-min {
-    grid-template-columns: 64px minmax(0, 1fr);
-  }
   .nav {
     position: sticky;
     top: 0;
@@ -1855,12 +1778,6 @@ tr.clickable.is-selected td { background: #edf7f6; }
 @media (max-width: 720px) {
   .shell {
     grid-template-columns: 1fr;
-  }
-  .shell.is-nav-min {
-    grid-template-columns: 1fr;
-  }
-  .shell.is-nav-min .nav {
-    display: none;
   }
   .nav {
     height: auto;
