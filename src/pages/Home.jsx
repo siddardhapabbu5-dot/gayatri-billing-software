@@ -345,10 +345,15 @@ export default function Home({ state, onEnquire, onStaff }) {
   const loadContactMedia = currentId === "contact";
   const navItems = PAGES.filter((item) => {
     if (item.hideNav) return false;
-    if (item.staffOnly && !staffAuthed) return false;
+    // Public: Home→Terms only. Staff shows after login, or while on #staff.
+    if (item.staffOnly && !staffAuthed && currentId !== "staff") return false;
     return true;
   });
-  const canSlideNext = staffAuthed ? page < PAGES.length - 1 : page < TERMS_PAGE_INDEX;
+  const canSlideNext = staffAuthed
+    ? page < PAGES.length - 1
+    : currentId === "staff"
+      ? false
+      : page < TERMS_PAGE_INDEX;
 
   const reduceMotion = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -567,14 +572,15 @@ export default function Home({ state, onEnquire, onStaff }) {
     let next = pageRef.current + dir;
     while (next >= 0 && next < PAGES.length) {
       const id = PAGES[next]?.id;
+      // Public cannot slide into Staff (use #staff URL). Logged-in staff can.
       if (id === "staff" && !isStaffSignedIn()) {
+        if (dir > 0) return;
         next += dir;
         continue;
       }
       break;
     }
     next = Math.min(PAGES.length - 1, Math.max(0, next));
-    if (PAGES[next]?.id === "staff" && !isStaffSignedIn()) return;
     goTo(PAGES[next].id);
   }
 
