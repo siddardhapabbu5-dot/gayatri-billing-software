@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getDeferredInstallPrompt,
   initPwaInstallCapture,
@@ -18,11 +19,12 @@ export default function InstallPrompt() {
     }
   });
   const [showManual, setShowManual] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (isStandaloneApp() || dismissed) return undefined;
 
-    const stopCapture = initPwaInstallCapture();
+    initPwaInstallCapture();
     const unsub = subscribeInstallPrompt((p) => {
       setDeferred(p);
       if (p) setShowManual(false);
@@ -41,7 +43,6 @@ export default function InstallPrompt() {
     return () => {
       if (timer) window.clearTimeout(timer);
       unsub();
-      stopCapture();
     };
   }, [dismissed]);
 
@@ -59,15 +60,23 @@ export default function InstallPrompt() {
   }
 
   async function install() {
-    const result = await promptPwaInstall();
-    if (result.ok || result.reason === "dismissed" || result.reason === "accepted") {
-      dismiss();
+    setBusy(true);
+    try {
+      const result = await promptPwaInstall();
+      if (result.ok || result.reason === "accepted") {
+        dismiss();
+        return;
+      }
+      // No native dialog — keep banner open so Share / Chrome menu steps stay visible.
+      setShowManual(true);
+    } finally {
+      setBusy(false);
     }
   }
 
   const apple = isAppleTouchDevice();
 
-  return (
+  const banner = (
     <div className="pwa-install" role="dialog" aria-label="Install Gayatri app">
       <div className="pwa-install-copy">
         <strong>Install Gayatri on this tablet</strong>
@@ -85,15 +94,18 @@ export default function InstallPrompt() {
         )}
       </div>
       <div className="pwa-install-actions">
-        {deferred && (
-          <button type="button" className="btn pwa-install-btn" onClick={install}>
-            Install
+        {deferred ? (
+          <button type="button" className="btn pwa-install-btn" disabled={busy} onClick={install}>
+            {busy ? "Opening…" : "Install"}
           </button>
-        )}
+        ) : null}
         <button type="button" className="btn ghost pwa-install-dismiss" onClick={dismiss}>
           Not now
         </button>
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return banner;
+  return createPortal(banner, document.body);
 }

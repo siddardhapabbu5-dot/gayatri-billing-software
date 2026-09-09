@@ -2,6 +2,7 @@
 
 let deferredPrompt = null;
 const listeners = new Set();
+let captureStarted = false;
 
 function notify() {
   for (const fn of listeners) fn(deferredPrompt);
@@ -32,28 +33,42 @@ export function subscribeInstallPrompt(fn) {
   return () => listeners.delete(fn);
 }
 
+/**
+ * Capture beforeinstallprompt once for the whole SPA.
+ * Never unregister — multiple UI pieces share this (public + staff).
+ */
 export function initPwaInstallCapture() {
   if (typeof window === "undefined") return () => {};
-  if (window.__gayatriPwaCapture) return () => {};
+  if (captureStarted || window.__gayatriPwaCapture) return () => {};
+  captureStarted = true;
   window.__gayatriPwaCapture = true;
 
-  const onPrompt = (e) => {
+  window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
     notify();
-  };
-  window.addEventListener("beforeinstallprompt", onPrompt);
-  return () => {
-    window.removeEventListener("beforeinstallprompt", onPrompt);
-    window.__gayatriPwaCapture = false;
-  };
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    notify();
+  });
+
+  return () => {};
 }
 
 export async function promptPwaInstall() {
   if (!deferredPrompt) return { ok: false, reason: "unavailable" };
-  deferredPrompt.prompt();
-  const choice = await deferredPrompt.userChoice;
-  deferredPrompt = null;
-  notify();
-  return { ok: choice?.outcome === "accepted", reason: choice?.outcome || "done" };
+  const promptEvent = deferredPrompt;
+  try {
+    promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    deferredPrompt = null;
+    notify();
+    return { ok: choice?.outcome === "accepted", reason: choice?.outcome || "done" };
+  } catch {
+    deferredPrompt = null;
+    notify();
+    return { ok: false, reason: "failed" };
+  }
 }

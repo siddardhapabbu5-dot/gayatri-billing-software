@@ -3,6 +3,7 @@ import Home from "./pages/Home.jsx";
 import StaffLogin from "./pages/StaffLogin.jsx";
 import InstallPrompt from "./components/InstallPrompt.jsx";
 import InstallAppButton from "./components/InstallAppButton.jsx";
+import { initPwaInstallCapture } from "./lib/pwaInstall.js";
 import { ROLES } from "./seed";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
@@ -235,6 +236,10 @@ export default function App() {
     if (fromHash === "login") return "desk";
     return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
   });
+
+  useEffect(() => {
+    initPwaInstallCapture();
+  }, []);
 
   useEffect(() => {
     // Always reload desk data from localStorage when opening staff pages

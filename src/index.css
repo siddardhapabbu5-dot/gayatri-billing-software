@@ -2216,7 +2216,7 @@ tr.clickable.is-selected td { background: #edf7f6; }
   left: 12px;
   right: 12px;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  z-index: 1200;
+  z-index: 10040;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2302,12 +2302,12 @@ tr.clickable.is-selected td { background: #edf7f6; }
 .install-app-modal {
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: 10050;
   display: grid;
-  place-items: end center;
+  place-items: center;
   padding: 16px;
   padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  background: rgba(8, 10, 12, 0.45);
+  background: rgba(8, 10, 12, 0.55);
 }
 .install-app-sheet {
   width: min(420px, 100%);
@@ -2331,6 +2331,11 @@ tr.clickable.is-selected td { background: #edf7f6; }
   line-height: 1.45;
   color: rgba(244, 239, 228, 0.85);
 }
+.install-app-hint {
+  margin: -0.35rem 0 0.85rem !important;
+  color: #ffe59a !important;
+  font-size: 0.86rem !important;
+}
 .install-app-steps {
   margin: 0 0 1rem;
   padding-left: 1.15rem;
@@ -2346,6 +2351,13 @@ tr.clickable.is-selected td { background: #edf7f6; }
   border-color: rgba(244, 239, 228, 0.28);
   color: #f4efe4;
   background: transparent;
+}
+
+.staff-login-hero-actions {
+  position: absolute;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  z-index: 2;
 }
 
 @media (min-width: 721px) and (max-width: 1200px) {

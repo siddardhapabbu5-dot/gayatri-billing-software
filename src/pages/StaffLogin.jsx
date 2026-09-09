@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { healthCheck, login } from "../api/client";
+import InstallAppButton from "../components/InstallAppButton.jsx";
 
 export default function StaffLogin({ onSuccess, onBack }) {
   const [email, setEmail] = useState("owner@gayatrifunctionhall.com");
@@ -44,6 +45,9 @@ export default function StaffLogin({ onSuccess, onBack }) {
       <div className="staff-login-shade" aria-hidden="true" />
 
       <header className="staff-login-hero">
+        <div className="staff-login-hero-actions">
+          <InstallAppButton tone="light" />
+        </div>
         <img src="/site/images/logo-gold.png" alt="Gayatri" />
         <p>Gayatri Convention</p>
         <h1>Staff desk</h1>
