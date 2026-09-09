@@ -32,9 +32,12 @@ a { color: inherit; }
   flex-direction: column;
   justify-content: space-between;
   box-sizing: border-box;
-  background:
-    url("/site/images/staff-login-bg.jpg") center / cover no-repeat;
-  overflow: hidden;
+  background-color: #102027;
+  background-image: url("/site/images/staff-login-bg.jpg");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  overflow: auto;
 }
 .staff-login-shade {
   position: absolute;

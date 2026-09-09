@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { healthCheck, login } from "../api/client";
 
 export default function StaffLogin({ onSuccess, onBack }) {
@@ -8,6 +8,12 @@ export default function StaffLogin({ onSuccess, onBack }) {
   const [busy, setBusy] = useState(false);
   const [apiUp, setApiUp] = useState(null);
   const [showDemo, setShowDemo] = useState(false);
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.remove("lux-page");
+    document.body.classList.remove("menu-lock");
+    document.body.style.overflow = "";
+  }, []);
 
   useEffect(() => {
     healthCheck().then(setApiUp);

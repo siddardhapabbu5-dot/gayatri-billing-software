@@ -196,6 +196,7 @@ function pageFromHash() {
   if (full === "portal") return "portal";
   if (full.startsWith("staff/")) {
     const id = full.slice(6).split(/[/?#]/)[0];
+    if (id === "login") return "login";
     if (STAFF_PAGES.has(id)) return id;
     return "desk";
   }
@@ -210,6 +211,7 @@ export default function App() {
   const [state, setState] = useState(getState);
   const [page, setPage] = useState(() => {
     const fromHash = pageFromHash();
+    if (fromHash === "login") return "home";
     if (fromHash && fromHash !== "home" && fromHash !== "portal" && getToken() && getAuthUser()) {
       return fromHash;
     }
@@ -224,10 +226,12 @@ export default function App() {
   const [authUser, setAuthUser] = useState(() => (getToken() ? getAuthUser() : null));
   const [staffGate, setStaffGate] = useState(() => {
     const fromHash = pageFromHash();
+    if (fromHash === "login") return true;
     return Boolean(fromHash && fromHash !== "home" && fromHash !== "portal" && !(getToken() && getAuthUser()));
   });
   const [pendingStaffPage, setPendingStaffPage] = useState(() => {
     const fromHash = pageFromHash();
+    if (fromHash === "login") return "desk";
     return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
   });
 
@@ -273,6 +277,13 @@ export default function App() {
     function applyHash() {
       const next = pageFromHash();
       if (!next) return;
+      if (next === "login") {
+        if (!(getToken() && getAuthUser())) {
+          setPendingStaffPage("desk");
+          setStaffGate(true);
+        }
+        return;
+      }
       if (next === "home" || next === "portal") {
         setStaffGate(false);
         setPage(next);
@@ -294,6 +305,15 @@ export default function App() {
       window.removeEventListener("popstate", applyHash);
     };
   }, []);
+
+  // Leave public-site CSS mode before painting staff login (avoids blank/cream screen).
+  useEffect(() => {
+    if (!(staffGate && !authUser)) return undefined;
+    document.documentElement.classList.remove("lux-page");
+    document.body.classList.remove("menu-lock");
+    document.body.style.overflow = "";
+    return undefined;
+  }, [staffGate, authUser]);
 
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
   const role = String(authUser?.role || user.role || "").toLowerCase();
@@ -317,8 +337,15 @@ export default function App() {
       go(homeStaffPage(u.role));
       return;
     }
+    document.documentElement.classList.remove("lux-page");
+    document.body.classList.remove("menu-lock");
+    document.body.style.overflow = "";
     setPendingStaffPage("desk");
     setStaffGate(true);
+    const loginHash = `${window.location.pathname}${window.location.search}#staff/login`;
+    if (window.location.hash !== "#staff/login") {
+      window.history.pushState(null, "", loginHash);
+    }
   }
 
   function logoutStaff() {
