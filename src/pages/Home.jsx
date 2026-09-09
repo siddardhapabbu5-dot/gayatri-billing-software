@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { publicAvailability } from "../engine";
 import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, sectionLines, termLocaleOf } from "../policies";
 import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
-import { getAuthUser, getToken } from "../api/client";
 import RetreatOffer from "./RetreatOffer.jsx";
 import InstallAppButton from "../components/InstallAppButton.jsx";
 import "../home.css";
@@ -18,37 +17,8 @@ const PAGES = [
   { id: "booking", label: "Book" },
   { id: "contact", label: "Visit" },
   { id: "terms", label: "Terms" },
-  /** Staff-only nav entry; public visitors stop at Terms. Login still via #staff. */
-  { id: "staff", label: "Staff", staffOnly: true },
+  { id: "staff", label: "Staff" },
 ];
-
-const TERMS_PAGE_INDEX = PAGES.findIndex((p) => p.id === "terms");
-const STAFF_NAV_SESSION_KEY = "gayatri-staff-nav";
-
-function isStaffSignedIn() {
-  return Boolean(getToken() && getAuthUser());
-}
-
-function readStaffNavSession() {
-  try {
-    return sessionStorage.getItem(STAFF_NAV_SESSION_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** Owner/staff who open #staff keep Staff in the menu on every page this browser tab. */
-function enableStaffNavSession() {
-  try {
-    sessionStorage.setItem(STAFF_NAV_SESSION_KEY, "1");
-  } catch {
-    /* ignore */
-  }
-}
-
-function staffCanSeeAllPages() {
-  return isStaffSignedIn() || readStaffNavSession();
-}
 
 const DARK_PAGES = new Set(["home"]);
 
@@ -356,12 +326,6 @@ export default function Home({ state, onEnquire, onStaff }) {
   const [hallFilm, setHallFilm] = useState(0);
   const hallImgRef = useRef(null);
   const [termFocus, setTermFocus] = useState(null);
-  const [staffNav, setStaffNav] = useState(() => {
-    if (typeof window !== "undefined" && window.location.hash.replace("#", "") === "staff") {
-      enableStaffNavSession();
-    }
-    return staffCanSeeAllPages();
-  });
   pageRef.current = page;
   const currentId = PAGES[page]?.id || "home";
   const lightPage = !DARK_PAGES.has(currentId);
@@ -371,13 +335,8 @@ export default function Home({ state, onEnquire, onStaff }) {
   const loadGalleryMedia = currentId === "gallery";
   const loadStayMedia = currentId === "stay";
   const loadContactMedia = currentId === "contact";
-  // Public: Home→Terms. After #staff or login: Home→Staff on every page.
-  const navItems = PAGES.filter((item) => {
-    if (item.hideNav) return false;
-    if (item.staffOnly && !staffNav) return false;
-    return true;
-  });
-  const canSlideNext = staffNav ? page < PAGES.length - 1 : page < TERMS_PAGE_INDEX;
+  const navItems = PAGES.filter((item) => !item.hideNav);
+  const canSlideNext = page < PAGES.length - 1;
 
   const reduceMotion = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -582,10 +541,6 @@ export default function Home({ state, onEnquire, onStaff }) {
     const deck = deckRef.current;
     const index = PAGES.findIndex((item) => item.id === id);
     if (!deck || index < 0) return;
-    if (id === "staff") {
-      enableStaffNavSession();
-      setStaffNav(true);
-    }
     setPage(index);
     pageRef.current = index;
     deck.scrollTo({
@@ -597,40 +552,14 @@ export default function Home({ state, onEnquire, onStaff }) {
   }
 
   function goBy(dir) {
-    let next = pageRef.current + dir;
-    while (next >= 0 && next < PAGES.length) {
-      const id = PAGES[next]?.id;
-      // Public cannot slide into Staff. Staff session / login can use all pages.
-      if (id === "staff" && !staffCanSeeAllPages()) {
-        if (dir > 0) return;
-        next += dir;
-        continue;
-      }
-      break;
-    }
-    next = Math.min(PAGES.length - 1, Math.max(0, next));
+    const next = Math.min(PAGES.length - 1, Math.max(0, pageRef.current + dir));
     goTo(PAGES[next].id);
   }
-
-  useEffect(() => {
-    const syncStaff = () => setStaffNav(staffCanSeeAllPages());
-    syncStaff();
-    window.addEventListener("focus", syncStaff);
-    window.addEventListener("storage", syncStaff);
-    return () => {
-      window.removeEventListener("focus", syncStaff);
-      window.removeEventListener("storage", syncStaff);
-    };
-  }, []);
 
   useEffect(() => {
     const jump = () => {
       const id = window.location.hash.replace("#", "") || "home";
       if (!PAGES.some((item) => item.id === id)) return;
-      if (id === "staff") {
-        enableStaffNavSession();
-        setStaffNav(true);
-      }
       window.requestAnimationFrame(() => goTo(id));
     };
     const t = window.setTimeout(jump, 80);
