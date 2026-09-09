@@ -56,6 +56,7 @@ const IMG = "/site/images";
 
 const FILM = [
   { src: `${IMG}/venue-garden.jpg`, alt: "Garden pavilion for outdoor sessions" },
+  { src: `${IMG}/film/agni.jpg`, alt: "Wedding ceremony portrait" },
   { src: `${IMG}/gallery-3.jpg`, alt: "Delegates in the hall" },
   { src: `${IMG}/hero.jpg`, alt: "Evening programme at the hall" },
   { src: `${IMG}/venue-imperial.jpg`, alt: "Imperial ballroom ceremony" },
@@ -201,7 +202,7 @@ const HALL_GALLERY_SLIDES = (() => {
     [`${IMG}/venue-imperial.jpg`, "Imperial Ballroom"],
     [`${IMG}/venue-garden.jpg`, "Garden Pavilion"],
     [`${IMG}/venue-courtyard.jpg`, "Heritage Courtyard"],
-    [`${IMG}/venue-imperial.jpg`, "Imperial Ballroom"],
+    [`${IMG}/film/agni.jpg`, "Ceremony portrait"],
     [`${IMG}/gallery-1.jpg`, "Guests in the hall"],
     [`${IMG}/gallery-5.jpg`, "Dining setup"],
     [`${IMG}/hero.jpg`, "Evening programme"],
