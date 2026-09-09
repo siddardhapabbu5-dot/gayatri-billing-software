@@ -99,9 +99,10 @@ h2,
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: 1.1rem 1.6rem;
+  padding: calc(1.1rem + env(safe-area-inset-top, 0px)) calc(1.6rem + env(safe-area-inset-right, 0px)) 1.1rem calc(1.6rem + env(safe-area-inset-left, 0px));
   color: #fff;
   transition: 0.25s ease;
+  box-sizing: border-box;
 }
 
 .site-header.scrolled,
