@@ -3061,11 +3061,11 @@ html.lux-page .site-header .logo-mark {
 html.lux-page .site-header .logo strong {
   font-size: 1.28rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   line-height: 1.35;
   padding-top: 0.12em;
   overflow: visible;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: auto;
   text-rendering: geometricPrecision;
 }
 
@@ -3271,15 +3271,74 @@ html.lux-page .to-top span {
 
   html.lux-page .site-nav a,
   html.lux-page .site-nav button {
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    padding: 0.32rem 0.18rem;
-    line-height: 1.3;
+    font-size: 0.78rem;
+    font-weight: 750;
+    letter-spacing: 0.035em;
+    padding: 0.38rem 0.22rem;
+    line-height: 1.35;
   }
 
   html.lux-page .site-nav a.stay-nav {
-    font-size: 0.66rem;
+    font-size: 0.74rem;
+    font-weight: 750;
     letter-spacing: 0.02em;
+  }
+
+  /* High-contrast text for easier reading on tablet */
+  html.lux-page .site-header.scrolled,
+  html.lux-page .site-header.scrolled .site-nav a,
+  html.lux-page .site-header.scrolled .site-nav button {
+    color: #0a0a0a !important;
+  }
+
+  html.lux-page .site-header.scrolled .logo strong {
+    color: #050505 !important;
+    font-weight: 700;
+    -webkit-font-smoothing: auto;
+  }
+
+  html.lux-page .site-header.scrolled .logo em {
+    color: #1a1a1a !important;
+    font-weight: 650;
+  }
+
+  html.lux-page .site-header:not(.scrolled) .site-nav a,
+  html.lux-page .site-header:not(.scrolled) .site-nav button,
+  html.lux-page .site-header:not(.scrolled) .logo strong {
+    color: #fffdf6 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65), 0 0 12px rgba(0, 0, 0, 0.35);
+    font-weight: 750;
+  }
+
+  html.lux-page .site-header:not(.scrolled) .logo em {
+    color: #ffe9a8 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    font-weight: 650;
+  }
+
+  html.lux-page .lux-root.is-light,
+  html.lux-page .lux-root.is-light p,
+  html.lux-page .lux-root.is-light li,
+  html.lux-page .lux-root.is-light label,
+  html.lux-page .lux-root.is-light td,
+  html.lux-page .lux-root.is-light .muted {
+    color: #1a1a1a;
+  }
+
+  html.lux-page .lux-root.is-light h1,
+  html.lux-page .lux-root.is-light h2,
+  html.lux-page .lux-root.is-light h3,
+  html.lux-page .lux-root.is-light h4,
+  html.lux-page .lux-root.is-light strong {
+    color: #0b0b0b;
+  }
+
+  html.lux-page .lux-root.is-light .muted,
+  html.lux-page .lux-root.is-light .venue-card p,
+  html.lux-page .lux-root.is-light .hall-slide-caption,
+  html.lux-page .lux-root.is-light .intro p {
+    color: #2a2a2a !important;
+    opacity: 1 !important;
   }
 
   html.lux-page .lux-deck > section {
