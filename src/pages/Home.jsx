@@ -22,9 +22,31 @@ const PAGES = [
 ];
 
 const TERMS_PAGE_INDEX = PAGES.findIndex((p) => p.id === "terms");
+const STAFF_NAV_SESSION_KEY = "gayatri-staff-nav";
 
 function isStaffSignedIn() {
   return Boolean(getToken() && getAuthUser());
+}
+
+function readStaffNavSession() {
+  try {
+    return sessionStorage.getItem(STAFF_NAV_SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Owner/staff who open #staff keep Staff in the menu on every page this browser tab. */
+function enableStaffNavSession() {
+  try {
+    sessionStorage.setItem(STAFF_NAV_SESSION_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+function staffCanSeeAllPages() {
+  return isStaffSignedIn() || readStaffNavSession();
 }
 
 const DARK_PAGES = new Set(["home"]);
@@ -333,7 +355,12 @@ export default function Home({ state, onEnquire, onStaff }) {
   const [hallFilm, setHallFilm] = useState(0);
   const hallImgRef = useRef(null);
   const [termFocus, setTermFocus] = useState(null);
-  const [staffAuthed, setStaffAuthed] = useState(() => isStaffSignedIn());
+  const [staffNav, setStaffNav] = useState(() => {
+    if (typeof window !== "undefined" && window.location.hash.replace("#", "") === "staff") {
+      enableStaffNavSession();
+    }
+    return staffCanSeeAllPages();
+  });
   pageRef.current = page;
   const currentId = PAGES[page]?.id || "home";
   const lightPage = !DARK_PAGES.has(currentId);
@@ -343,17 +370,13 @@ export default function Home({ state, onEnquire, onStaff }) {
   const loadGalleryMedia = currentId === "gallery";
   const loadStayMedia = currentId === "stay";
   const loadContactMedia = currentId === "contact";
+  // Public: Home→Terms. After #staff or login: Home→Staff on every page.
   const navItems = PAGES.filter((item) => {
     if (item.hideNav) return false;
-    // Public: Home→Terms only. Staff shows after login, or while on #staff.
-    if (item.staffOnly && !staffAuthed && currentId !== "staff") return false;
+    if (item.staffOnly && !staffNav) return false;
     return true;
   });
-  const canSlideNext = staffAuthed
-    ? page < PAGES.length - 1
-    : currentId === "staff"
-      ? false
-      : page < TERMS_PAGE_INDEX;
+  const canSlideNext = staffNav ? page < PAGES.length - 1 : page < TERMS_PAGE_INDEX;
 
   const reduceMotion = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -558,6 +581,10 @@ export default function Home({ state, onEnquire, onStaff }) {
     const deck = deckRef.current;
     const index = PAGES.findIndex((item) => item.id === id);
     if (!deck || index < 0) return;
+    if (id === "staff") {
+      enableStaffNavSession();
+      setStaffNav(true);
+    }
     setPage(index);
     pageRef.current = index;
     deck.scrollTo({
@@ -572,8 +599,8 @@ export default function Home({ state, onEnquire, onStaff }) {
     let next = pageRef.current + dir;
     while (next >= 0 && next < PAGES.length) {
       const id = PAGES[next]?.id;
-      // Public cannot slide into Staff (use #staff URL). Logged-in staff can.
-      if (id === "staff" && !isStaffSignedIn()) {
+      // Public cannot slide into Staff. Staff session / login can use all pages.
+      if (id === "staff" && !staffCanSeeAllPages()) {
         if (dir > 0) return;
         next += dir;
         continue;
@@ -585,7 +612,7 @@ export default function Home({ state, onEnquire, onStaff }) {
   }
 
   useEffect(() => {
-    const syncStaff = () => setStaffAuthed(isStaffSignedIn());
+    const syncStaff = () => setStaffNav(staffCanSeeAllPages());
     syncStaff();
     window.addEventListener("focus", syncStaff);
     window.addEventListener("storage", syncStaff);
@@ -599,7 +626,10 @@ export default function Home({ state, onEnquire, onStaff }) {
     const jump = () => {
       const id = window.location.hash.replace("#", "") || "home";
       if (!PAGES.some((item) => item.id === id)) return;
-      // Public guests may still open #staff to sign in; nav link stays hidden.
+      if (id === "staff") {
+        enableStaffNavSession();
+        setStaffNav(true);
+      }
       window.requestAnimationFrame(() => goTo(id));
     };
     const t = window.setTimeout(jump, 80);
