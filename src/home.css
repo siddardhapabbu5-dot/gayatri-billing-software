@@ -274,7 +274,7 @@ html.lux-page .staff-gate {
 }
 
 html.lux-page .locations {
-  padding: 4.35rem 2.4rem 0 !important;
+  padding: 4.35rem 2.4rem 1.75rem !important;
   justify-content: flex-start !important;
   gap: 0.55rem;
   min-height: 0;
@@ -1675,43 +1675,116 @@ html.lux-page .venues-reserve-bar {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  margin: 0 -2.4rem 0;
-  background:
-    radial-gradient(circle at 12% 30%, rgba(255, 255, 255, 0.06), transparent 28%),
-    radial-gradient(circle at 88% 70%, rgba(255, 255, 255, 0.05), transparent 30%),
-    #1f3d2a;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 0.75rem;
+  margin: 0.55rem 0 0.85rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 html.lux-page .venues-reserve-btn {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  min-height: 3.05rem;
-  padding: 0.7rem 0.8rem;
-  border: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
-  background: transparent;
-  color: #fff;
-  font-family: Jost, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  gap: 0.65rem;
+  min-height: 4.35rem;
+  min-width: 0;
+  padding: 0.85rem 0.85rem;
+  border: 1px solid rgba(212, 197, 161, 0.55);
+  border-radius: 0.7rem;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.05), transparent 40%),
+    linear-gradient(145deg, #2a2a2a 0%, #1c1c1c 55%, #151515 100%);
+  color: #f7f1e6;
   cursor: pointer;
-  transition: background 0.16s ease;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 html.lux-page .venues-reserve-btn:last-child {
-  border-right: 0;
+  border-right: 1px solid rgba(212, 197, 161, 0.55);
+}
+
+html.lux-page .venues-reserve-icon {
+  display: grid;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(212, 197, 161, 0.35);
+}
+
+html.lux-page .venues-reserve-btn .venues-ico-cal {
+  width: 1rem;
+  height: 1rem;
+  opacity: 1;
+  color: #d4c5a1;
+}
+
+html.lux-page .venues-reserve-divider {
+  width: 1px;
+  height: 1.9rem;
+  background: rgba(212, 197, 161, 0.45);
+}
+
+html.lux-page .venues-reserve-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+html.lux-page .venues-reserve-kicker {
+  font-family: Jost, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #d4c5a1;
+}
+
+html.lux-page .venues-reserve-name {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(0.98rem, 1.15vw, 1.22rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: none;
+}
+
+html.lux-page .venues-reserve-arrow {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 197, 161, 0.65);
+  font-size: 0.9rem;
+  color: #d4c5a1;
+  transform: translateX(0);
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
 html.lux-page .venues-reserve-btn:hover,
 html.lux-page .venues-reserve-btn:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(212, 197, 161, 0.9);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.07), transparent 40%),
+    linear-gradient(145deg, #333 0%, #222 55%, #181818 100%);
   outline: none;
+}
+
+html.lux-page .venues-reserve-btn:hover .venues-reserve-arrow,
+html.lux-page .venues-reserve-btn:focus-visible .venues-reserve-arrow {
+  transform: translateX(3px);
+  background: rgba(212, 197, 161, 0.12);
+  color: #ecd9a8;
 }
 
 html.lux-page .venue-photo-slot,
@@ -2053,6 +2126,19 @@ html.lux-page .lightbox-frame video {
   background: #000;
 }
 
+html.lux-page .lightbox-video-error {
+  margin: 0;
+  padding: 1.5rem 1.25rem;
+  max-width: 28rem;
+  text-align: center;
+  font-family: Jost, sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #f3e6c4;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 0.5rem;
+}
+
 html.lux-page .lightbox-frame figcaption {
   font-family: Jost, sans-serif;
   font-size: 0.72rem;
@@ -2062,19 +2148,27 @@ html.lux-page .lightbox-frame figcaption {
 }
 
 html.lux-page .lightbox-nav {
-  border: 0;
-  background: transparent;
-  color: #f3e6c4;
-  font-size: 2.6rem;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 252, 246, 0.95);
+  color: #1f3d2a;
+  font-size: 1.7rem;
   line-height: 1;
-  padding: 0.4rem 0.55rem;
+  padding: 0;
   cursor: pointer;
-  transition: color 0.2s ease, transform 0.2s ease;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  transition: background 0.2s ease, transform 0.2s ease;
+  z-index: 2;
 }
 
 html.lux-page .lightbox-nav:hover {
-  color: #fff;
-  transform: scale(1.08);
+  background: #fff;
+  transform: scale(1.05);
+  color: #1f3d2a;
 }
 
 html.lux-page .map-wrap {
@@ -3033,17 +3127,19 @@ html.lux-page .to-top span {
   }
 
   html.lux-page .venues-reserve-bar {
-    margin: 0.7rem -1rem 0;
+    margin: 0.7rem 0 1rem;
+    padding: 0;
     grid-template-columns: 1fr;
+    gap: 0.65rem;
   }
 
   html.lux-page .venues-reserve-btn {
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    min-height: 4.2rem;
+    padding: 0.85rem 1rem;
   }
 
-  html.lux-page .venues-reserve-btn:last-child {
-    border-bottom: 0;
+  html.lux-page .venues-reserve-name {
+    white-space: normal;
   }
 
   html.lux-page .venues-leaf {

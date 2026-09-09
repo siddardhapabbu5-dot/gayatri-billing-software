@@ -74,6 +74,6 @@ class HealthController {
     return Map.of(
         "status", "UP",
         "service", "gayatri-vhms-backend",
-        "build", "cors-off-v2");
+        "build", "videos-v1");
   }
 }

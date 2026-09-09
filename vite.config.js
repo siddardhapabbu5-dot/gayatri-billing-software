@@ -48,11 +48,13 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         globPatterns: ["**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp,woff2}"],
-        // Keep large gallery videos out of the precache; load on demand.
-        navigateFallbackDenylist: [/^\/api/],
+        // Videos load on demand; never fall back HTML/cache for media.
+        navigateFallbackDenylist: [/^\/api/, /\.(?:mp4|webm|mov|m4v)(?:$|\?)/i],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/site/images/"),
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith("/site/images/") &&
+              !/\.(?:mp4|webm|mov|m4v)$/i.test(url.pathname),
             handler: "CacheFirst",
             options: {
               cacheName: "gayatri-images",

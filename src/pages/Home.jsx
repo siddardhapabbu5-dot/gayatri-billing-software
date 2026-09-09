@@ -104,6 +104,50 @@ function isGalleryVideo(item) {
   return item?.kind === "video" || /\.(mp4|mov|webm|m4v)$/i.test(item?.src || "");
 }
 
+/** Opens with sound after a gallery click (user gesture). Shows controls if autoplay is blocked. */
+function LightboxVideo({ src, poster }) {
+  const ref = useRef(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+    const el = ref.current;
+    if (!el) return undefined;
+    el.muted = false;
+    el.defaultMuted = false;
+    el.volume = 1;
+    const tryPlay = () => {
+      const p = el.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+    tryPlay();
+    el.addEventListener("loadeddata", tryPlay);
+    return () => el.removeEventListener("loadeddata", tryPlay);
+  }, [src]);
+
+  if (failed) {
+    return (
+      <p className="lightbox-video-error">
+        Video could not load. Refresh the page (clear site data if needed), then try again.
+      </p>
+    );
+  }
+
+  return (
+    <video
+      ref={ref}
+      key={src}
+      src={src}
+      poster={poster || undefined}
+      controls
+      autoPlay
+      playsInline
+      preload="auto"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 const GALLERY_PHOTOS = GALLERY.filter((item) => !isGalleryVideo(item));
 const GALLERY_VIDEOS = GALLERY.filter((item) => isGalleryVideo(item));
 
@@ -598,19 +642,17 @@ export default function Home({ state, onEnquire, onStaff }) {
     };
     const onKey = (e) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         setLightbox(null);
         setTermFocus(null);
         return;
       }
       if (termFocus) return;
       if (lightbox) {
-        if (e.key === "ArrowRight") {
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
           e.preventDefault();
-          shiftLightbox(1);
-        }
-        if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          shiftLightbox(-1);
+          e.stopPropagation();
+          shiftLightbox(e.key === "ArrowRight" ? 1 : -1);
         }
         return;
       }
@@ -625,10 +667,11 @@ export default function Home({ state, onEnquire, onStaff }) {
       }
     };
     window.addEventListener("wheel", onWheel, { passive: false });
-    document.addEventListener("keydown", onKey);
+    // Capture so lightbox arrows win over anything else
+    window.addEventListener("keydown", onKey, true);
     return () => {
       window.removeEventListener("wheel", onWheel);
-      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
     };
   }, [lightbox, termFocus, reduceMotion]);
 
@@ -893,18 +936,29 @@ export default function Home({ state, onEnquire, onStaff }) {
           </div>
 
           <footer className="venues-reserve-bar">
-            {halls.map((h) => (
-              <button
-                key={`reserve-${h.id}`}
-                type="button"
-                className="venues-reserve-btn"
-                onClick={() => goBooking({ venue: h.name })}
-              >
-                <span className="venues-ico venues-ico-cal" aria-hidden="true" />
-                Reserve the hall
-                <span aria-hidden="true">→</span>
-              </button>
-            ))}
+            {halls.map((h) => {
+              const title = h.name.replace(/\s*\(MINI\)\s*$/i, "");
+              return (
+                <button
+                  key={`reserve-${h.id}`}
+                  type="button"
+                  className="venues-reserve-btn"
+                  onClick={() => goBooking({ venue: h.name })}
+                >
+                  <span className="venues-reserve-icon" aria-hidden="true">
+                    <span className="venues-ico venues-ico-cal" />
+                  </span>
+                  <span className="venues-reserve-divider" aria-hidden="true" />
+                  <span className="venues-reserve-copy">
+                    <span className="venues-reserve-kicker">Reserve</span>
+                    <span className="venues-reserve-name">{title}</span>
+                  </span>
+                  <span className="venues-reserve-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </button>
+              );
+            })}
           </footer>
         </section>
 
@@ -1655,15 +1709,7 @@ export default function Home({ state, onEnquire, onStaff }) {
               onClick={(e) => e.stopPropagation()}
             >
               {isGalleryVideo(lightbox) ? (
-                <video
-                  key={lightbox.src}
-                  src={lightbox.src}
-                  poster={lightbox.poster || undefined}
-                  controls
-                  autoPlay
-                  playsInline
-                  preload="metadata"
-                />
+                <LightboxVideo src={lightbox.src} poster={lightbox.poster} />
               ) : (
                 <img key={lightbox.src} src={lightbox.src} alt={lightbox.alt} decoding="async" />
               )}
@@ -1683,24 +1729,28 @@ export default function Home({ state, onEnquire, onStaff }) {
           </>
         ) : null}
       </div>
-      <button
-        type="button"
-        className="slide-arrow prev"
-        aria-label="Previous page"
-        disabled={page === 0}
-        onClick={() => goBy(-1)}
-      >
-        ‹
-      </button>
-      <button
-        type="button"
-        className="slide-arrow next"
-        aria-label="Next page"
-        disabled={page === PAGES.length - 1}
-        onClick={() => goBy(1)}
-      >
-        ›
-      </button>
+      {!lightbox ? (
+        <>
+          <button
+            type="button"
+            className="slide-arrow prev"
+            aria-label="Previous page"
+            disabled={page === 0}
+            onClick={() => goBy(-1)}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="slide-arrow next"
+            aria-label="Next page"
+            disabled={page === PAGES.length - 1}
+            onClick={() => goBy(1)}
+          >
+            ›
+          </button>
+        </>
+      ) : null}
       <div className="toast" hidden={!toast}>
         {toast}
       </div>
