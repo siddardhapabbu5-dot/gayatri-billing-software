@@ -54,10 +54,9 @@ const DARK_PAGES = new Set(["home"]);
 const IMG = "/site/images";
 
 const FILM = [
-  { src: `${IMG}/film/mandap.jpg`, alt: "Convention hall interior" },
+  { src: `${IMG}/venue-garden.jpg`, alt: "Garden pavilion for outdoor sessions" },
   { src: `${IMG}/film/agni.jpg`, alt: "Hall stage and lighting" },
   { src: `${IMG}/gallery-3.jpg`, alt: "Delegates in the hall" },
-  { src: `${IMG}/venue-garden.jpg`, alt: "Garden pavilion for outdoor sessions" },
   { src: `${IMG}/hero.jpg`, alt: "Evening programme at the hall" },
 ];
 
@@ -501,7 +500,7 @@ export default function Home({ state, onEnquire, onStaff }) {
 
   useEffect(() => {
     if (FILM.length < 2 || currentId !== "home") return undefined;
-    const timer = window.setInterval(() => setFilmFrame((i) => (i + 1) % FILM.length), 5200);
+    const timer = window.setInterval(() => setFilmFrame((i) => (i + 1) % FILM.length), 8500);
     return () => window.clearInterval(timer);
   }, [currentId]);
 
@@ -823,7 +822,7 @@ export default function Home({ state, onEnquire, onStaff }) {
 
   return (
     <div className={`lux-root${lightPage ? " is-light" : ""}${currentId === "booking" ? " is-book" : ""}`}>
-      <header className={`site-header${lightPage ? " scrolled" : ""}`} id="header">
+      <header className="site-header scrolled" id="header">
         <div className="logo logo-static" aria-label={p.brandName || "Gayatri"}>
           <img className="logo-mark" src={`${IMG}/logo-mark.png`} alt="" />
           <span>
@@ -865,19 +864,21 @@ export default function Home({ state, onEnquire, onStaff }) {
           <div className="hero-film" aria-hidden="true">
             <div className="hero-aurora"></div>
             <div className="hero-rays"></div>
-            {loadHomeMedia && FILM[filmFrame] ? (
-              <img
-                key={FILM[filmFrame].src}
-                className="film-slide is-on"
-                src={FILM[filmFrame].src}
-                alt=""
-                loading="eager"
-                decoding="async"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            ) : null}
+            {loadHomeMedia
+              ? FILM.map((frame, i) => (
+                  <img
+                    key={frame.src}
+                    className={`film-slide${i === filmFrame ? " is-on" : ""}`}
+                    src={frame.src}
+                    alt=""
+                    loading={i === 0 ? "eager" : "lazy"}
+                    decoding="async"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                ))
+              : null}
             <div className="hero-film-shade"></div>
           </div>
           <div className="petals" aria-hidden="true">

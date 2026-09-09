@@ -19,13 +19,14 @@ html.lux-page .lux-root {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: block;
+  position: relative;
 }
 
 html.lux-page .lux-deck {
   height: 100%;
-  flex: 1 1 auto;
+  height: 100dvh;
+  max-height: 100dvh;
   min-height: 0;
   display: flex;
   flex-direction: row;
@@ -98,39 +99,44 @@ html.lux-page .hero-rays {
   background: repeating-conic-gradient(
     from 0deg,
     transparent 0 14deg,
-    rgba(232, 180, 35, 0.08) 14deg 17deg
+    rgba(232, 180, 35, 0.045) 14deg 17deg
   );
-  animation: raySpin 48s linear infinite;
-  opacity: 0.85;
+  animation: raySpin 72s linear infinite;
+  opacity: 0.45;
 }
 
 html.lux-page .film-slide {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transform: scale(1.06);
-  transition: opacity 1.5s ease;
+  transform: scale(1.04);
+  transition: opacity 2.6s ease-in-out;
   z-index: 1;
+  pointer-events: none;
+  will-change: opacity, transform;
 }
 
 html.lux-page .film-slide.is-on {
   opacity: 1;
-  animation: filmKen 8s linear forwards;
+  z-index: 2;
+  animation: filmKen 12s ease-in-out forwards;
 }
 
 html.lux-page .hero-film-shade {
-  z-index: 2;
+  z-index: 3;
   background:
-    linear-gradient(180deg, rgba(11, 9, 7, 0.18), rgba(11, 9, 7, 0.42) 70%, rgba(11, 9, 7, 0.78)),
-    radial-gradient(ellipse at 50% 42%, rgba(58, 42, 18, 0.12), rgba(11, 9, 7, 0.28));
+    linear-gradient(180deg, rgba(11, 9, 7, 0.28), rgba(11, 9, 7, 0.48) 70%, rgba(11, 9, 7, 0.82)),
+    radial-gradient(ellipse at 50% 42%, rgba(58, 42, 18, 0.14), rgba(11, 9, 7, 0.32));
   pointer-events: none;
 }
 
 html.lux-page .petals {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
   overflow: hidden;
 }
@@ -223,8 +229,8 @@ html.lux-page .hero-offers p {
 }
 
 @keyframes filmKen {
-  from { transform: scale(1.06); }
-  to { transform: scale(1.2); }
+  from { transform: scale(1.04); }
+  to { transform: scale(1.1); }
 }
 
 @keyframes glowPulse {
@@ -2889,31 +2895,79 @@ html.lux-page .menu {
 }
 
 html.lux-page .site-header {
+  /* Overlay hero again so Home stays full-viewport (previous screen fit) */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  inset: 0 0 auto;
+  width: 100%;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.8rem 1.2rem;
-  padding: calc(0.7rem + env(safe-area-inset-top, 0px)) calc(1.2rem + env(safe-area-inset-right, 0px)) 0.7rem calc(1.2rem + env(safe-area-inset-left, 0px));
-  flex: 0 0 auto;
+  padding: calc(1rem + env(safe-area-inset-top, 0px)) calc(1.2rem + env(safe-area-inset-right, 0px)) 0.95rem calc(1.2rem + env(safe-area-inset-left, 0px));
   z-index: 30;
+  overflow: visible;
+  box-sizing: border-box;
+  animation: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Soft blend into hero — no hard partition line under the nav */
+html.lux-page .site-header.scrolled,
+html.lux-page .site-header.menu-open {
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #ffffff calc(100% - 18px),
+    rgba(255, 255, 255, 0.72) calc(100% - 8px),
+    rgba(255, 255, 255, 0)
+  );
+  box-shadow: none;
+  border: 0;
+  border-bottom: none;
+}
+
+html.lux-page .site-header.scrolled::after,
+html.lux-page .site-header.menu-open::after {
+  content: none;
 }
 
 html.lux-page .site-header .logo {
   justify-content: flex-start;
   text-align: left;
+  align-items: center;
+  min-width: 0;
+  overflow: visible;
 }
 
 html.lux-page .site-header .logo-mark {
   width: 42px;
+  flex-shrink: 0;
 }
 
 html.lux-page .site-header .logo strong {
-  font-size: 1.15rem;
+  font-size: 1.28rem;
+  font-weight: 700;
   letter-spacing: 0.1em;
+  line-height: 1.35;
+  padding-top: 0.12em;
+  color: #151515;
+  overflow: visible;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 
 html.lux-page .site-header .logo em {
-  font-size: 0.78rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  font-style: italic;
+  line-height: 1.35;
+  color: #2a2a2a;
+  opacity: 1;
+  overflow: visible;
 }
 
 html.lux-page .site-nav {
@@ -2923,10 +2977,13 @@ html.lux-page .site-nav {
   align-items: center;
   gap: 0.2rem 1.1rem;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   max-width: 100%;
   min-width: 0;
-  padding-inline: 0.35rem;
+  padding: 0.2rem 0.35rem;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
 
 html.lux-page .site-nav::-webkit-scrollbar {
@@ -2944,11 +3001,12 @@ html.lux-page .site-nav button {
   border: 0;
   border-bottom: 2px solid transparent;
   color: inherit;
-  padding: 0.62rem 0.35rem;
-  line-height: 1.2;
+  padding: 0.7rem 0.35rem;
+  line-height: 1.35;
   cursor: pointer;
   white-space: nowrap;
   flex: 0 0 auto;
+  overflow: visible;
 }
 
 html.lux-page .site-nav a.is-on {
@@ -2963,7 +3021,7 @@ html.lux-page .site-nav a.stay-nav {
 
 @media (min-width: 900px) {
   html.lux-page .site-header {
-    padding: 0.85rem 1.4rem;
+    padding: calc(1.05rem + env(safe-area-inset-top, 0px)) 1.4rem 1rem;
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
@@ -2977,7 +3035,8 @@ html.lux-page .site-nav a.stay-nav {
     font-size: 0.92rem;
     font-weight: 700;
     letter-spacing: 0.08em;
-    padding: 0.55rem 0.28rem;
+    padding: 0.65rem 0.28rem;
+    line-height: 1.35;
   }
 
   html.lux-page .site-nav a.stay-nav {
@@ -2985,10 +3044,18 @@ html.lux-page .site-nav a.stay-nav {
     letter-spacing: 0.03em;
   }
 
+  html.lux-page .header-actions {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+  }
+
   html.lux-page .header-actions .btn {
     font-size: 0.86rem;
-    padding: 0.7rem 1rem;
+    padding: 0.75rem 1rem;
+    line-height: 1.3;
     white-space: nowrap;
+    align-items: center;
   }
 }
 
@@ -3048,12 +3115,33 @@ html.lux-page .to-top span {
 /* Tablet / iPad PWA: allow vertical scroll so content is not cut off */
 @media (min-width: 721px) and (max-width: 1200px) {
   html.lux-page .site-header {
-    padding: calc(0.8rem + env(safe-area-inset-top, 0px)) calc(1.15rem + env(safe-area-inset-right, 0px)) 0.8rem calc(1.15rem + env(safe-area-inset-left, 0px));
-    gap: 0.65rem 1rem;
+    padding: calc(1.15rem + env(safe-area-inset-top, 0px)) calc(1.15rem + env(safe-area-inset-right, 0px)) 0.85rem calc(1.15rem + env(safe-area-inset-left, 0px));
+    gap: 0.45rem 1rem;
+    grid-template-columns: auto auto;
+    grid-template-rows: auto auto;
+  }
+
+  html.lux-page .site-header .logo {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+  }
+
+  html.lux-page .header-actions {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+    align-self: center;
   }
 
   html.lux-page .site-nav {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
     gap: 0.15rem 0.85rem;
+    padding: 0.15rem 0.2rem 0.35rem;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 
   html.lux-page .site-nav a,
@@ -3061,6 +3149,7 @@ html.lux-page .to-top span {
     font-size: 0.88rem;
     letter-spacing: 0.09em;
     padding: 0.55rem 0.28rem;
+    line-height: 1.4;
   }
 
   html.lux-page .lux-deck > section {
@@ -3388,10 +3477,23 @@ html.lux-page .to-top span {
   }
 
   html.lux-page .site-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto auto;
+    grid-template-rows: auto auto;
+  }
+
+  html.lux-page .site-header .logo {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  html.lux-page .header-actions {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
   }
 
   html.lux-page .site-nav {
+    grid-row: 2;
     grid-column: 1 / -1;
     justify-content: flex-start;
     flex-wrap: nowrap;
