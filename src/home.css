@@ -3498,21 +3498,27 @@ html.lux-page .to-top span {
   /* Keep page content clear of docked bottom arrows */
   html.lux-page .locations.venues-page,
   html.lux-page .rooms-page,
-  html.lux-page .organize {
-    padding-bottom: calc(5.85rem + env(safe-area-inset-bottom, 0px)) !important;
+  html.lux-page .organize,
+  html.lux-page .gallery {
+    padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   html.lux-page .venues-reserve-bar {
-    margin-bottom: calc(3.4rem + env(safe-area-inset-bottom, 0px));
+    margin-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  html.lux-page .rooms-rate-book {
+    margin-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    padding-inline: 3.4rem;
   }
 
   html.lux-page .booking-form .book-agree {
-    padding-inline: 3.1rem;
-    margin-bottom: 0.85rem;
+    padding-inline: 3.4rem;
+    margin-bottom: 1rem;
   }
 
   html.lux-page .booking-form .btn.full {
-    margin-bottom: 0.35rem;
+    margin-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -4322,12 +4328,12 @@ html.lux-page .rooms-empty {
 
   html.lux-page .rooms-page {
     padding-top: 13.25rem !important;
-    padding-bottom: calc(6.1rem + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   html.lux-page .gallery-mosaic {
     grid-template-columns: 1fr 1fr !important;
-    padding-bottom: 4.5rem;
+    padding-bottom: 5.5rem;
   }
 
   /* Dock page arrows so they do not cover body copy / cards */
@@ -4351,19 +4357,29 @@ html.lux-page .rooms-empty {
   html.lux-page .locations.venues-page,
   html.lux-page .organize,
   html.lux-page .gallery {
-    padding-bottom: calc(6.1rem + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   html.lux-page .venues-reserve-bar {
-    margin-bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px)) !important;
+    margin-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   html.lux-page .rooms-rate-grid {
     padding-bottom: 1.25rem;
   }
 
+  html.lux-page .rooms-rate-book {
+    margin-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    padding-inline: 3.5rem;
+  }
+
   html.lux-page .booking-form .book-agree {
-    padding-inline: 3.15rem !important;
+    padding-inline: 3.4rem !important;
+    margin-bottom: 1rem;
+  }
+
+  html.lux-page .booking-form .btn.full {
+    margin-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
 
   html.lux-page .hero .petals {
