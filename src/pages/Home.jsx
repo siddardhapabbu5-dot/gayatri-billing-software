@@ -338,6 +338,12 @@ export default function Home({ state, onEnquire, onStaff }) {
     syncAppModeFromUrl();
     return isStaffAppMode();
   });
+
+  useLayoutEffect(() => {
+    const mode = syncAppModeFromUrl();
+    setStaffApp(mode === "staff" || isStaffAppMode());
+  }, []);
+
   pageRef.current = page;
   const currentId = PAGES[page]?.id || "home";
   const lightPage = !DARK_PAGES.has(currentId);
@@ -799,7 +805,10 @@ export default function Home({ state, onEnquire, onStaff }) {
 
   return (
     <div className={`lux-root${lightPage ? " is-light" : ""}${currentId === "booking" ? " is-book" : ""}`}>
-      <header className={`site-header${lightPage ? " scrolled" : ""}`} id="header">
+      <header
+        className={`site-header${lightPage ? " scrolled" : ""}${staffApp ? " is-staff-app" : ""}`}
+        id="header"
+      >
         <div className="logo logo-static" aria-label={p.brandName || "Gayatri"}>
           <img className="logo-mark" src={`${IMG}/logo-mark.png`} alt="" />
           <span>
@@ -814,6 +823,7 @@ export default function Home({ state, onEnquire, onStaff }) {
               href={`#${item.id}`}
               className={[
                 item.id === "stay" ? "stay-nav" : "",
+                item.id === "staff" ? "staff-nav" : "",
                 item.id === "stay" ? (currentId.startsWith("stay") ? "is-on" : "") : currentId === item.id ? "is-on" : "",
               ].filter(Boolean).join(" ")}
               onClick={(e) => onPageNav(e, item.id)}
@@ -823,6 +833,15 @@ export default function Home({ state, onEnquire, onStaff }) {
           ))}
         </nav>
         <div className="header-actions">
+          {staffApp ? (
+            <a
+              className={`staff-desk-link${currentId === "staff" ? " is-on" : ""}`}
+              href="#staff"
+              onClick={(e) => onPageNav(e, "staff")}
+            >
+              Staff
+            </a>
+          ) : null}
           <InstallAppButton tone={lightPage ? "dark" : "light"} />
           <a
             className="btn btn-gold"
