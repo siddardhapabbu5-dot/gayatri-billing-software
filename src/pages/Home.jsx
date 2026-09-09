@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { publicAvailability } from "../engine";
 import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, sectionLines, termLocaleOf } from "../policies";
 import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
+import { getAuthUser, getToken } from "../api/client";
 import RetreatOffer from "./RetreatOffer.jsx";
 import "../home.css";
 
@@ -16,8 +17,15 @@ const PAGES = [
   { id: "booking", label: "Book" },
   { id: "contact", label: "Visit" },
   { id: "terms", label: "Terms" },
-  { id: "staff", label: "Staff" },
+  /** Staff-only nav entry; public visitors stop at Terms. Login still via #staff. */
+  { id: "staff", label: "Staff", staffOnly: true },
 ];
+
+const TERMS_PAGE_INDEX = PAGES.findIndex((p) => p.id === "terms");
+
+function isStaffSignedIn() {
+  return Boolean(getToken() && getAuthUser());
+}
 
 const DARK_PAGES = new Set(["home"]);
 
@@ -325,6 +333,7 @@ export default function Home({ state, onEnquire, onStaff }) {
   const [hallFilm, setHallFilm] = useState(0);
   const hallImgRef = useRef(null);
   const [termFocus, setTermFocus] = useState(null);
+  const [staffAuthed, setStaffAuthed] = useState(() => isStaffSignedIn());
   pageRef.current = page;
   const currentId = PAGES[page]?.id || "home";
   const lightPage = !DARK_PAGES.has(currentId);
@@ -334,6 +343,12 @@ export default function Home({ state, onEnquire, onStaff }) {
   const loadGalleryMedia = currentId === "gallery";
   const loadStayMedia = currentId === "stay";
   const loadContactMedia = currentId === "contact";
+  const navItems = PAGES.filter((item) => {
+    if (item.hideNav) return false;
+    if (item.staffOnly && !staffAuthed) return false;
+    return true;
+  });
+  const canSlideNext = staffAuthed ? page < PAGES.length - 1 : page < TERMS_PAGE_INDEX;
 
   const reduceMotion = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -549,14 +564,36 @@ export default function Home({ state, onEnquire, onStaff }) {
   }
 
   function goBy(dir) {
-    const next = Math.min(PAGES.length - 1, Math.max(0, pageRef.current + dir));
+    let next = pageRef.current + dir;
+    while (next >= 0 && next < PAGES.length) {
+      const id = PAGES[next]?.id;
+      if (id === "staff" && !isStaffSignedIn()) {
+        next += dir;
+        continue;
+      }
+      break;
+    }
+    next = Math.min(PAGES.length - 1, Math.max(0, next));
+    if (PAGES[next]?.id === "staff" && !isStaffSignedIn()) return;
     goTo(PAGES[next].id);
   }
+
+  useEffect(() => {
+    const syncStaff = () => setStaffAuthed(isStaffSignedIn());
+    syncStaff();
+    window.addEventListener("focus", syncStaff);
+    window.addEventListener("storage", syncStaff);
+    return () => {
+      window.removeEventListener("focus", syncStaff);
+      window.removeEventListener("storage", syncStaff);
+    };
+  }, []);
 
   useEffect(() => {
     const jump = () => {
       const id = window.location.hash.replace("#", "") || "home";
       if (!PAGES.some((item) => item.id === id)) return;
+      // Public guests may still open #staff to sign in; nav link stays hidden.
       window.requestAnimationFrame(() => goTo(id));
     };
     const t = window.setTimeout(jump, 80);
@@ -759,7 +796,7 @@ export default function Home({ state, onEnquire, onStaff }) {
           </span>
         </div>
         <nav className="site-nav" aria-label="Site">
-          {PAGES.filter((item) => !item.hideNav).map((item) => (
+          {navItems.map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
@@ -1623,7 +1660,7 @@ export default function Home({ state, onEnquire, onStaff }) {
         <section className="contact staff-gate reveal" id="staff">
           <h2>Convention desk</h2>
           <p className="page-sub">
-            For the Gayatri team. Open the calendar, rooms, reservations, and payments.
+            For Gayatri owner and staff only. Open the calendar, rooms, reservations, and payments.
           </p>
           <p>{p.desk}</p>
           <div className="contact-actions">
@@ -1744,7 +1781,7 @@ export default function Home({ state, onEnquire, onStaff }) {
             type="button"
             className="slide-arrow next"
             aria-label="Next page"
-            disabled={page === PAGES.length - 1}
+            disabled={!canSlideNext}
             onClick={() => goBy(1)}
           >
             ›
