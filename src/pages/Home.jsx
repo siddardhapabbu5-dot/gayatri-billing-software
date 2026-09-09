@@ -4,6 +4,7 @@ import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, sectionLines
 import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
 import { getAuthUser, getToken } from "../api/client";
 import RetreatOffer from "./RetreatOffer.jsx";
+import InstallAppButton from "../components/InstallAppButton.jsx";
 import "../home.css";
 
 const PAGES = [
@@ -846,6 +847,7 @@ export default function Home({ state, onEnquire, onStaff }) {
           ))}
         </nav>
         <div className="header-actions">
+          <InstallAppButton tone={lightPage ? "dark" : "light"} />
           <a
             className="btn btn-gold"
             href="#booking"

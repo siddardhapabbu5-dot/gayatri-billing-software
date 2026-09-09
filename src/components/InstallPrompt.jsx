@@ -1,31 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-
-function isStandalone() {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true
-  );
-}
-
-/** iPhone/iPad including iPadOS “desktop” Safari (reports as Macintosh). */
-function isAppleTouchDevice() {
-  const ua = window.navigator.userAgent || "";
-  if (/iphone|ipod|ipad/i.test(ua)) return true;
-  return /macintosh/i.test(ua) && (window.navigator.maxTouchPoints || 0) > 1;
-}
-
-function isTouchTabletOrPhone() {
-  return (
-    isAppleTouchDevice() ||
-    (window.matchMedia("(pointer: coarse)").matches &&
-      Math.min(window.screen.width, window.screen.height) >= 600) ||
-    (window.navigator.maxTouchPoints || 0) > 1
-  );
-}
+import { useEffect, useState } from "react";
+import {
+  getDeferredInstallPrompt,
+  initPwaInstallCapture,
+  isAppleTouchDevice,
+  isStandaloneApp,
+  promptPwaInstall,
+  subscribeInstallPrompt,
+} from "../lib/pwaInstall.js";
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState(null);
-  const deferredRef = useRef(null);
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem("gayatri-pwa-dismiss") === "1";
@@ -36,32 +20,32 @@ export default function InstallPrompt() {
   const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
-    if (isStandalone() || dismissed) return undefined;
+    if (isStandaloneApp() || dismissed) return undefined;
 
-    const onPrompt = (e) => {
-      e.preventDefault();
-      deferredRef.current = e;
-      setDeferred(e);
-      setShowManual(false);
-    };
-    window.addEventListener("beforeinstallprompt", onPrompt);
+    const stopCapture = initPwaInstallCapture();
+    const unsub = subscribeInstallPrompt((p) => {
+      setDeferred(p);
+      if (p) setShowManual(false);
+    });
+    setDeferred(getDeferredInstallPrompt());
 
     let timer = 0;
     if (isAppleTouchDevice()) {
       setShowManual(true);
-    } else if (isTouchTabletOrPhone()) {
+    } else {
       timer = window.setTimeout(() => {
-        if (!deferredRef.current) setShowManual(true);
+        if (!getDeferredInstallPrompt()) setShowManual(true);
       }, 2500);
     }
 
     return () => {
       if (timer) window.clearTimeout(timer);
-      window.removeEventListener("beforeinstallprompt", onPrompt);
+      unsub();
+      stopCapture();
     };
   }, [dismissed]);
 
-  if (isStandalone() || dismissed) return null;
+  if (isStandaloneApp() || dismissed) return null;
   if (!deferred && !showManual) return null;
 
   function dismiss() {
@@ -71,18 +55,14 @@ export default function InstallPrompt() {
       /* ignore */
     }
     setDismissed(true);
-    setDeferred(null);
-    deferredRef.current = null;
     setShowManual(false);
   }
 
   async function install() {
-    if (!deferred) return;
-    deferred.prompt();
-    await deferred.userChoice;
-    setDeferred(null);
-    deferredRef.current = null;
-    dismiss();
+    const result = await promptPwaInstall();
+    if (result.ok || result.reason === "dismissed" || result.reason === "accepted") {
+      dismiss();
+    }
   }
 
   const apple = isAppleTouchDevice();

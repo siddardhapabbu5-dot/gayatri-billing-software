@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import Home from "./pages/Home.jsx";
 import StaffLogin from "./pages/StaffLogin.jsx";
 import InstallPrompt from "./components/InstallPrompt.jsx";
+import InstallAppButton from "./components/InstallAppButton.jsx";
 import { ROLES } from "./seed";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
@@ -553,6 +554,7 @@ export default function App() {
           </div>
           <div className="row">
             <span className="muted">{state.notifications[0]?.title}</span>
+            <InstallAppButton tone="dark" />
             <a className="btn ghost small" href={staffHref("home")} onClick={(e) => openNav(e, "home")}>
               Public site
             </a>

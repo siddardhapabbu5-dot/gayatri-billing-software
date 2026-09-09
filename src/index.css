@@ -2272,3 +2272,86 @@ tr.clickable.is-selected td { background: #edf7f6; }
   color: #f4efe4 !important;
   border-color: rgba(244, 239, 228, 0.28) !important;
 }
+
+.install-app-btn {
+  appearance: none;
+  border: 1px solid currentColor;
+  background: transparent;
+  font-family: Jost, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.62rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.install-app-btn--light {
+  color: #f3e6b8;
+  border-color: rgba(243, 230, 184, 0.55);
+}
+.install-app-btn--dark {
+  color: #15202b;
+  border-color: rgba(21, 32, 43, 0.35);
+}
+.install-app-btn:hover {
+  background: rgba(196, 163, 90, 0.16);
+}
+
+.install-app-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgba(8, 10, 12, 0.45);
+}
+.install-app-sheet {
+  width: min(420px, 100%);
+  background: #102027;
+  color: #f4efe4;
+  border: 1px solid rgba(196, 163, 90, 0.35);
+  border-radius: 16px;
+  padding: 1.15rem 1.2rem 1rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.install-app-sheet h2 {
+  margin: 0 0 0.35rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: #f6e7b4;
+}
+.install-app-sheet > p {
+  margin: 0 0 0.9rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: rgba(244, 239, 228, 0.85);
+}
+.install-app-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.install-app-steps li {
+  margin-bottom: 0.35rem;
+}
+.install-app-close {
+  width: 100%;
+  margin-top: 0.35rem;
+  border-color: rgba(244, 239, 228, 0.28);
+  color: #f4efe4;
+  background: transparent;
+}
+
+@media (min-width: 721px) and (max-width: 1200px) {
+  .install-app-btn {
+    font-size: 0.68rem;
+    padding: 0.55rem 0.7rem;
+  }
+}
+
