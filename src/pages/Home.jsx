@@ -822,7 +822,7 @@ export default function Home({ state, onEnquire, onStaff }) {
 
   return (
     <div className={`lux-root${lightPage ? " is-light" : ""}${currentId === "booking" ? " is-book" : ""}`}>
-      <header className="site-header scrolled" id="header">
+      <header className={`site-header${lightPage ? " scrolled" : ""}`} id="header">
         <div className="logo logo-static" aria-label={p.brandName || "Gayatri"}>
           <img className="logo-mark" src={`${IMG}/logo-mark.png`} alt="" />
           <span>

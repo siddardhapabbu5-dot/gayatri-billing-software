@@ -2895,7 +2895,7 @@ html.lux-page .menu {
 }
 
 html.lux-page .site-header {
-  /* Overlay hero again so Home stays full-viewport (previous screen fit) */
+  /* Overlay hero so film animation shows under the nav */
   position: fixed;
   top: 0;
   left: 0;
@@ -2913,9 +2913,43 @@ html.lux-page .site-header {
   animation: none;
   border: 0;
   box-shadow: none;
+  background: transparent;
+  color: #f3e6b8;
 }
 
-/* Soft blend into hero — no hard partition line under the nav */
+/* Home: nav sits on top of animated hero photos (no white cover) */
+html.lux-page .site-header:not(.scrolled) {
+  background: linear-gradient(
+    180deg,
+    rgba(11, 9, 7, 0.55) 0%,
+    rgba(11, 9, 7, 0.28) 55%,
+    rgba(11, 9, 7, 0) 100%
+  );
+  color: #f3e6b8;
+  box-shadow: none;
+  border: 0;
+}
+
+html.lux-page .site-header:not(.scrolled) .logo strong {
+  color: #f6edd4;
+  font-weight: 700;
+}
+
+html.lux-page .site-header:not(.scrolled) .logo em {
+  color: #d8c48a;
+  font-weight: 600;
+}
+
+html.lux-page .site-header:not(.scrolled) .site-nav a,
+html.lux-page .site-header:not(.scrolled) .site-nav button {
+  color: #f3e6b8;
+}
+
+html.lux-page .site-header:not(.scrolled) .site-nav a.is-on {
+  border-bottom-color: #d8c48a;
+}
+
+/* Soft blend on light pages — no hard partition line under the nav */
 html.lux-page .site-header.scrolled,
 html.lux-page .site-header.menu-open {
   background: linear-gradient(
@@ -2925,6 +2959,7 @@ html.lux-page .site-header.menu-open {
     rgba(255, 255, 255, 0.72) calc(100% - 8px),
     rgba(255, 255, 255, 0)
   );
+  color: var(--ink, #15202b);
   box-shadow: none;
   border: 0;
   border-bottom: none;
@@ -2933,6 +2968,14 @@ html.lux-page .site-header.menu-open {
 html.lux-page .site-header.scrolled::after,
 html.lux-page .site-header.menu-open::after {
   content: none;
+}
+
+html.lux-page .site-header.scrolled .logo strong {
+  color: #151515;
+}
+
+html.lux-page .site-header.scrolled .logo em {
+  color: #2a2a2a;
 }
 
 html.lux-page .site-header .logo {
@@ -2954,7 +2997,6 @@ html.lux-page .site-header .logo strong {
   letter-spacing: 0.1em;
   line-height: 1.35;
   padding-top: 0.12em;
-  color: #151515;
   overflow: visible;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
@@ -2965,7 +3007,6 @@ html.lux-page .site-header .logo em {
   font-weight: 600;
   font-style: italic;
   line-height: 1.35;
-  color: #2a2a2a;
   opacity: 1;
   overflow: visible;
 }
