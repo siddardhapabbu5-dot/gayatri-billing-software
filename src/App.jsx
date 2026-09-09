@@ -170,20 +170,38 @@ const STAFF_PAGES = new Set(
   GROUPS.flatMap((g) => g.items.map((i) => i.id)).filter((id) => id !== "home" && id !== "portal")
 );
 
+/** Public website section hashes (#venues, #rooms, …) — must not open staff desk. */
+const PUBLIC_SITE_HASHES = new Set([
+  "home",
+  "about",
+  "venues",
+  "stay",
+  "stay-space",
+  "rooms",
+  "gallery",
+  "booking",
+  "contact",
+  "terms",
+  "staff",
+]);
+
 function staffHref(id) {
   if (id === "home" || id === "portal") return `${window.location.pathname}${window.location.search}#home`;
   return `${window.location.pathname}${window.location.search}#staff/${id}`;
 }
 
 function pageFromHash() {
-  const raw = String(window.location.hash || "").replace(/^#/, "");
-  if (!raw || raw === "home") return "home";
-  if (raw === "portal") return "portal";
-  if (raw.startsWith("staff/")) {
-    const id = raw.slice(6).split(/[/?#]/)[0];
+  const full = String(window.location.hash || "").replace(/^#/, "");
+  if (!full || full === "home") return "home";
+  if (full === "portal") return "portal";
+  if (full.startsWith("staff/")) {
+    const id = full.slice(6).split(/[/?#]/)[0];
     if (STAFF_PAGES.has(id)) return id;
     return "desk";
   }
+  const raw = full.split(/[/?]/)[0];
+  // Logged-in refresh on #venues used to jump into staff Venues — keep public hashes on the website.
+  if (PUBLIC_SITE_HASHES.has(raw)) return "home";
   if (STAFF_PAGES.has(raw)) return raw;
   return null;
 }

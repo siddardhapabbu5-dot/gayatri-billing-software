@@ -1705,7 +1705,7 @@ tr.clickable.is-selected td { background: #edf7f6; }
   background: rgba(16, 32, 39, 0.72);
   display: grid;
   place-items: center;
-  z-index: 40;
+  z-index: 60;
   padding: 24px;
 }
 .lightbox-card {
