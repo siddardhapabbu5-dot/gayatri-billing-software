@@ -3178,36 +3178,6 @@ html.lux-page .site-header.is-staff-app .site-nav a {
   padding: 0.45rem 0.28rem;
 }
 
-html.lux-page .staff-desk-link {
-  appearance: none;
-  border: 1px solid currentColor;
-  background: transparent;
-  font-family: Jost, "Segoe UI", sans-serif;
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.62rem 0.85rem;
-  text-decoration: none;
-  line-height: 1.2;
-  color: inherit;
-}
-
-html.lux-page .site-header:not(.scrolled) .staff-desk-link {
-  color: #f3e6b8;
-  border-color: rgba(243, 230, 184, 0.55);
-}
-
-html.lux-page .site-header.scrolled .staff-desk-link {
-  color: #15202b;
-  border-color: rgba(21, 32, 43, 0.35);
-}
-
-html.lux-page .staff-desk-link.is-on {
-  background: rgba(196, 163, 90, 0.2);
-  border-color: #c4a35a;
-}
-
 html.lux-page .site-nav::-webkit-scrollbar {
   display: none;
 }

@@ -833,15 +833,6 @@ export default function Home({ state, onEnquire, onStaff }) {
           ))}
         </nav>
         <div className="header-actions">
-          {staffApp ? (
-            <a
-              className={`staff-desk-link${currentId === "staff" ? " is-on" : ""}`}
-              href="#staff"
-              onClick={(e) => onPageNav(e, "staff")}
-            >
-              Staff
-            </a>
-          ) : null}
           <InstallAppButton tone={lightPage ? "dark" : "light"} />
           <a
             className="btn btn-gold"
