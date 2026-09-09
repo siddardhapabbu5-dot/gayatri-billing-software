@@ -1,0 +1,31 @@
+{
+  "id": "/?mode=staff",
+  "name": "Gayatri Staff",
+  "short_name": "Gayatri Staff",
+  "description": "Gayatri Convention staff desk — phone, tablet, desktop",
+  "theme_color": "#102027",
+  "background_color": "#102027",
+  "display": "standalone",
+  "orientation": "any",
+  "start_url": "/?mode=staff#home",
+  "scope": "/",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

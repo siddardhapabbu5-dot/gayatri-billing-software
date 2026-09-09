@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  applyManifestForMode,
+  getAppMode,
+  isStaffAppMode,
+  MODE_STAFF,
+  subscribeAppMode,
+} from "../lib/appMode.js";
+import {
   getDeferredInstallPrompt,
   initPwaInstallCapture,
   isAppleTouchDevice,
@@ -10,9 +17,7 @@ import {
 } from "../lib/pwaInstall.js";
 
 /**
- * Always-visible site option: “Get app”.
- * Opens Chrome/Edge install dialog when available, otherwise shows Add to Home Screen steps.
- * Modal portals to document.body so it works above the staff desk shell.
+ * “Get app” — installs Public or Staff PWA depending on current app mode.
  */
 export default function InstallAppButton({ className = "", tone = "light" }) {
   const [open, setOpen] = useState(false);
@@ -20,20 +25,31 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
   const [busy, setBusy] = useState(false);
   const [standalone, setStandalone] = useState(false);
   const [hint, setHint] = useState("");
+  const [staffMode, setStaffMode] = useState(() => isStaffAppMode());
 
   useEffect(() => {
     setStandalone(isStandaloneApp());
+    applyManifestForMode(getAppMode());
     initPwaInstallCapture();
-    const unsub = subscribeInstallPrompt((p) => setCanPrompt(Boolean(p)));
+    const unsubPrompt = subscribeInstallPrompt((p) => setCanPrompt(Boolean(p)));
+    const unsubMode = subscribeAppMode((mode) => {
+      setStaffMode(mode === MODE_STAFF);
+      applyManifestForMode(mode);
+    });
     setCanPrompt(Boolean(getDeferredInstallPrompt()));
-    return unsub;
+    return () => {
+      unsubPrompt();
+      unsubMode();
+    };
   }, []);
 
   if (standalone) return null;
 
   const apple = isAppleTouchDevice();
+  const appLabel = staffMode ? "Gayatri Staff" : "Gayatri";
 
   async function tryNativeInstall() {
+    applyManifestForMode(getAppMode());
     if (!getDeferredInstallPrompt()) return { ok: false, reason: "unavailable" };
     setBusy(true);
     try {
@@ -54,7 +70,6 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
       setOpen(false);
       return;
     }
-    // No browser install dialog (Safari / already used / criteria) — show clear steps.
     setOpen(true);
     if (native.reason === "failed") {
       setHint("Browser install dialog did not open. Use the steps below.");
@@ -74,10 +89,12 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
             }}
           >
             <div className="install-app-sheet">
-              <h2>Download app version</h2>
+              <h2>{staffMode ? "Install Staff app" : "Install public website app"}</h2>
               <p>
-                Install Gayatri on this tablet or phone — public site and staff desk as one home-screen
-                app. This is not an App Store download; it adds this website as an app icon.
+                {staffMode
+                  ? "Install Gayatri Staff on this device — website pages plus Staff desk entry. Same layout on phone, tablet, and desktop."
+                  : "Install the public Gayatri website on this device — Home through Terms (no Staff). Same layout on phone, tablet, and desktop."}{" "}
+                This adds <strong>{appLabel}</strong> as a home-screen / desktop app (not an App Store download).
               </p>
               {hint ? <p className="install-app-hint">{hint}</p> : null}
               {canPrompt ? (
@@ -87,12 +104,18 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
                   disabled={busy}
                   onClick={onInstallClick}
                 >
-                  {busy ? "Opening…" : "Install app"}
+                  {busy ? "Opening…" : `Install ${appLabel}`}
                 </button>
               ) : apple ? (
                 <ol className="install-app-steps">
                   <li>
-                    Open this site in <strong>Safari</strong>
+                    Open this page in <strong>Safari</strong>
+                    {staffMode ? (
+                      <>
+                        {" "}
+                        (use <code>?mode=staff</code> for Staff app)
+                      </>
+                    ) : null}
                   </li>
                   <li>
                     Tap <strong>Share</strong> <span aria-hidden="true">□↑</span>
@@ -105,6 +128,17 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
                 <ol className="install-app-steps">
                   <li>
                     Open in <strong>Chrome</strong> (or Edge)
+                    {staffMode ? (
+                      <>
+                        {" "}
+                        at <code>/?mode=staff</code>
+                      </>
+                    ) : (
+                      <>
+                        {" "}
+                        at <code>/?mode=public</code>
+                      </>
+                    )}
                   </li>
                   <li>
                     Tap menu <strong>⋮</strong>

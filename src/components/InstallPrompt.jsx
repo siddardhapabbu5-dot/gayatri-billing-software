@@ -8,6 +8,7 @@ import {
   promptPwaInstall,
   subscribeInstallPrompt,
 } from "../lib/pwaInstall.js";
+import { applyManifestForMode, getAppMode, isStaffAppMode } from "../lib/appMode.js";
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState(null);
@@ -24,6 +25,7 @@ export default function InstallPrompt() {
   useEffect(() => {
     if (isStandaloneApp() || dismissed) return undefined;
 
+    applyManifestForMode(getAppMode());
     initPwaInstallCapture();
     const unsub = subscribeInstallPrompt((p) => {
       setDeferred(p);
@@ -79,9 +81,15 @@ export default function InstallPrompt() {
   const banner = (
     <div className="pwa-install" role="dialog" aria-label="Install Gayatri app">
       <div className="pwa-install-copy">
-        <strong>Install Gayatri on this tablet</strong>
+        <strong>
+          {isStaffAppMode() ? "Install Gayatri Staff on this device" : "Install Gayatri on this device"}
+        </strong>
         {deferred ? (
-          <p>Public website + Staff desk as one app icon.</p>
+          <p>
+            {isStaffAppMode()
+              ? "Install Gayatri Staff — website + Staff desk."
+              : "Install the public Gayatri website (Home → Terms)."}
+          </p>
         ) : apple ? (
           <p>
             Safari → Share <span aria-hidden="true">□↑</span> → <em>Add to Home Screen</em>

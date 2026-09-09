@@ -4,6 +4,7 @@ import StaffLogin from "./pages/StaffLogin.jsx";
 import InstallPrompt from "./components/InstallPrompt.jsx";
 import InstallAppButton from "./components/InstallAppButton.jsx";
 import { initPwaInstallCapture } from "./lib/pwaInstall.js";
+import { enableStaffAppMode, syncAppModeFromUrl } from "./lib/appMode.js";
 import { ROLES } from "./seed";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
@@ -238,6 +239,7 @@ export default function App() {
   });
 
   useEffect(() => {
+    syncAppModeFromUrl();
     initPwaInstallCapture();
   }, []);
 
@@ -284,6 +286,7 @@ export default function App() {
       const next = pageFromHash();
       if (!next) return;
       if (next === "login") {
+        enableStaffAppMode();
         if (!(getToken() && getAuthUser())) {
           setPendingStaffPage("desk");
           setStaffGate(true);
@@ -293,13 +296,16 @@ export default function App() {
       if (next === "home" || next === "portal") {
         setStaffGate(false);
         setPage(next);
+        syncAppModeFromUrl();
         return;
       }
       if (!getToken() || !getAuthUser()) {
+        enableStaffAppMode();
         setPendingStaffPage(next);
         setStaffGate(true);
         return;
       }
+      enableStaffAppMode();
       setAuthUser(getAuthUser());
       setStaffGate(false);
       setPage(next);
@@ -336,6 +342,7 @@ export default function App() {
   }, [authUser, page, role]);
 
   function enterStaff() {
+    enableStaffAppMode();
     if (getToken() && getAuthUser()) {
       const u = getAuthUser();
       setAuthUser(u);
@@ -463,6 +470,7 @@ export default function App() {
             go("home");
           }}
           onSuccess={(u) => {
+            enableStaffAppMode();
             setAuthUser(u);
             setStaffGate(false);
             setState(applyAuthUser(u));
@@ -500,6 +508,7 @@ export default function App() {
         <StaffLogin
           onBack={() => go("home")}
           onSuccess={(u) => {
+            enableStaffAppMode();
             setAuthUser(u);
             setState(applyAuthUser(u));
             const want = pendingStaffPage || "desk";

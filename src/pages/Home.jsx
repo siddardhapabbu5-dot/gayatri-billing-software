@@ -4,6 +4,12 @@ import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, sectionLines
 import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
 import RetreatOffer from "./RetreatOffer.jsx";
 import InstallAppButton from "../components/InstallAppButton.jsx";
+import {
+  enableStaffAppMode,
+  isStaffAppMode,
+  subscribeAppMode,
+  syncAppModeFromUrl,
+} from "../lib/appMode.js";
 import "../home.css";
 
 const PAGES = [
@@ -17,9 +23,11 @@ const PAGES = [
   { id: "booking", label: "Book" },
   { id: "contact", label: "Visit" },
   { id: "terms", label: "Terms" },
-  { id: "staff", label: "Staff" },
+  /** Only in Staff app mode (desktop/laptop/phone/tablet). */
+  { id: "staff", label: "Staff", staffOnly: true },
 ];
 
+const TERMS_PAGE_INDEX = PAGES.findIndex((p) => p.id === "terms");
 const DARK_PAGES = new Set(["home"]);
 
 const IMG = "/site/images";
@@ -326,6 +334,10 @@ export default function Home({ state, onEnquire, onStaff }) {
   const [hallFilm, setHallFilm] = useState(0);
   const hallImgRef = useRef(null);
   const [termFocus, setTermFocus] = useState(null);
+  const [staffApp, setStaffApp] = useState(() => {
+    syncAppModeFromUrl();
+    return isStaffAppMode();
+  });
   pageRef.current = page;
   const currentId = PAGES[page]?.id || "home";
   const lightPage = !DARK_PAGES.has(currentId);
@@ -335,8 +347,12 @@ export default function Home({ state, onEnquire, onStaff }) {
   const loadGalleryMedia = currentId === "gallery";
   const loadStayMedia = currentId === "stay";
   const loadContactMedia = currentId === "contact";
-  const navItems = PAGES.filter((item) => !item.hideNav);
-  const canSlideNext = page < PAGES.length - 1;
+  const navItems = PAGES.filter((item) => {
+    if (item.hideNav) return false;
+    if (item.staffOnly && !staffApp) return false;
+    return true;
+  });
+  const canSlideNext = staffApp ? page < PAGES.length - 1 : page < TERMS_PAGE_INDEX;
 
   const reduceMotion = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -541,6 +557,10 @@ export default function Home({ state, onEnquire, onStaff }) {
     const deck = deckRef.current;
     const index = PAGES.findIndex((item) => item.id === id);
     if (!deck || index < 0) return;
+    if (id === "staff") {
+      enableStaffAppMode();
+      setStaffApp(true);
+    }
     setPage(index);
     pageRef.current = index;
     deck.scrollTo({
@@ -552,14 +572,36 @@ export default function Home({ state, onEnquire, onStaff }) {
   }
 
   function goBy(dir) {
-    const next = Math.min(PAGES.length - 1, Math.max(0, pageRef.current + dir));
+    let next = pageRef.current + dir;
+    while (next >= 0 && next < PAGES.length) {
+      const id = PAGES[next]?.id;
+      if (id === "staff" && !isStaffAppMode()) {
+        if (dir > 0) return;
+        next += dir;
+        continue;
+      }
+      break;
+    }
+    next = Math.min(PAGES.length - 1, Math.max(0, next));
     goTo(PAGES[next].id);
   }
+
+  useEffect(() => {
+    syncAppModeFromUrl();
+    return subscribeAppMode(() => setStaffApp(isStaffAppMode()));
+  }, []);
 
   useEffect(() => {
     const jump = () => {
       const id = window.location.hash.replace("#", "") || "home";
       if (!PAGES.some((item) => item.id === id)) return;
+      if (id === "staff") {
+        enableStaffAppMode();
+        setStaffApp(true);
+      } else {
+        syncAppModeFromUrl();
+        setStaffApp(isStaffAppMode());
+      }
       window.requestAnimationFrame(() => goTo(id));
     };
     const t = window.setTimeout(jump, 80);
@@ -574,8 +616,12 @@ export default function Home({ state, onEnquire, onStaff }) {
     const deck = deckRef.current;
     if (!deck) return undefined;
     const onScroll = () => {
-      const i = Math.round(deck.scrollLeft / Math.max(deck.clientWidth, 1));
-      const clamped = Math.min(PAGES.length - 1, Math.max(0, i));
+      let i = Math.round(deck.scrollLeft / Math.max(deck.clientWidth, 1));
+      let clamped = Math.min(PAGES.length - 1, Math.max(0, i));
+      if (PAGES[clamped]?.id === "staff" && !isStaffAppMode()) {
+        clamped = TERMS_PAGE_INDEX;
+        deck.scrollTo({ left: clamped * deck.clientWidth });
+      }
       if (clamped !== pageRef.current) {
         setPage(clamped);
         pageRef.current = clamped;
