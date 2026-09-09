@@ -485,26 +485,26 @@ html.lux-page .stay-hero-page .retreat-hero {
   grid-template-columns: minmax(0, 1.22fr) minmax(280px, 0.78fr);
 }
 
-/* Tablet portrait: stack photos above copy so layout is readable */
-@media (min-width: 721px) and (max-width: 980px) {
+/* Phone + tablet portrait: stack photos above copy */
+@media (max-width: 980px) {
   html.lux-page .stay-hero-page {
     padding: 5.4rem 0 0 !important;
   }
 
   html.lux-page .stay-hero-page .retreat-hero {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(42%, 0.95fr) minmax(0, 1.05fr);
+    grid-template-columns: 1fr !important;
+    grid-template-rows: minmax(11rem, 38vh) minmax(0, 1fr) !important;
   }
 
   html.lux-page .stay-hero-page .retreat-photos {
-    grid-template-rows: none;
-    grid-template-columns: 1fr 1fr;
-    height: 100%;
-    min-height: 11rem;
+    grid-template-rows: none !important;
+    grid-template-columns: 1fr 1fr !important;
+    height: 100% !important;
+    min-height: 11rem !important;
   }
 
   html.lux-page .stay-hero-page .retreat-hero-copy {
-    padding: 1.1rem 1.25rem 1.35rem;
+    padding: 1.1rem 1.25rem 1.35rem !important;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -518,10 +518,21 @@ html.lux-page .stay-hero-page .retreat-hero {
   }
 }
 
+@media (max-width: 900px) {
+  html.lux-page .stay-hero-page {
+    padding-top: 12.75rem !important;
+  }
+}
+
 html.lux-page .stay-hero-page .retreat-photos,
 html.lux-page .stay-hero-page .retreat-hero-copy {
   min-height: 0;
   height: 100%;
+}
+
+html.lux-page .stay-hero-page .retreat-hero-copy h2 {
+  max-width: none;
+  color: #fff8ea;
 }
 
 html.lux-page .stay-hero-page .retreat-bundle {
@@ -541,8 +552,8 @@ html.lux-page .stay-story-page {
   overflow: hidden !important;
 }
 
-/* Tablet: allow story page to scroll; keep hero stacked on portrait */
-@media (min-width: 721px) and (max-width: 980px) {
+/* Phone + tablet portrait: allow story page to scroll; stack boards */
+@media (max-width: 980px) {
   html.lux-page .stay-story-page {
     padding: 5.5rem 1.2rem 1.4rem !important;
     overflow-x: hidden !important;
@@ -555,6 +566,12 @@ html.lux-page .stay-story-page {
   html.lux-page .stay-story-page .retreat-space {
     grid-template-columns: 1fr !important;
     gap: 1rem;
+  }
+}
+
+@media (max-width: 900px) {
+  html.lux-page .stay-story-page {
+    padding-top: 12.75rem !important;
   }
 }
 
@@ -1891,6 +1908,8 @@ html.lux-page .map-slot {
 html.lux-page .ghost-title {
   font-size: clamp(1.8rem, 4vw, 3.2rem);
   margin-bottom: 1rem;
+  color: #2a241c;
+  font-weight: 650;
 }
 
 html.lux-page .page-title {
@@ -2175,11 +2194,22 @@ html.lux-page .gallery-mosaic .gallery-item:focus-visible {
 }
 
 html.lux-page .lightbox {
+  position: fixed;
+  inset: 0;
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.6rem;
+  place-items: center;
   padding: 1.4rem;
+  z-index: 80;
+}
+
+html.lux-page .lightbox-stage {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: max-content;
+  max-width: min(1100px, 96vw);
 }
 
 html.lux-page .lightbox[hidden] {
@@ -2250,6 +2280,24 @@ html.lux-page .lightbox-nav:hover {
   background: #fff;
   transform: scale(1.05);
   color: #1f3d2a;
+}
+
+html.lux-page .lightbox-close {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  z-index: 5;
+  border: 0;
+  background: rgba(255, 252, 246, 0.92);
+  color: #1f3d2a;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  font-size: 1.65rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
 }
 
 html.lux-page .map-wrap {
@@ -3335,10 +3383,39 @@ html.lux-page .to-top span {
 
   html.lux-page .lux-root.is-light .muted,
   html.lux-page .lux-root.is-light .venue-card p,
-  html.lux-page .lux-root.is-light .hall-slide-caption,
   html.lux-page .lux-root.is-light .intro p {
     color: #2a2a2a !important;
     opacity: 1 !important;
+  }
+
+  /* Keep captions/light type on dark panels readable */
+  html.lux-page .lux-root.is-light .hall-slide-caption,
+  html.lux-page .lux-root.is-light .hall-slide-caption strong,
+  html.lux-page .lux-root.is-light .hall-slide-caption span {
+    color: #fff8ea !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  }
+
+  html.lux-page .lux-root.is-light .stay-hero-page,
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-hero-copy,
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-hero-copy p,
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-hero-copy h2,
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-tag,
+  html.lux-page .lux-root.is-light .stay-story-page .retreat-perk,
+  html.lux-page .lux-root.is-light .stay-story-page .retreat-perk p {
+    color: #fff8ea !important;
+  }
+
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-kicker,
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-price,
+  html.lux-page .lux-root.is-light .stay-hero-page .retreat-bundle,
+  html.lux-page .lux-root.is-light .stay-story-page .retreat-perk h4,
+  html.lux-page .lux-root.is-light .stay-story-page .retreat-perk-num {
+    color: #ffe59a !important;
+  }
+
+  html.lux-page .lux-root.is-light .ghost-title {
+    color: #1a1510 !important;
   }
 
   html.lux-page .lux-deck > section {
@@ -3387,6 +3464,9 @@ html.lux-page .to-top span {
   html.lux-page .slide-arrow {
     width: 48px;
     height: 48px;
+    top: auto;
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    transform: none;
   }
 
   html.lux-page .slide-arrow.prev {
@@ -3406,12 +3486,24 @@ html.lux-page .to-top span {
   html.lux-page .stories,
   html.lux-page .contact,
   html.lux-page .staff-gate {
-    padding: 5.2rem 1.1rem 3.4rem !important;
+    padding: 13.25rem 1.1rem 3.4rem !important;
     justify-content: flex-start;
   }
 
+  html.lux-page .rooms-page {
+    padding-top: 13.25rem !important;
+  }
+
+  html.lux-page .stay-hero-page {
+    padding-top: 12.75rem !important;
+  }
+
+  html.lux-page .stay-story-page {
+    padding-top: 12.75rem !important;
+  }
+
   html.lux-page .contact.visit-page {
-    padding: 4.55rem 1rem 1rem !important;
+    padding: 12.5rem 1rem 1rem !important;
     overflow-y: auto !important;
     justify-content: flex-start !important;
   }
@@ -3532,25 +3624,44 @@ html.lux-page .to-top span {
   }
 
   html.lux-page .lightbox {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
-    justify-items: center;
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 3.5rem 0.55rem 1.25rem;
+    z-index: 80;
   }
 
-  html.lux-page .lightbox-nav {
-    font-size: 2rem;
-  }
-
-  html.lux-page .lightbox-nav.prev {
-    order: 2;
+  html.lux-page .lightbox-stage {
+    width: max-content;
+    max-width: min(100%, 96vw);
+    grid-template-columns: auto auto auto;
+    gap: 0.3rem;
   }
 
   html.lux-page .lightbox-frame {
-    order: 1;
+    max-width: 100%;
+    width: 100%;
+    z-index: 1;
   }
 
-  html.lux-page .lightbox-nav.next {
-    order: 3;
+  html.lux-page .lightbox-nav {
+    position: static;
+    transform: none;
+    z-index: 3;
+    width: 48px;
+    height: 48px;
+    font-size: 1.75rem;
+    margin: 0;
+    align-self: center;
+    justify-self: center;
+  }
+
+  html.lux-page .lightbox-close {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    z-index: 4;
   }
 
   html.lux-page .terms-page {
@@ -3657,12 +3768,20 @@ html.lux-page .to-top span {
     grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
+  html.lux-page .slide-arrow {
+    top: auto;
+    bottom: calc(1.15rem + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    width: 46px;
+    height: 46px;
+  }
+
   html.lux-page .slide-arrow.prev {
-    left: 6px;
+    left: calc(6px + env(safe-area-inset-left, 0px));
   }
 
   html.lux-page .slide-arrow.next {
-    right: 6px;
+    right: calc(6px + env(safe-area-inset-right, 0px));
   }
 
   html.lux-page .site-header {
@@ -4091,14 +4210,143 @@ html.lux-page .rooms-empty {
 
 @media (max-width: 900px) {
   html.lux-page .rooms-page {
-    padding: 4.6rem 1.25rem 1.5rem !important;
+    padding: 13.25rem 1rem 5.5rem !important;
+    justify-content: flex-start !important;
+  }
+  html.lux-page .rooms-page-inner {
+    max-width: none;
+    width: 100%;
   }
   html.lux-page .rooms-rate-grid {
     grid-template-columns: 1fr;
-    max-width: 22rem;
-    margin: 0 auto;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    gap: 1rem;
   }
   html.lux-page .rooms-rate-card h3 {
     min-height: 0;
+    color: #0b0b0b;
+  }
+  html.lux-page .rooms-title,
+  html.lux-page .rooms-lead,
+  html.lux-page .rooms-rate-price,
+  html.lux-page .rooms-rate-guests,
+  html.lux-page .rooms-rate-extra {
+    color: #1a1a1a;
+  }
+  html.lux-page .rooms-kicker {
+    color: #3a342c;
+  }
+}
+
+/* Phone: readable type, bottom arrows, single-column rooms/stay */
+@media (max-width: 720px) {
+  html.lux-page .ghost-title,
+  html.lux-page .watermark {
+    color: #1a1510 !important;
+    font-weight: 700;
+    font-size: clamp(1.55rem, 7vw, 2.2rem);
+    letter-spacing: 0.04em;
+    margin-bottom: 0.85rem;
+  }
+
+  html.lux-page .intro-copy {
+    color: #1a1a1a !important;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    padding-inline: 0.15rem 0.25rem;
+  }
+
+  html.lux-page .intro,
+  html.lux-page .gallery,
+  html.lux-page .rooms-page {
+    padding-left: calc(0.85rem + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(0.85rem + env(safe-area-inset-right, 0px)) !important;
+  }
+
+  html.lux-page .stay-page {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  html.lux-page .stay-story-page {
+    padding: 12.75rem 1rem 1.4rem !important;
+    overflow-y: auto !important;
+    justify-content: flex-start !important;
+  }
+
+  html.lux-page .stay-story-page .retreat-board-main,
+  html.lux-page .stay-story-page .retreat-space,
+  html.lux-page .stay-story-page .retreat-perks {
+    grid-template-columns: 1fr !important;
+  }
+
+  html.lux-page .rooms-page {
+    padding-top: 13.25rem !important;
+    padding-bottom: 5.75rem !important;
+  }
+
+  html.lux-page .gallery-mosaic {
+    grid-template-columns: 1fr 1fr !important;
+    padding-bottom: 4.5rem;
+  }
+
+  /* Dock page arrows so they do not cover body copy / cards */
+  html.lux-page .slide-arrow {
+    top: auto !important;
+    bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+    width: 44px;
+    height: 44px;
+    font-size: 1.45rem;
+    transform: none !important;
+  }
+
+  html.lux-page .slide-arrow.prev {
+    left: calc(0.85rem + env(safe-area-inset-left, 0px));
+  }
+
+  html.lux-page .slide-arrow.next {
+    right: calc(0.85rem + env(safe-area-inset-right, 0px));
+  }
+
+  html.lux-page .lightbox-nav {
+    width: 46px;
+    height: 46px;
+    font-size: 1.55rem;
+    position: static;
+    transform: none;
+  }
+
+  html.lux-page .lightbox-stage {
+    grid-template-columns: auto auto auto;
+    gap: 0.2rem;
+    width: max-content;
+    max-width: 96vw;
+  }
+
+  html.lux-page .lightbox-frame {
+    max-width: 100%;
+    padding-inline: 0;
+  }
+
+  html.lux-page .lightbox-frame img,
+  html.lux-page .lightbox-frame video {
+    max-height: 62vh;
+  }
+
+  html.lux-page .stay-hero-page .retreat-hero {
+    grid-template-rows: minmax(9rem, 28vh) minmax(0, 1fr) !important;
+  }
+
+  html.lux-page .stay-hero-page .retreat-hero-copy h2,
+  html.lux-page .retreat-hero-copy h2 {
+    max-width: none;
+    font-size: clamp(1.45rem, 6.2vw, 2rem);
+    line-height: 1.15;
+  }
+
+  html.lux-page .stay-hero-page .retreat-hero-copy {
+    padding: 0.85rem 1rem 5.5rem !important;
   }
 }

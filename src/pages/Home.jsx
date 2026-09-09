@@ -1769,7 +1769,7 @@ export default function Home({ state, onEnquire, onStaff }) {
           ×
         </button>
         {lightbox ? (
-          <>
+          <div className="lightbox-stage" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="lightbox-nav prev"
@@ -1803,7 +1803,7 @@ export default function Home({ state, onEnquire, onStaff }) {
             >
               ›
             </button>
-          </>
+          </div>
         ) : null}
       </div>
       {!lightbox ? (

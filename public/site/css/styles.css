@@ -377,10 +377,10 @@ h2,
 .watermark {
   margin: 0 0 1.5rem;
   font-size: clamp(2.4rem, 6vw, 4.6rem);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #ded8ce;
+  color: #2a241c;
 }
 
 .intro-layout {
