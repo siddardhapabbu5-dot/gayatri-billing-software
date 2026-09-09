@@ -1,0 +1,5 @@
+# Generated tablet review assets (large); regenerate with capture scripts
+tablet-preview/*.png
+tablet-preview/*.pdf
+tablet-validate/**
+!tablet-validate/.gitkeep

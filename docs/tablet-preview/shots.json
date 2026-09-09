@@ -1,0 +1,142 @@
+[
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Home",
+    "file": "ipad-portrait-home.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "The Hall",
+    "file": "ipad-portrait-about.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Venues",
+    "file": "ipad-portrait-venues.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "The Royal Family Retreat",
+    "file": "ipad-portrait-stay.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Rooms",
+    "file": "ipad-portrait-rooms.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Gallery",
+    "file": "ipad-portrait-gallery.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Book",
+    "file": "ipad-portrait-booking.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Visit",
+    "file": "ipad-portrait-contact.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Terms",
+    "file": "ipad-portrait-terms.png"
+  },
+  {
+    "viewport": "iPad portrait",
+    "width": 768,
+    "height": 1024,
+    "page": "Staff login",
+    "file": "ipad-portrait-staff-login.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Home",
+    "file": "ipad-landscape-home.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "The Hall",
+    "file": "ipad-landscape-about.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Venues",
+    "file": "ipad-landscape-venues.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "The Royal Family Retreat",
+    "file": "ipad-landscape-stay.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Rooms",
+    "file": "ipad-landscape-rooms.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Gallery",
+    "file": "ipad-landscape-gallery.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Book",
+    "file": "ipad-landscape-booking.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Visit",
+    "file": "ipad-landscape-contact.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Terms",
+    "file": "ipad-landscape-terms.png"
+  },
+  {
+    "viewport": "iPad landscape",
+    "width": 1024,
+    "height": 768,
+    "page": "Staff login",
+    "file": "ipad-landscape-staff-login.png"
+  }
+]

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Gayatri Convention — Tablet layout review</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 24px;
+      background: #f5f2eb;
+    }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .meta { color: #555; font-size: 13px; margin-bottom: 28px; }
+    .sheet {
+      break-after: page;
+      page-break-after: always;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px 18px 20px;
+      margin-bottom: 24px;
+    }
+    .sheet:last-child { break-after: auto; page-break-after: auto; }
+    .sheet h2 { font-size: 16px; margin: 0 0 4px; }
+    .sheet .sub { font-size: 12px; color: #666; margin-bottom: 12px; }
+    .frame {
+      display: flex;
+      justify-content: center;
+      background: #e8e4dc;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .frame img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #ccc;
+      box-shadow: 0 4px 18px rgba(0,0,0,.12);
+      background: #fff;
+      /* Keep letterforms clear of any page-edge crop */
+      padding-top: 8px;
+      background-clip: content-box;
+    }
+    .err { color: #a00; font-size: 13px; }
+    .cover { padding: 40px 24px; }
+    .cover ul { line-height: 1.7; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .sheet { border: none; box-shadow: none; margin: 0; padding: 8px 0; }
+      .frame { padding: 8px 0; background: #fff; }
+      .frame img {
+        max-height: 160mm;
+        padding-top: 4mm;
+        object-fit: contain;
+        object-position: top center;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet cover">
+    <h1>Gayatri Convention — Tablet layout review</h1>
+    <p class="meta">
+      Generated 2026-09-09 07:28 UTC<br/>
+      Source: http://127.0.0.1:5177<br/>
+      Viewports: iPad portrait 768×1024 · iPad landscape 1024×768
+    </p>
+    <p><strong>How to save as PDF:</strong> Open this file in Chrome → Ctrl+P → Destination: Save as PDF → Landscape → Save.</p>
+    <p class="no-print"><strong>Check before public:</strong> Confirm nav, hero, venues reserve bar, gallery, contact, and staff login fit without horizontal cut-off or overlapping chrome on both orientations.</p>
+    <ul>
+      <li>Home (<code>#home</code>)</li><li>The Hall (<code>#about</code>)</li><li>Venues (<code>#venues</code>)</li><li>The Royal Family Retreat (<code>#stay</code>)</li><li>Rooms (<code>#rooms</code>)</li><li>Gallery (<code>#gallery</code>)</li><li>Book (<code>#booking</code>)</li><li>Visit (<code>#contact</code>)</li><li>Terms (<code>#terms</code>)</li><li>Staff login (<code>#staff/login</code>)</li>
+    </ul>
+  </div>
+  <div class="sheet">
+    <h2>Home</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-home.png" alt="Home iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>The Hall</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-about.png" alt="The Hall iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Venues</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-venues.png" alt="Venues iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>The Royal Family Retreat</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-stay.png" alt="The Royal Family Retreat iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Rooms</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-rooms.png" alt="Rooms iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Gallery</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-gallery.png" alt="Gallery iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Book</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-booking.png" alt="Book iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Visit</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-contact.png" alt="Visit iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Terms</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-terms.png" alt="Terms iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Staff login</h2>
+    <p class="sub">iPad portrait · 768×1024</p>
+    <div class="frame"><img src="./ipad-portrait-staff-login.png" alt="Staff login iPad portrait" /></div>
+  </div>
+<div class="sheet">
+    <h2>Home</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-home.png" alt="Home iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>The Hall</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-about.png" alt="The Hall iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Venues</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-venues.png" alt="Venues iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>The Royal Family Retreat</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-stay.png" alt="The Royal Family Retreat iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Rooms</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-rooms.png" alt="Rooms iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Gallery</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-gallery.png" alt="Gallery iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Book</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-booking.png" alt="Book iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Visit</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-contact.png" alt="Visit iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Terms</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-terms.png" alt="Terms iPad landscape" /></div>
+  </div>
+<div class="sheet">
+    <h2>Staff login</h2>
+    <p class="sub">iPad landscape · 1024×768</p>
+    <div class="frame"><img src="./ipad-landscape-staff-login.png" alt="Staff login iPad landscape" /></div>
+  </div>
+</body>
+</html>
