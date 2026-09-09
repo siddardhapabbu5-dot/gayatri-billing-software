@@ -337,9 +337,8 @@ a { color: inherit; }
 }
 .brand p { margin: 8px 0 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-2); }
 .brand small { display: block; margin-top: 8px; color: #9bb0b8; font-size: 11px; line-height: 1.4; }
-.nav-group { margin-top: 16px; }
-.nav-group span { display: block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f969e; padding: 0 8px 6px; }
-.nav button,
+.nav-group { margin-top: 12px; }
+.nav button:not(.nav-group-toggle),
 .nav a {
   display: block;
   width: 100%; text-align: left; background: transparent; border: 0; color: #c5d4da;
@@ -349,8 +348,42 @@ a { color: inherit; }
   cursor: pointer;
   font-family: inherit;
 }
-.nav button:hover, .nav button.on,
 .nav a:hover, .nav a.on { background: var(--nav-2); color: #fff; }
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: #7f969e;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.nav-group-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #c5d4da;
+}
+.nav-group.is-open .nav-group-toggle {
+  color: #a8bdc5;
+}
+.nav-group-label {
+  min-width: 0;
+}
+.nav-group-arrow {
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
+  color: #c5d4da;
+}
 .nav-foot {
   flex: 0 0 auto;
   margin-top: 0;

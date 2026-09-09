@@ -188,6 +188,13 @@ const PUBLIC_SITE_HASHES = new Set([
   "staff",
 ]);
 
+function groupForPage(pageId) {
+  for (const g of GROUPS) {
+    if (g.items.some((i) => i.id === pageId)) return g.label;
+  }
+  return GROUPS[0]?.label || "Operations";
+}
+
 function staffHref(id) {
   if (id === "home" || id === "portal") return `${window.location.pathname}${window.location.search}#home`;
   return `${window.location.pathname}${window.location.search}#staff/${id}`;
@@ -237,6 +244,11 @@ export default function App() {
     if (fromHash === "login") return "desk";
     return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
   });
+  const [openNavGroup, setOpenNavGroup] = useState(() => groupForPage(page));
+
+  useEffect(() => {
+    setOpenNavGroup(groupForPage(page));
+  }, [page]);
 
   useEffect(() => {
     syncAppModeFromUrl();
@@ -530,23 +542,37 @@ export default function App() {
           <h1>{state.property.brandName || "Gayatri"}</h1>
         </div>
         <div className="nav-scroll">
-          {GROUPS.map((g) => (
-            <div className="nav-group" key={g.label}>
-              <span>{g.label}</span>
-              {g.items
-                .filter((i) => can(role, i.perm))
-                .map((i) => (
-                  <a
-                    key={i.id}
-                    href={staffHref(i.id)}
-                    className={page === i.id ? "on" : ""}
-                    onClick={(e) => openNav(e, i.id)}
-                  >
-                    {i.label}
-                  </a>
-                ))}
-            </div>
-          ))}
+          {GROUPS.map((g) => {
+            const items = g.items.filter((i) => can(role, i.perm));
+            if (!items.length) return null;
+            const open = openNavGroup === g.label;
+            return (
+              <div className={`nav-group${open ? " is-open" : ""}`} key={g.label}>
+                <button
+                  type="button"
+                  className="nav-group-toggle"
+                  aria-expanded={open}
+                  onClick={() => setOpenNavGroup(open ? null : g.label)}
+                >
+                  <span className="nav-group-label">{g.label}</span>
+                  <span className="nav-group-arrow" aria-hidden="true">
+                    {open ? "▾" : "▸"}
+                  </span>
+                </button>
+                {open &&
+                  items.map((i) => (
+                    <a
+                      key={i.id}
+                      href={staffHref(i.id)}
+                      className={page === i.id ? "on" : ""}
+                      onClick={(e) => openNav(e, i.id)}
+                    >
+                      {i.label}
+                    </a>
+                  ))}
+              </div>
+            );
+          })}
         </div>
         <div className="nav-foot">
           <div className="nav-foot-user">
