@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function isStandalone() {
   return (
@@ -7,12 +7,25 @@ function isStandalone() {
   );
 }
 
-function isIos() {
-  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+/** iPhone/iPad including iPadOS “desktop” Safari (reports as Macintosh). */
+function isAppleTouchDevice() {
+  const ua = window.navigator.userAgent || "";
+  if (/iphone|ipod|ipad/i.test(ua)) return true;
+  return /macintosh/i.test(ua) && (window.navigator.maxTouchPoints || 0) > 1;
+}
+
+function isTouchTabletOrPhone() {
+  return (
+    isAppleTouchDevice() ||
+    (window.matchMedia("(pointer: coarse)").matches &&
+      Math.min(window.screen.width, window.screen.height) >= 600) ||
+    (window.navigator.maxTouchPoints || 0) > 1
+  );
 }
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState(null);
+  const deferredRef = useRef(null);
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem("gayatri-pwa-dismiss") === "1";
@@ -20,24 +33,36 @@ export default function InstallPrompt() {
       return false;
     }
   });
-  const [showIos, setShowIos] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     if (isStandalone() || dismissed) return undefined;
 
     const onPrompt = (e) => {
       e.preventDefault();
+      deferredRef.current = e;
       setDeferred(e);
+      setShowManual(false);
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
 
-    if (isIos()) setShowIos(true);
+    let timer = 0;
+    if (isAppleTouchDevice()) {
+      setShowManual(true);
+    } else if (isTouchTabletOrPhone()) {
+      timer = window.setTimeout(() => {
+        if (!deferredRef.current) setShowManual(true);
+      }, 2500);
+    }
 
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+    };
   }, [dismissed]);
 
   if (isStandalone() || dismissed) return null;
-  if (!deferred && !showIos) return null;
+  if (!deferred && !showManual) return null;
 
   function dismiss() {
     try {
@@ -47,7 +72,8 @@ export default function InstallPrompt() {
     }
     setDismissed(true);
     setDeferred(null);
-    setShowIos(false);
+    deferredRef.current = null;
+    setShowManual(false);
   }
 
   async function install() {
@@ -55,18 +81,26 @@ export default function InstallPrompt() {
     deferred.prompt();
     await deferred.userChoice;
     setDeferred(null);
+    deferredRef.current = null;
     dismiss();
   }
+
+  const apple = isAppleTouchDevice();
 
   return (
     <div className="pwa-install" role="dialog" aria-label="Install Gayatri app">
       <div className="pwa-install-copy">
-        <strong>Install Gayatri on this phone</strong>
+        <strong>Install Gayatri on this tablet</strong>
         {deferred ? (
-          <p>Public website + Staff desk in one app icon.</p>
+          <p>Public website + Staff desk as one app icon.</p>
+        ) : apple ? (
+          <p>
+            Safari → Share <span aria-hidden="true">□↑</span> → <em>Add to Home Screen</em>
+          </p>
         ) : (
           <p>
-            Tap Share <span aria-hidden="true">□↑</span> then <em>Add to Home Screen</em>.
+            Chrome menu <span aria-hidden="true">⋮</span> → <em>Install app</em> or{" "}
+            <em>Add to Home screen</em>
           </p>
         )}
       </div>
