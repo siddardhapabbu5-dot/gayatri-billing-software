@@ -193,6 +193,16 @@ function staffHref(id) {
   return `${window.location.pathname}${window.location.search}#staff/${id}`;
 }
 
+const NAV_MIN_KEY = "gayatri-staff-nav-min";
+
+function readNavMin() {
+  try {
+    return localStorage.getItem(NAV_MIN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function pageFromHash() {
   const full = String(window.location.hash || "").replace(/^#/, "");
   if (!full || full === "home") return "home";
@@ -237,6 +247,19 @@ export default function App() {
     if (fromHash === "login") return "desk";
     return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
   });
+  const [navMin, setNavMin] = useState(readNavMin);
+
+  function toggleNavMin() {
+    setNavMin((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(NAV_MIN_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     syncAppModeFromUrl();
@@ -523,11 +546,20 @@ export default function App() {
   return (
     <>
     <InstallPrompt />
-    <div className="shell">
-      <aside className="nav no-print">
+    <div className={`shell${navMin ? " is-nav-min" : ""}`}>
+      <aside className={`nav no-print${navMin ? " is-min" : ""}`} aria-label="Staff menu">
         <div className="brand">
           <img className="brand-logo" src="/site/images/logo-gold.png" alt="" />
           <h1>{state.property.brandName || "Gayatri"}</h1>
+          <button
+            type="button"
+            className="nav-min-btn"
+            onClick={toggleNavMin}
+            aria-expanded={!navMin}
+            title={navMin ? "Expand menu" : "Minimize menu"}
+          >
+            {navMin ? "»" : "« Minimize"}
+          </button>
         </div>
         <div className="nav-scroll">
           {GROUPS.map((g) => (
@@ -540,9 +572,19 @@ export default function App() {
                     key={i.id}
                     href={staffHref(i.id)}
                     className={page === i.id ? "on" : ""}
+                    title={i.label}
                     onClick={(e) => openNav(e, i.id)}
                   >
-                    {i.label}
+                    <span className="nav-label-full">{i.label}</span>
+                    <span className="nav-label-short" aria-hidden="true">
+                      {i.label
+                        .split(/[\s/&]+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((w) => w[0])
+                        .join("")
+                        .toUpperCase()}
+                    </span>
                   </a>
                 ))}
             </div>
@@ -560,11 +602,23 @@ export default function App() {
       </aside>
       <div className="workspace">
         <header className="topbar no-print">
-          <div>
-            <div className="crumb">
-              {state.company.group} / {state.property.name}
+          <div className="topbar-lead">
+            {navMin && (
+              <button
+                type="button"
+                className="btn ghost small nav-expand-btn"
+                onClick={toggleNavMin}
+                title="Expand menu"
+              >
+                ☰ Menu
+              </button>
+            )}
+            <div>
+              <div className="crumb">
+                {state.company.group} / {state.property.name}
+              </div>
+              <h2>{titles[page]}</h2>
             </div>
-            <h2>{titles[page]}</h2>
           </div>
           <div className="row">
             <span className="muted">{state.notifications[0]?.title}</span>
