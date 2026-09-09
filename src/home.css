@@ -485,6 +485,39 @@ html.lux-page .stay-hero-page .retreat-hero {
   grid-template-columns: minmax(0, 1.22fr) minmax(280px, 0.78fr);
 }
 
+/* Tablet portrait: stack photos above copy so layout is readable */
+@media (min-width: 721px) and (max-width: 980px) {
+  html.lux-page .stay-hero-page {
+    padding: 5.4rem 0 0 !important;
+  }
+
+  html.lux-page .stay-hero-page .retreat-hero {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(42%, 0.95fr) minmax(0, 1.05fr);
+  }
+
+  html.lux-page .stay-hero-page .retreat-photos {
+    grid-template-rows: none;
+    grid-template-columns: 1fr 1fr;
+    height: 100%;
+    min-height: 11rem;
+  }
+
+  html.lux-page .stay-hero-page .retreat-hero-copy {
+    padding: 1.1rem 1.25rem 1.35rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.lux-page .stay-story-page .retreat-board {
+    overflow: visible;
+  }
+
+  html.lux-page .stay-story-page .retreat-perks {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 html.lux-page .stay-hero-page .retreat-photos,
 html.lux-page .stay-hero-page .retreat-hero-copy {
   min-height: 0;
@@ -506,6 +539,40 @@ html.lux-page .stay-story-page {
   align-items: stretch !important;
   padding: 5.1rem 3.4rem 2rem !important;
   overflow: hidden !important;
+}
+
+/* Tablet: allow story page to scroll; keep hero stacked on portrait */
+@media (min-width: 721px) and (max-width: 980px) {
+  html.lux-page .stay-story-page {
+    padding: 5.5rem 1.2rem 1.4rem !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    justify-content: flex-start !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.lux-page .stay-story-page .retreat-board-main,
+  html.lux-page .stay-story-page .retreat-space {
+    grid-template-columns: 1fr !important;
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 981px) and (max-width: 1200px) {
+  html.lux-page .stay-hero-page {
+    padding: 5.2rem 0 0 !important;
+  }
+
+  html.lux-page .stay-hero-page .retreat-hero {
+    grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  }
+
+  html.lux-page .stay-story-page {
+    padding: 5.3rem 1.6rem 1.4rem !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 html.lux-page .stay-story-page .retreat {
