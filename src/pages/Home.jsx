@@ -10,7 +10,7 @@ const PAGES = [
   { id: "home", label: "Home" },
   { id: "about", label: "The Hall" },
   { id: "venues", label: "Venues" },
-  { id: "stay", label: "The Royal Family Retreat" },
+  { id: "stay", label: "Family Retreat", fullLabel: "The Royal Family Retreat" },
   { id: "stay-space", label: "The Royal Family Retreat", hideNav: true },
   { id: "rooms", label: "Rooms" },
   { id: "gallery", label: "Gallery" },
