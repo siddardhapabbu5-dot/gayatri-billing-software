@@ -533,13 +533,14 @@
   .staff-m-chip {
     appearance: none;
     flex: 0 0 auto;
-    min-height: 34px;
-    padding: 6px 12px;
+    min-height: 36px;
+    padding: 8px 14px;
     border-radius: 8px;
     border: 1px solid #e6ebf0;
     background: #fff;
     font-size: 12px;
     white-space: nowrap;
+    scroll-snap-align: start;
   }
 
   .staff-m-chip.on {
@@ -564,11 +565,28 @@
 
   .staff-m-asset-row {
     display: flex;
-    gap: 6px;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 2px;
-    margin-bottom: 12px;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    margin: 0 -12px 12px;
+    padding: 2px 12px 10px;
+    touch-action: pan-x;
+  }
+
+  .staff-m-asset-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Extra end space so last hall chip is not clipped */
+  .staff-m-asset-row::after {
+    content: "";
+    flex: 0 0 20px;
   }
 
   .staff-m-book-card .hall {

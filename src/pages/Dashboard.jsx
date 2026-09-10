@@ -22,6 +22,25 @@ function monthShort(iso) {
   return parseISO(iso).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
 }
 
+function chipLabel(opt) {
+  if (!opt) return "";
+  if (opt.id === "all") return "All";
+  if (opt.id === "retreat") return "Retreat";
+  if (opt.id.startsWith("hall:")) {
+    // Short chip text so Hall 3 is not clipped on phone
+    const clean = String(opt.label || "")
+      .replace(/\s*\([^)]*\)\s*/g, " ")
+      .trim();
+    const first = clean.split(/\s+/)[0] || clean;
+    return first.length >= 3 ? first : clean;
+  }
+  if (opt.id.startsWith("roomType:")) {
+    const name = String(opt.label || "");
+    return name.length > 12 ? `${name.slice(0, 11)}…` : name;
+  }
+  return opt.label;
+}
+
 function isActiveBooking(b) {
   return b && !["Cancelled", "Refunded"].includes(b.status);
 }
@@ -630,10 +649,11 @@ export default function Dashboard({ state, go, staffUser }) {
               type="button"
               role="tab"
               aria-selected={filterAsset === opt.id}
+              title={opt.label}
               className={`staff-m-chip${filterAsset === opt.id ? " on" : ""}`}
               onClick={() => setFilterAsset(opt.id)}
             >
-              {opt.id === "all" ? "All" : opt.label}
+              {chipLabel(opt)}
             </button>
           ))}
         </div>
