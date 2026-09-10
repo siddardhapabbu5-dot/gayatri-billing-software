@@ -195,6 +195,18 @@ function groupForPage(pageId) {
   return GROUPS[0]?.label || "Operations";
 }
 
+const NAV_OPEN_KEY = "gayatri-staff-nav-open";
+
+function readNavOpen() {
+  try {
+    const v = localStorage.getItem(NAV_OPEN_KEY);
+    if (v === null) return true;
+    return v !== "0";
+  } catch {
+    return true;
+  }
+}
+
 function staffHref(id) {
   if (id === "home" || id === "portal") return `${window.location.pathname}${window.location.search}#home`;
   return `${window.location.pathname}${window.location.search}#staff/${id}`;
@@ -245,6 +257,19 @@ export default function App() {
     return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
   });
   const [openNavGroup, setOpenNavGroup] = useState(() => groupForPage(page));
+  const [navOpen, setNavOpen] = useState(readNavOpen);
+
+  function toggleNavOpen() {
+    setNavOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(NAV_OPEN_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     setOpenNavGroup(groupForPage(page));
@@ -535,11 +560,19 @@ export default function App() {
   return (
     <>
     <InstallPrompt />
-    <div className="shell">
-      <aside className="nav no-print">
+    <div className={`shell${navOpen ? "" : " is-nav-closed"}`}>
+      <aside className="nav no-print" aria-hidden={!navOpen}>
         <div className="brand">
           <img className="brand-logo" src="/site/images/logo-gold.png" alt="" />
           <h1>{state.property.brandName || "Gayatri"}</h1>
+          <button
+            type="button"
+            className="nav-collapse-btn"
+            onClick={toggleNavOpen}
+            title="Close sidebar"
+          >
+            « Close menu
+          </button>
         </div>
         <div className="nav-scroll">
           {GROUPS.map((g) => {
@@ -555,12 +588,10 @@ export default function App() {
                   onClick={() => setOpenNavGroup(open ? null : g.label)}
                 >
                   <span className="nav-group-label">{g.label}</span>
-                  <span className="nav-group-arrow" aria-hidden="true">
-                    {open ? "▾" : "▸"}
-                  </span>
+                  <span className={`nav-group-arrow${open ? " is-open" : ""}`} aria-hidden="true" />
                 </button>
-                {open &&
-                  items.map((i) => (
+                <div className="nav-group-items" hidden={!open}>
+                  {items.map((i) => (
                     <a
                       key={i.id}
                       href={staffHref(i.id)}
@@ -570,6 +601,7 @@ export default function App() {
                       {i.label}
                     </a>
                   ))}
+                </div>
               </div>
             );
           })}
@@ -586,11 +618,23 @@ export default function App() {
       </aside>
       <div className="workspace">
         <header className="topbar no-print">
-          <div>
-            <div className="crumb">
-              {state.company.group} / {state.property.name}
+          <div className="topbar-lead">
+            {!navOpen && (
+              <button
+                type="button"
+                className="btn ghost small nav-open-btn"
+                onClick={toggleNavOpen}
+                title="Open sidebar"
+              >
+                ☰ Menu
+              </button>
+            )}
+            <div>
+              <div className="crumb">
+                {state.company.group} / {state.property.name}
+              </div>
+              <h2>{titles[page]}</h2>
             </div>
-            <h2>{titles[page]}</h2>
           </div>
           <div className="row">
             <span className="muted">{state.notifications[0]?.title}</span>
