@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { publicAvailability } from "../engine";
 import { TERM_LANGS, TERM_SECTIONS, cancelSectionLines, policiesOf, sectionLines, termLocaleOf } from "../policies";
 import { capacityText, enquiryAlertText, mapEmbedSrc, mapGoogleUrl, money, monthMatrix, pad, parseISO, smsHref, telHref, todayISO, waMe } from "../lib";
@@ -1737,60 +1738,62 @@ export default function Home({ state, onEnquire, onStaff }) {
         );
       })() : null}
 
-      <div
-        className={`lightbox${lightbox && isGalleryVideo(lightbox) ? " is-video" : " is-photo"}`}
-        hidden={!lightbox}
-        onClick={() => setLightbox(null)}
-      >
-        <button
-          type="button"
-          className="lightbox-close"
-          aria-label="Close"
-          onClick={(e) => {
-            e.stopPropagation();
-            setLightbox(null);
-          }}
-        >
-          ×
-        </button>
-        {lightbox ? (
-          <div className="lightbox-stage" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="lightbox-nav prev"
-              aria-label={isGalleryVideo(lightbox) ? "Previous video" : "Previous photo"}
-              onClick={(e) => {
-                e.stopPropagation();
-                shiftLightbox(-1);
-              }}
+      {lightbox
+        ? createPortal(
+            <div
+              className={`lightbox${isGalleryVideo(lightbox) ? " is-video" : " is-photo"}`}
+              onClick={() => setLightbox(null)}
             >
-              ‹
-            </button>
-            <figure
-              className={`lightbox-frame${isGalleryVideo(lightbox) ? " is-video" : " is-photo"}`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {isGalleryVideo(lightbox) ? (
-                <LightboxVideo src={lightbox.src} poster={lightbox.poster} />
-              ) : (
-                <img key={lightbox.src} src={lightbox.src} alt={lightbox.alt} decoding="async" />
-              )}
-              <figcaption>{lightbox.label || lightbox.alt}</figcaption>
-            </figure>
-            <button
-              type="button"
-              className="lightbox-nav next"
-              aria-label={isGalleryVideo(lightbox) ? "Next video" : "Next photo"}
-              onClick={(e) => {
-                e.stopPropagation();
-                shiftLightbox(1);
-              }}
-            >
-              ›
-            </button>
-          </div>
-        ) : null}
-      </div>
+              <button
+                type="button"
+                className="lightbox-close"
+                aria-label="Close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightbox(null);
+                }}
+              >
+                ×
+              </button>
+              <div className="lightbox-stage" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="lightbox-nav prev"
+                  aria-label={isGalleryVideo(lightbox) ? "Previous video" : "Previous photo"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    shiftLightbox(-1);
+                  }}
+                >
+                  ‹
+                </button>
+                <figure
+                  className={`lightbox-frame${isGalleryVideo(lightbox) ? " is-video" : " is-photo"}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isGalleryVideo(lightbox) ? (
+                    <LightboxVideo src={lightbox.src} poster={lightbox.poster} />
+                  ) : (
+                    <img key={lightbox.src} src={lightbox.src} alt={lightbox.alt} decoding="async" />
+                  )}
+                  <figcaption>{lightbox.label || lightbox.alt}</figcaption>
+                </figure>
+                <button
+                  type="button"
+                  className="lightbox-nav next"
+                  aria-label={isGalleryVideo(lightbox) ? "Next video" : "Next photo"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    shiftLightbox(1);
+                  }}
+                >
+                  ›
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
       {!lightbox ? (
         <>
           <button

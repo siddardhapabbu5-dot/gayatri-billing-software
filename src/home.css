@@ -2199,17 +2199,23 @@ html.lux-page .lightbox {
   display: grid;
   place-items: center;
   padding: 1.4rem;
-  z-index: 80;
+  z-index: 240;
+  background: rgba(8, 10, 12, 0.72);
+  box-sizing: border-box;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 html.lux-page .lightbox-stage {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  width: max-content;
-  max-width: min(1100px, 96vw);
+  width: min(1100px, 96vw);
+  max-width: 96vw;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 html.lux-page .lightbox[hidden] {
@@ -2221,14 +2227,18 @@ html.lux-page .lightbox-frame {
   display: grid;
   justify-items: center;
   gap: 0.7rem;
-  max-width: min(1100px, 92vw);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 html.lux-page .lightbox-frame img,
 html.lux-page .lightbox-frame video {
-  max-height: 78vh;
+  max-height: min(78vh, calc(100dvh - 6.5rem));
   max-width: 100%;
   width: auto;
+  height: auto;
   object-fit: contain;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
@@ -3672,40 +3682,62 @@ html.lux-page .to-top span {
     inset: 0;
     display: grid;
     place-items: center;
-    padding: 3.5rem 0.55rem 1.25rem;
-    z-index: 80;
+    padding: calc(3.75rem + env(safe-area-inset-top, 0px)) 0.85rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    z-index: 240;
+    overflow: auto;
   }
 
+  /* Full-width media; arrows overlay so landscape photos aren't half-cut */
   html.lux-page .lightbox-stage {
-    width: max-content;
-    max-width: min(100%, 96vw);
-    grid-template-columns: auto auto auto;
-    gap: 0.3rem;
+    position: relative;
+    display: block;
+    width: min(980px, 94vw);
+    max-width: 94vw;
+    min-width: 0;
   }
 
   html.lux-page .lightbox-frame {
-    max-width: 100%;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     z-index: 1;
   }
 
+  html.lux-page .lightbox-frame img,
+  html.lux-page .lightbox-frame video {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: min(72dvh, calc(100dvh - 8rem));
+    margin: 0 auto;
+    object-fit: contain;
+  }
+
   html.lux-page .lightbox-nav {
-    position: static;
-    transform: none;
+    position: absolute;
+    top: 42%;
+    transform: translateY(-50%);
     z-index: 3;
     width: 48px;
     height: 48px;
     font-size: 1.75rem;
     margin: 0;
-    align-self: center;
-    justify-self: center;
+  }
+
+  html.lux-page .lightbox-nav.prev {
+    left: 0.35rem;
+  }
+
+  html.lux-page .lightbox-nav.next {
+    right: 0.35rem;
   }
 
   html.lux-page .lightbox-close {
-    position: absolute;
+    position: fixed;
     top: calc(12px + env(safe-area-inset-top, 0px));
     right: calc(12px + env(safe-area-inset-right, 0px));
-    z-index: 4;
+    z-index: 250;
   }
 
   html.lux-page .terms-page {
@@ -4390,25 +4422,42 @@ html.lux-page .rooms-empty {
     width: 46px;
     height: 46px;
     font-size: 1.55rem;
-    position: static;
-    transform: none;
+    position: absolute;
+    top: 40%;
+    transform: translateY(-50%);
+  }
+
+  html.lux-page .lightbox-nav.prev {
+    left: 0.25rem;
+  }
+
+  html.lux-page .lightbox-nav.next {
+    right: 0.25rem;
   }
 
   html.lux-page .lightbox-stage {
-    grid-template-columns: auto auto auto;
-    gap: 0.2rem;
-    width: max-content;
-    max-width: 96vw;
+    display: block;
+    position: relative;
+    width: min(100%, 94vw);
+    max-width: 94vw;
+    min-width: 0;
   }
 
   html.lux-page .lightbox-frame {
     max-width: 100%;
+    width: 100%;
+    min-width: 0;
     padding-inline: 0;
   }
 
   html.lux-page .lightbox-frame img,
   html.lux-page .lightbox-frame video {
-    max-height: 62vh;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: min(64dvh, calc(100dvh - 7.5rem));
+    object-fit: contain;
   }
 
   html.lux-page .stay-hero-page .retreat-hero {
