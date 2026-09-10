@@ -19,7 +19,7 @@ export default defineConfig({
         id: "/?mode=public",
         name: "Gayatri Convention",
         short_name: "Gayatri",
-        description: "Gayatri Convention — public website (phone, tablet, desktop)",
+        description: "Gayatri Convention — public website (gayatriconvention.com)",
         theme_color: "#102027",
         background_color: "#102027",
         display: "standalone",

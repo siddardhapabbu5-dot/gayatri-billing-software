@@ -65,9 +65,29 @@ If `${{Postgres.*}}` names differ in your dashboard, open Postgres → **Variabl
    - Manager: `desk@gayatrifunctionhall.com` / `Manager@123`
    - HK: `hk@gayatrifunctionhall.com` / `Hk@123`
 
-### 8) (Optional) Custom domain later
-Railway → service → **Custom Domain** → add `gayatriconvention.com`  
-Update DNS as Railway shows.
+### 8) Custom domains (public + staff)
+
+| Role | Domain |
+|--|--|
+| Public website | `gayatriconvention.com` (+ `www`) |
+| Staff app | `app.gayatriconvention.com` |
+
+1. Buy **gayatriconvention.com** at GoDaddy / Namecheap / Google Domains / Cloudflare.
+2. Railway → your web service → **Settings** → **Networking** → **Custom Domain**
+3. Add all three:
+   - `gayatriconvention.com`
+   - `www.gayatriconvention.com`
+   - `app.gayatriconvention.com`
+4. Railway shows a **CNAME** (or A/ALIAS) target — copy those into your domain DNS exactly.
+5. Wait until Railway shows domains as **Active** (SSL auto).
+6. Set Railway variable:
+   - `APP_CORS_ORIGINS` = `https://gayatriconvention.com,https://www.gayatriconvention.com,https://app.gayatriconvention.com,https://gayatri-billing-software-production.up.railway.app`
+7. Redeploy once after CORS update.
+
+App behaviour (built-in):
+- `gayatriconvention.com` → **public** mode
+- `app.gayatriconvention.com` → **staff** mode
+- Old Railway URL still works with `?mode=public` / `?mode=staff`
 
 ---
 

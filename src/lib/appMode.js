@@ -6,6 +6,10 @@ export const APP_MODE_KEY = "gayatri-app-mode";
 export const MODE_PUBLIC = "public";
 export const MODE_STAFF = "staff";
 
+/** Production hosts (custom domains). */
+export const PUBLIC_HOSTS = new Set(["gayatriconvention.com", "www.gayatriconvention.com"]);
+export const STAFF_HOSTS = new Set(["app.gayatriconvention.com"]);
+
 const listeners = new Set();
 
 function notify(mode) {
@@ -30,6 +34,23 @@ export function readStoredAppMode() {
 
 export function isStaffSignedIn() {
   return Boolean(getToken() && getAuthUser());
+}
+
+export function currentHostname() {
+  if (typeof window === "undefined") return "";
+  return String(window.location.hostname || "").toLowerCase();
+}
+
+/**
+ * Custom-domain host → fixed mode.
+ * Railway / localhost return null (use ?mode= / hash / storage).
+ */
+export function modeFromHostname(hostname = currentHostname()) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return null;
+  if (STAFF_HOSTS.has(h)) return MODE_STAFF;
+  if (PUBLIC_HOSTS.has(h)) return MODE_PUBLIC;
+  return null;
 }
 
 /** URL forces staff mode: ?mode=staff, #staff, #staff/... */
@@ -59,10 +80,14 @@ export function urlRequestsPublicMode() {
 /**
  * Staff app: Staff link in nav + desk entry.
  * Public app: visual site only (Home → Terms).
+ *
+ * Priority: explicit ?mode= → signed-in / #staff → custom domain host → storage → public.
  */
 export function getAppMode() {
   if (urlRequestsPublicMode() && !isStaffSignedIn()) return MODE_PUBLIC;
   if (urlRequestsStaffMode() || isStaffSignedIn()) return MODE_STAFF;
+  const fromHost = modeFromHostname();
+  if (fromHost) return fromHost;
   const stored = readStoredAppMode();
   if (stored) return stored;
   return MODE_PUBLIC;
@@ -92,13 +117,17 @@ export function enablePublicAppMode() {
   return setAppMode(MODE_PUBLIC);
 }
 
-/** Sync mode from current URL (hash / query) without wiping an explicit public preference unless URL asks staff. */
+/** Sync mode from host / URL (hash / query). */
 export function syncAppModeFromUrl() {
   if (urlRequestsPublicMode() && !isStaffSignedIn()) {
     return setAppMode(MODE_PUBLIC);
   }
   if (urlRequestsStaffMode() || isStaffSignedIn()) {
     return setAppMode(MODE_STAFF);
+  }
+  const fromHost = modeFromHostname();
+  if (fromHost) {
+    return setAppMode(fromHost);
   }
   applyManifestForMode(getAppMode());
   return getAppMode();
