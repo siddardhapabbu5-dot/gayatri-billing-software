@@ -1588,6 +1588,20 @@ export default function Home({ state, onEnquire, onStaff }) {
             <header className={`terms-banner lang-${termLang}`}>
               <div className="terms-banner-inner">
                 <h2>{termLoc.ui.title}</h2>
+                <div className="terms-lang-chips terms-lang-chips--banner" role="group" aria-label={termLoc.ui.langLabel}>
+                  <span className="terms-lang-chips-label">{termLoc.ui.langLabel}</span>
+                  {TERM_LANGS.map((l) => (
+                    <button
+                      key={l.id}
+                      type="button"
+                      className={termLang === l.id ? "is-on" : ""}
+                      aria-pressed={termLang === l.id}
+                      onClick={() => setTermLang(l.id)}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </header>
             <div className="terms-body">

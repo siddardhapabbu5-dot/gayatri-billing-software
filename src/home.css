@@ -4517,17 +4517,44 @@ html.lux-page .rooms-empty {
     white-space: nowrap;
   }
 
-  /* 2) Terms: visible language chips (EN / TE / HI) */
+  /* 2) Terms: language chips in banner + side (phone) */
   html.lux-page .terms-lang-drop {
-    display: none;
+    display: none !important;
   }
 
-  html.lux-page .terms-lang-chips {
-    display: flex;
+  html.lux-page .terms-banner {
+    padding: 15.25rem 0.85rem 0 !important;
+    align-items: flex-end;
+  }
+
+  html.lux-page .terms-banner-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    min-height: auto;
+    padding: 0.85rem 0.75rem 0.9rem !important;
+  }
+
+  html.lux-page .terms-banner h2 {
+    font-size: clamp(1.35rem, 6vw, 1.75rem);
+    margin: 0;
+  }
+
+  html.lux-page .terms-lang-chips,
+  html.lux-page .terms-lang-chips--banner {
+    display: flex !important;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.35rem;
-    margin: 0 0 0.55rem;
+    margin: 0;
+  }
+
+  html.lux-page .terms-lang-chips--banner {
+    justify-content: center;
+    padding: 0.55rem 0.45rem;
+    border: 1px solid rgba(198, 164, 88, 0.55);
+    border-radius: 4px;
+    background: rgba(255, 253, 248, 0.96);
   }
 
   html.lux-page .terms-lang-chips-label {
@@ -4538,6 +4565,7 @@ html.lux-page .rooms-empty {
     text-transform: uppercase;
     color: #6a5f50;
     font-weight: 650;
+    text-align: center;
   }
 
   html.lux-page .terms-lang-chips button {
@@ -4545,10 +4573,11 @@ html.lux-page .rooms-empty {
     background: #fffdf8;
     color: #1a3d3d;
     border-radius: 3px;
-    padding: 0.4rem 0.55rem;
+    padding: 0.45rem 0.65rem;
     font-family: Jost, "Noto Sans Telugu", "Noto Sans Devanagari", sans-serif;
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     cursor: pointer;
+    min-height: 2.1rem;
   }
 
   html.lux-page .terms-lang-chips button.is-on {
@@ -4557,10 +4586,54 @@ html.lux-page .rooms-empty {
     color: #f6edd4;
   }
 
+  /* Side chips duplicate banner on phone — hide to avoid clutter */
+  html.lux-page .terms-side > .terms-lang-chips {
+    display: none !important;
+  }
+
   html.lux-page .lux-deck > section.terms-page {
     overflow-x: hidden !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Book page: show name/phone — scroll from top, clear tall nav */
+  html.lux-page .lux-deck > section.organize {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    padding: 15.75rem 0.75rem calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.lux-page .lux-root:has(.site-header.is-staff-app) .organize {
+    padding-top: 17.25rem !important;
+  }
+
+  html.lux-page .book-shell {
+    max-height: none !important;
+    justify-content: flex-start !important;
+    width: 100%;
+    margin: 0;
+  }
+
+  html.lux-page .book-head {
+    margin-bottom: 0.35rem;
+  }
+
+  html.lux-page .booking-form {
+    grid-template-columns: 1fr !important;
+    gap: 0.55rem;
+    padding: 0.85rem 0.8rem 1rem;
+  }
+
+  html.lux-page .booking-form .field {
+    grid-column: 1 / -1;
+  }
+
+  html.lux-page .hall-picks {
+    grid-template-columns: 1fr !important;
   }
 
   /* 3) THE HALL: allow vertical scroll + show full photo band */
