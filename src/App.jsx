@@ -140,6 +140,21 @@ const GROUPS = [
   },
 ];
 
+/** Phone bottom dock — tap jumps to that staff page (space-saving). */
+const PHONE_DOCK = [
+  { id: "desk", short: "Desk" },
+  { id: "calendar", short: "Cal" },
+  { id: "rooms", short: "Rooms" },
+  { id: "reserve", short: "Res" },
+  { id: "billing", short: "Pay" },
+];
+
+const PHONE_DOCK_IDS = new Set(PHONE_DOCK.map((i) => i.id));
+
+function allStaffNavItems() {
+  return GROUPS.flatMap((g) => g.items).filter((i) => i.id !== "home");
+}
+
 function can(role, perm) {
   const list = ROLES[role]?.permissions || [];
   return list.includes("*") || list.includes(perm);
@@ -258,6 +273,7 @@ export default function App() {
   });
   const [openNavGroup, setOpenNavGroup] = useState(() => groupForPage(page));
   const [navOpen, setNavOpen] = useState(readNavOpen);
+  const [phoneMoreOpen, setPhoneMoreOpen] = useState(false);
 
   function toggleNavOpen() {
     setNavOpen((prev) => {
@@ -273,6 +289,10 @@ export default function App() {
 
   useEffect(() => {
     setOpenNavGroup(groupForPage(page));
+    setPhoneMoreOpen(false);
+    const workspace = document.querySelector(".workspace");
+    if (workspace) workspace.scrollTop = 0;
+    window.scrollTo(0, 0);
   }, [page]);
 
   useEffect(() => {
@@ -366,6 +386,11 @@ export default function App() {
 
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
   const role = String(authUser?.role || user.role || "").toLowerCase();
+  const phoneDockItems = PHONE_DOCK.filter((i) => can(role, permForPage(i.id)));
+  const phoneMoreItems = allStaffNavItems().filter(
+    (i) => can(role, i.perm) && !PHONE_DOCK_IDS.has(i.id)
+  );
+  const phoneMoreActive = phoneMoreItems.some((i) => i.id === page);
 
   // Block deep-links to pages this role cannot open (menu alone is not enough).
   useEffect(() => {
@@ -560,7 +585,7 @@ export default function App() {
   return (
     <>
     <InstallPrompt />
-    <div className={`shell${navOpen ? "" : " is-nav-closed"}`}>
+    <div className={`shell shell-staff${navOpen ? "" : " is-nav-closed"}`}>
       <aside className="nav no-print" aria-hidden={!navOpen}>
         <div className="brand">
           <img className="brand-logo" src="/site/images/logo-gold.png" alt="" />
@@ -619,10 +644,18 @@ export default function App() {
       <div className="workspace">
         <header className="topbar no-print">
           <div className="topbar-lead">
+            <button
+              type="button"
+              className="btn ghost small nav-open-btn staff-phone-only"
+              onClick={() => setPhoneMoreOpen((v) => !v)}
+              title="More staff pages"
+            >
+              More
+            </button>
             {!navOpen && (
               <button
                 type="button"
-                className="btn ghost small nav-open-btn"
+                className="btn ghost small nav-open-btn staff-desk-only"
                 onClick={toggleNavOpen}
                 title="Open sidebar"
               >
@@ -636,10 +669,10 @@ export default function App() {
               <h2>{titles[page]}</h2>
             </div>
           </div>
-          <div className="row">
-            <span className="muted">{state.notifications[0]?.title}</span>
+          <div className="row topbar-actions">
+            <span className="muted topbar-note">{state.notifications[0]?.title}</span>
             <InstallAppButton tone="dark" />
-            <a className="btn ghost small" href={staffHref("home")} onClick={(e) => openNav(e, "home")}>
+            <a className="btn ghost small topbar-public" href={staffHref("home")} onClick={(e) => openNav(e, "home")}>
               Public site
             </a>
             <button className="btn ghost small" type="button" onClick={logoutStaff}>
@@ -942,6 +975,58 @@ export default function App() {
           </Suspense>
         </div>
       </div>
+
+      {phoneMoreOpen ? (
+        <div className="staff-phone-more no-print" role="dialog" aria-label="More staff pages">
+          <div className="staff-phone-more-head">
+            <strong>More</strong>
+            <button type="button" className="btn ghost small" onClick={() => setPhoneMoreOpen(false)}>
+              Close
+            </button>
+          </div>
+          <div className="staff-phone-more-grid">
+            {phoneMoreItems.map((i) => (
+              <a
+                key={i.id}
+                href={staffHref(i.id)}
+                className={page === i.id ? "on" : ""}
+                onClick={(e) => {
+                  openNav(e, i.id);
+                  setPhoneMoreOpen(false);
+                }}
+              >
+                {i.label}
+              </a>
+            ))}
+            <a href={staffHref("home")} onClick={(e) => openNav(e, "home")}>
+              Public site
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+      <nav className="staff-phone-dock no-print" aria-label="Staff phone menu">
+        {phoneDockItems.map((i) => (
+          <a
+            key={i.id}
+            href={staffHref(i.id)}
+            className={page === i.id ? "on" : ""}
+            onClick={(e) => {
+              openNav(e, i.id);
+              setPhoneMoreOpen(false);
+            }}
+          >
+            {i.short}
+          </a>
+        ))}
+        <button
+          type="button"
+          className={phoneMoreOpen || phoneMoreActive ? "on" : ""}
+          onClick={() => setPhoneMoreOpen((v) => !v)}
+        >
+          More
+        </button>
+      </nav>
     </div>
     </>
   );
