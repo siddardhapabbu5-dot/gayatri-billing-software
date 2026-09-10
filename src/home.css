@@ -2672,6 +2672,10 @@ html.lux-page .terms-lang-drop {
   width: 100%;
 }
 
+html.lux-page .terms-lang-chips {
+  display: none;
+}
+
 html.lux-page .terms-lang-trigger {
   position: relative;
   display: flex;
@@ -4473,5 +4477,148 @@ html.lux-page .rooms-empty {
 
   html.lux-page .stay-hero-page .retreat-hero-copy {
     padding: 0.85rem 1rem 5.5rem !important;
+  }
+
+  /* 1) Header: stop GET APP overlapping GAYATRI */
+  html.lux-page .site-header {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    column-gap: 0.45rem;
+  }
+
+  html.lux-page .site-header .logo {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  html.lux-page .site-header .logo-mark {
+    width: 34px;
+  }
+
+  html.lux-page .site-header .logo strong {
+    font-size: 1.02rem;
+    letter-spacing: 0.06em;
+  }
+
+  html.lux-page .site-header .logo em {
+    font-size: 0.72rem;
+  }
+
+  html.lux-page .header-actions {
+    flex-shrink: 0;
+    gap: 0.3rem;
+    max-width: none;
+  }
+
+  html.lux-page .header-actions .btn,
+  html.lux-page .header-actions .install-app-btn {
+    font-size: 0.62rem;
+    letter-spacing: 0.02em;
+    padding: 0.38rem 0.48rem;
+    white-space: nowrap;
+  }
+
+  /* 2) Terms: visible language chips (EN / TE / HI) */
+  html.lux-page .terms-lang-drop {
+    display: none;
+  }
+
+  html.lux-page .terms-lang-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0 0 0.55rem;
+  }
+
+  html.lux-page .terms-lang-chips-label {
+    width: 100%;
+    font-family: Jost, sans-serif;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6a5f50;
+    font-weight: 650;
+  }
+
+  html.lux-page .terms-lang-chips button {
+    border: 1px solid #c6a458;
+    background: #fffdf8;
+    color: #1a3d3d;
+    border-radius: 3px;
+    padding: 0.4rem 0.55rem;
+    font-family: Jost, "Noto Sans Telugu", "Noto Sans Devanagari", sans-serif;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+
+  html.lux-page .terms-lang-chips button.is-on {
+    background: #1f3d2a;
+    border-color: #1f3d2a;
+    color: #f6edd4;
+  }
+
+  html.lux-page .lux-deck > section.terms-page {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 3) THE HALL: allow vertical scroll + show full photo band */
+  html.lux-page .lux-deck > section.intro {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start !important;
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.lux-page .intro-photos.hall-autoscroll {
+    min-height: 14rem;
+    height: min(48vh, 22rem);
+    max-height: 22rem;
+    flex: 0 0 auto;
+  }
+
+  /* 4) VENUES: keep cards+photos in flow (not collapsed) */
+  html.lux-page .locations.venues-page {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start !important;
+  }
+
+  html.lux-page .venues-stage {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    display: block !important;
+  }
+
+  html.lux-page .venue-grid {
+    flex: 0 0 auto !important;
+    max-height: none !important;
+    min-height: auto !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.9rem;
+  }
+
+  html.lux-page .venues-page .venue-card {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  html.lux-page .venues-page .venue-card img,
+  html.lux-page .venues-page .venue-photo-slot {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-height: 11.5rem !important;
+    height: 42vw !important;
+    max-height: 15rem !important;
+    object-fit: cover !important;
+    display: block !important;
+  }
+
+  html.lux-page .venues-reserve-bar {
+    flex: 0 0 auto;
+    margin-top: 0.75rem;
   }
 }

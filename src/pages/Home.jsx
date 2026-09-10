@@ -1625,6 +1625,20 @@ export default function Home({ state, onEnquire, onStaff }) {
                     </ul>
                   )}
                 </div>
+                <div className="terms-lang-chips" role="group" aria-label={termLoc.ui.langLabel}>
+                  <span className="terms-lang-chips-label">{termLoc.ui.langLabel}</span>
+                  {TERM_LANGS.map((l) => (
+                    <button
+                      key={l.id}
+                      type="button"
+                      className={termLang === l.id ? "is-on" : ""}
+                      aria-pressed={termLang === l.id}
+                      onClick={() => setTermLang(l.id)}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
                 <nav className={`terms-toc lang-${termLang}`} aria-label={termLoc.ui.tocLabel}>
                   <p className="terms-toc-kicker">{termLoc.ui.tocLabel}</p>
                   {publicTermSections.map((sec, i) => {
