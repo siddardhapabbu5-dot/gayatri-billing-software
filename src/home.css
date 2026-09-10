@@ -4579,18 +4579,26 @@ html.lux-page .rooms-empty {
     flex: 0 0 auto;
   }
 
-  /* 4) VENUES: keep cards+photos in flow (not collapsed) */
+  /* 4) VENUES: keep cards+photos in flow (not collapsed / not under header fade) */
   html.lux-page .locations.venues-page {
     overflow-x: hidden !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
     justify-content: flex-start !important;
+    /* Tall wrapped nav + soft header fade must clear first photo */
+    padding-top: 16.5rem !important;
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.lux-page .lux-root:has(.site-header.is-staff-app) .locations.venues-page {
+    padding-top: 17.75rem !important;
   }
 
   html.lux-page .venues-stage {
     flex: 0 0 auto !important;
     min-height: auto !important;
     display: block !important;
+    padding-top: 0.35rem;
   }
 
   html.lux-page .venue-grid {
@@ -4598,23 +4606,33 @@ html.lux-page .rooms-empty {
     max-height: none !important;
     min-height: auto !important;
     grid-template-columns: 1fr !important;
-    gap: 0.9rem;
+    gap: 1rem;
   }
 
   html.lux-page .venues-page .venue-card {
     height: auto !important;
     min-height: 0 !important;
+    overflow: hidden;
   }
 
   html.lux-page .venues-page .venue-card img,
   html.lux-page .venues-page .venue-photo-slot {
     flex: 0 0 auto !important;
-    width: 100% !important;
-    min-height: 11.5rem !important;
-    height: 42vw !important;
-    max-height: 15rem !important;
-    object-fit: cover !important;
     display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: 16 / 10 !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+    border-radius: 15px 15px 0 0;
+  }
+
+  /* Stop white header fade eating the top of venue photos */
+  html.lux-page .site-header.scrolled,
+  html.lux-page .site-header.menu-open {
+    background: #ffffff !important;
   }
 
   html.lux-page .venues-reserve-bar {
