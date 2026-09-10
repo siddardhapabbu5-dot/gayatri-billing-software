@@ -773,7 +773,7 @@ export default function Billing({
         onApprove={(id) => onApproveRefund?.(id)}
         onReject={(id) => onRejectRefund?.(id)}
       />
-      <div className="panel no-print bill-filters" style={{ marginBottom: 12 }}>
+      <div className="panel no-print bill-filters staff-desk-bill-filters" style={{ marginBottom: 12 }}>
         <div className="fields bill-filter-grid">
           <label style={{ gridColumn: "1 / -1" }}>
             Find party
@@ -822,7 +822,84 @@ export default function Billing({
           Open the bill for full line register. Showing {rows.length} party bill{rows.length === 1 ? "" : "s"}.
         </p>
       </div>
-      <div className="panel">
+
+      {/* Phone card list */}
+      <section className="staff-m-bill" aria-label="Phone payments">
+        <label className="staff-m-search">
+          <span className="sr-only">Find party</span>
+          <input
+            type="search"
+            value={partyQuery}
+            onChange={(e) => setPartyQuery(e.target.value)}
+            placeholder="Search booking, name, phone…"
+            autoComplete="off"
+          />
+        </label>
+        <div className="staff-m-asset-row" role="tablist" aria-label="Balance filter">
+          {[
+            { id: "all", label: "All" },
+            { id: "due", label: "Pending" },
+            { id: "refund", label: "Refund" },
+            { id: "settled", label: "Settled" },
+          ].map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="tab"
+              className={`staff-m-chip${balanceFilter === f.id ? " on" : ""}`}
+              aria-selected={balanceFilter === f.id}
+              onClick={() => setBalanceFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {!rows.length ? (
+          <div className="staff-m-empty">
+            <p>{partyQuery ? "No matching bills." : "No active bills."}</p>
+          </div>
+        ) : (
+          <div className="staff-m-book-list">
+            {rows.map(({ b, pays, totals, stay }) => {
+              const g = state.guests.find((x) => x.id === b.guestId);
+              const { collections, paidNet } = ledger(pays, totals);
+              const bal = Number(totals.balance) || 0;
+              const status = paymentStatus(totals, b);
+              const tone =
+                String(status).toLowerCase().includes("cancel")
+                  ? "is-bad"
+                  : bal > 0
+                    ? "is-warn"
+                    : "is-ok";
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  className="staff-m-book-card"
+                  onClick={() => setOpen(b.id)}
+                >
+                  <span className="hall">{stay.roomLabel || "Booking"}</span>
+                  <span className="title">{g?.name || "Guest"}</span>
+                  <span className="meta">
+                    {b.number} · {formatDateDMY(stay.from)}
+                    {stay.to && stay.to !== stay.from ? ` → ${formatDateDMY(stay.to)}` : ""}
+                  </span>
+                  <span className="meta" style={{ fontWeight: 650, color: "#102027", marginTop: 4 }}>
+                    {m(totals.total)}
+                    {bal > 0 ? ` · pending ${m(bal)}` : collections > 0 ? ` · paid ${m(paidNet)}` : ""}
+                  </span>
+                  <span className="foot">
+                    <span className={`staff-m-status ${tone}`}>{status}</span>
+                    <span aria-hidden="true">›</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="panel staff-desk-bill-table">
         <table>
           <thead>
             <tr>

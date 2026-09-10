@@ -3,6 +3,9 @@ import Home from "./pages/Home.jsx";
 import StaffLogin from "./pages/StaffLogin.jsx";
 import InstallPrompt from "./components/InstallPrompt.jsx";
 import InstallAppButton from "./components/InstallAppButton.jsx";
+import StaffMobileHeader from "./components/staff-mobile/StaffMobileHeader.jsx";
+import StaffMobileDrawer from "./components/staff-mobile/StaffMobileDrawer.jsx";
+import StaffMobileBottomNav from "./components/staff-mobile/StaffMobileBottomNav.jsx";
 import { initPwaInstallCapture } from "./lib/pwaInstall.js";
 import { enableStaffAppMode, syncAppModeFromUrl } from "./lib/appMode.js";
 import { ROLES } from "./seed";
@@ -105,6 +108,7 @@ function applyAuthUser(authUser) {
 const GROUPS = [
   {
     label: "Operations",
+    icon: "⚙",
     items: [
       { id: "home", label: "Home", perm: "dashboard" },
       { id: "desk", label: "Dashboard", perm: "dashboard" },
@@ -116,6 +120,7 @@ const GROUPS = [
   },
   {
     label: "Guest & event",
+    icon: "👥",
     items: [
       { id: "guests", label: "Guests / CRM", perm: "guests" },
       { id: "documents", label: "Documents", perm: "documents" },
@@ -124,6 +129,7 @@ const GROUPS = [
   },
   {
     label: "Finance",
+    icon: "₹",
     items: [
       { id: "billing", label: "Payment & Invoice", perm: "billing" },
       { id: "expenses", label: "Expense entry", perm: "expenses" },
@@ -132,6 +138,7 @@ const GROUPS = [
   },
   {
     label: "System",
+    icon: "🛠",
     items: [
       { id: "assistant", label: "Assistant", perm: "dashboard" },
       { id: "settings", label: "Settings", perm: "settings.property" },
@@ -258,6 +265,8 @@ export default function App() {
   });
   const [openNavGroup, setOpenNavGroup] = useState(() => groupForPage(page));
   const [navOpen, setNavOpen] = useState(readNavOpen);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobileDrawerGroup, setMobileDrawerGroup] = useState(null);
 
   function toggleNavOpen() {
     setNavOpen((prev) => {
@@ -271,9 +280,32 @@ export default function App() {
     });
   }
 
+  function openMobileDrawer() {
+    setMobileDrawerOpen(true);
+  }
+
+  function closeMobileDrawer() {
+    setMobileDrawerOpen(false);
+    setMobileDrawerGroup(null);
+  }
+
+  function navigateMobile(id) {
+    closeMobileDrawer();
+    go(id);
+  }
+
   useEffect(() => {
     setOpenNavGroup(groupForPage(page));
   }, [page]);
+
+  useEffect(() => {
+    if (!mobileDrawerOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileDrawerOpen]);
 
   useEffect(() => {
     syncAppModeFromUrl();
@@ -560,7 +592,35 @@ export default function App() {
   return (
     <>
     <InstallPrompt />
-    <div className={`shell${navOpen ? "" : " is-nav-closed"}`}>
+    <div
+      className={`shell is-staff-phone${navOpen ? "" : " is-nav-closed"}${mobileDrawerOpen ? " is-drawer-open" : ""}`}
+    >
+      <StaffMobileHeader
+        brand={state.property.brandName || "Gayatri"}
+        notifyTitle={state.notifications[0]?.title}
+        onOpenMenu={openMobileDrawer}
+        onProfile={openMobileDrawer}
+      />
+      <StaffMobileDrawer
+        open={mobileDrawerOpen}
+        brand={state.property.brandName || "Gayatri"}
+        groups={GROUPS.map((g) => ({
+          ...g,
+          items: g.items.filter((i) => i.id !== "home" && can(role, i.perm)),
+        })).filter((g) => g.items.length)}
+        openGroup={mobileDrawerGroup}
+        onToggleGroup={(label) => setMobileDrawerGroup((cur) => (cur === label ? null : label))}
+        page={page}
+        userName={authUser.name}
+        userRole={authUser.roleLabel || authUser.role}
+        onNavigate={navigateMobile}
+        onClose={closeMobileDrawer}
+        onLogout={() => {
+          closeMobileDrawer();
+          logoutStaff();
+        }}
+        onPublicSite={() => navigateMobile("home")}
+      />
       <aside className="nav no-print" aria-hidden={!navOpen}>
         <div className="brand">
           <img className="brand-logo" src="/site/images/logo-gold.png" alt="" />
@@ -654,6 +714,7 @@ export default function App() {
                 key={`desk-${(state.payments || []).length}-${(state.expenses || []).length}-${(state.bookings || []).length}`}
                 state={state}
                 go={go}
+                staffUser={authUser}
               />
             )}
             {page === "calendar" && (
@@ -942,6 +1003,11 @@ export default function App() {
           </Suspense>
         </div>
       </div>
+      <StaffMobileBottomNav
+        page={page}
+        onNavigate={(id) => go(id)}
+        onMore={openMobileDrawer}
+      />
     </div>
     </>
   );

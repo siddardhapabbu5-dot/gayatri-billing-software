@@ -1,0 +1,807 @@
+/* Phone staff shell only — tablet/desktop/public unchanged.
+   Active when .shell.is-staff-phone AND viewport ≤ 767px. */
+
+.staff-m-header,
+.staff-m-backdrop,
+.staff-m-drawer,
+.staff-m-dock,
+.staff-m-dash,
+.staff-m-cal,
+.staff-m-bill,
+.staff-m-reserve {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .shell.is-staff-phone {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    background: #f7f8fa;
+  }
+
+  .shell.is-staff-phone > .nav {
+    display: none !important;
+  }
+
+  .shell.is-staff-phone .topbar {
+    display: none !important;
+  }
+
+  .shell.is-staff-phone .workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: none;
+  }
+
+  .shell.is-staff-phone .content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 12px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .shell.is-staff-phone.is-drawer-open .content {
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* —— Sticky header (light) —— */
+  .shell.is-staff-phone .staff-m-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex: 0 0 auto;
+    height: calc(52px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 6px 0;
+    background: #fff;
+    color: #102027;
+    border-bottom: 1px solid #e6ebf0;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .staff-m-brand {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    justify-content: center;
+    flex: 1 1 auto;
+  }
+
+  .staff-m-logo {
+    height: 22px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .staff-m-brand strong {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #102027;
+    white-space: nowrap;
+  }
+
+  .staff-m-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .staff-m-icon-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 0;
+  }
+
+  .staff-m-icon-btn:focus-visible {
+    outline: 2px solid #c4a35a;
+    outline-offset: 2px;
+  }
+
+  .staff-m-icon {
+    font-size: 17px;
+    line-height: 1;
+    opacity: 0.85;
+  }
+
+  /* —— Backdrop + right drawer —— */
+  .shell.is-staff-phone .staff-m-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(8, 16, 20, 0.48);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+  }
+
+  .shell.is-staff-phone .staff-m-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .shell.is-staff-phone .staff-m-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 55;
+    width: min(86vw, 350px);
+    height: 100dvh;
+    max-height: 100dvh;
+    background: #102027;
+    color: #f4efe4;
+    border-left: 1px solid rgba(196, 163, 90, 0.28);
+    transform: translateX(105%);
+    transition: transform 260ms ease;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .shell.is-staff-phone .staff-m-drawer.is-open {
+    transform: translateX(0);
+  }
+
+  .staff-m-drawer-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 14px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .staff-m-drawer-title {
+    display: block;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 22px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #e6c98a;
+  }
+
+  .staff-m-drawer-sub {
+    margin-top: 2px;
+    font-size: 13px;
+    color: rgba(244, 239, 228, 0.72);
+  }
+
+  .staff-m-drawer-close {
+    color: #f4efe4;
+  }
+
+  .staff-m-drawer-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 8px 16px;
+  }
+
+  .staff-m-drawer-link {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #f4efe4;
+    text-align: left;
+    font-size: 15px;
+  }
+
+  .staff-m-drawer-link.nested {
+    padding-left: 28px;
+    font-size: 14px;
+    min-height: 44px;
+    color: rgba(244, 239, 228, 0.9);
+  }
+
+  .staff-m-drawer-link.is-on {
+    background: rgba(196, 163, 90, 0.18);
+    color: #e6c98a;
+  }
+
+  .staff-m-acc-toggle {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #f4efe4;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .staff-m-acc-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .staff-m-acc-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-size: 22px;
+    line-height: 1;
+    transition: transform 220ms ease;
+    color: #c4a35a;
+  }
+
+  .staff-m-acc-chevron.is-open {
+    transform: rotate(90deg);
+  }
+
+  .staff-m-acc-panel {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 240ms ease, opacity 200ms ease;
+  }
+
+  .staff-m-acc.is-open .staff-m-acc-panel {
+    max-height: 480px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .staff-m-drawer-foot {
+    flex: 0 0 auto;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .staff-m-drawer-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .staff-m-drawer-user strong {
+    display: block;
+    font-size: 15px;
+  }
+
+  .staff-m-drawer-user .muted {
+    color: rgba(244, 239, 228, 0.65);
+    font-size: 12px;
+  }
+
+  .staff-m-logout {
+    width: 100%;
+    min-height: 44px;
+    border-color: rgba(244, 239, 228, 0.28) !important;
+    color: #f4efe4 !important;
+  }
+
+  /* —— Bottom dock (light) —— */
+  .shell.is-staff-phone .staff-m-dock {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    background: #fff;
+    color: #5d6b78;
+    border-top: 1px solid #e6ebf0;
+    padding: 4px 2px calc(4px + env(safe-area-inset-bottom, 0px));
+    box-shadow: none;
+  }
+
+  .staff-m-dock-item {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 2px;
+    border-radius: 8px;
+    font-size: 10px;
+    letter-spacing: 0.01em;
+  }
+
+  .staff-m-dock-ico {
+    font-size: 15px;
+    line-height: 1;
+    min-height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .staff-m-dock-item.is-on {
+    color: #0f766e;
+  }
+
+  .staff-m-dock-item.is-primary {
+    position: relative;
+    top: -6px;
+  }
+
+  .staff-m-dock-item.is-primary .staff-m-dock-ico {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #c4a35a;
+    color: #102027;
+    font-size: 24px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  .staff-m-dock-item.is-primary .staff-m-dock-label {
+    color: #102027;
+    font-weight: 600;
+  }
+
+  .staff-m-dock-item:focus-visible {
+    outline: 2px solid #c4a35a;
+    outline-offset: 2px;
+  }
+
+  /* Soften / tuck install banner on staff phone */
+  body:has(.shell.is-staff-phone) .pwa-install {
+    display: none !important;
+  }
+
+  /* —— Mobile dashboard —— */
+  .shell.is-staff-phone .staff-m-dash {
+    display: block;
+  }
+
+  .shell.is-staff-phone .staff-desk-full {
+    display: none !important;
+  }
+
+  .staff-m-dash-greet {
+    margin: 2px 0 12px;
+  }
+
+  .staff-m-dash-greet .hi {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .staff-m-dash-greet strong {
+    display: block;
+    margin-top: 1px;
+    font-size: 18px;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    color: #102027;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+
+  .staff-m-dash-greet .when {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .staff-m-sec {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .staff-m-ov-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-bottom: 12px;
+    border: 1px solid #e6ebf0;
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .staff-m-ov-card {
+    appearance: none;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 12px 12px;
+    text-align: left;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+
+  .staff-m-ov-card:nth-child(odd) {
+    border-right: 1px solid #e6ebf0;
+  }
+
+  .staff-m-ov-card:nth-child(-n + 2) {
+    border-bottom: 1px solid #e6ebf0;
+  }
+
+  .staff-m-ov-card .n {
+    font-size: 22px;
+    font-weight: 650;
+    color: #102027;
+    line-height: 1;
+  }
+
+  .staff-m-ov-card .l {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .staff-m-rev {
+    border: 1px solid #e6ebf0;
+    background: #fff;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .staff-m-rev .l {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0;
+  }
+
+  .staff-m-rev .n {
+    font-size: 18px;
+    font-weight: 650;
+    color: #102027;
+  }
+
+  .staff-m-book-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .staff-m-book-card {
+    appearance: none;
+    width: 100%;
+    border: 1px solid #e6ebf0;
+    background: #fff;
+    border-radius: 10px;
+    padding: 12px;
+    text-align: left;
+    display: grid;
+    gap: 2px;
+  }
+
+  .staff-m-chip {
+    appearance: none;
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #e6ebf0;
+    background: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .staff-m-chip.on {
+    background: #102027;
+    border-color: #102027;
+    color: #fff;
+  }
+
+  .staff-m-empty {
+    border: 1px solid #e6ebf0;
+    border-radius: 10px;
+    background: #fff;
+    padding: 16px 14px;
+    text-align: center;
+  }
+
+  .staff-m-empty p {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .staff-m-asset-row {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    margin-bottom: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .staff-m-book-card .hall {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #0f766e;
+    font-weight: 600;
+  }
+
+  .staff-m-book-card .title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #15202b;
+  }
+
+  .staff-m-book-card .meta {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .staff-m-book-card .foot {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .staff-m-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .staff-m-status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .staff-m-status.is-ok {
+    color: #0f766e;
+  }
+
+  .staff-m-status.is-warn {
+    color: #b45309;
+  }
+
+  .staff-m-status.is-bad {
+    color: #b42318;
+  }
+
+  .staff-m-hall-panel {
+    border: 1px solid #e6ebf0;
+    background: #fff;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .staff-m-hall-panel h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .staff-m-hall-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+  }
+
+  .staff-m-hall-row span {
+    color: var(--muted);
+  }
+
+  .staff-m-hall-row strong {
+    color: #15202b;
+  }
+
+  /* Calendar / Billing / Reservations phone surfaces */
+  .shell.is-staff-phone .staff-m-cal,
+  .shell.is-staff-phone .staff-m-bill,
+  .shell.is-staff-phone .staff-m-reserve {
+    display: block;
+  }
+
+  .shell.is-staff-phone .staff-desk-cal,
+  .shell.is-staff-phone .staff-desk-bill-filters,
+  .shell.is-staff-phone .staff-desk-bill-table,
+  .shell.is-staff-phone .staff-desk-reserve-table {
+    display: none !important;
+  }
+
+  .shell.is-staff-phone:has(.staff-m-cal) .page-lead,
+  .shell.is-staff-phone:has(.staff-m-bill) .page-lead,
+  .shell.is-staff-phone:has(.staff-m-reserve) .page-lead {
+    display: none !important;
+  }
+
+  .staff-m-cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .staff-m-cal-nav strong {
+    font-size: 18px;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    color: #102027;
+  }
+
+  .staff-m-cal-day {
+    appearance: none;
+    flex: 0 0 auto;
+    min-width: 46px;
+    min-height: 54px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid #e6ebf0;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .staff-m-cal-day b {
+    font-size: 16px;
+    line-height: 1;
+    color: #15202b;
+  }
+
+  .staff-m-cal-day span {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .staff-m-cal-day.on {
+    background: #102027;
+    border-color: #102027;
+    color: #e6c98a;
+  }
+
+  .staff-m-cal-day.on b,
+  .staff-m-cal-day.on span {
+    color: #e6c98a;
+  }
+
+  .staff-m-cal-day.busy:not(.on) {
+    border-color: rgba(15, 118, 110, 0.45);
+  }
+
+  .staff-m-cal-day.today:not(.on) {
+    outline: 1px solid #c4a35a;
+  }
+
+  .staff-m-search {
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .staff-m-search input {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    font: inherit;
+  }
+
+  .staff-m-book-card-static {
+    cursor: default;
+  }
+
+  .staff-m-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .staff-m-card-actions .btn {
+    min-height: 40px;
+    flex: 1 1 auto;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .staff-m-header,
+  .staff-m-backdrop,
+  .staff-m-drawer,
+  .staff-m-dock,
+  .staff-m-dash,
+  .staff-m-cal,
+  .staff-m-bill,
+  .staff-m-reserve {
+    display: none !important;
+  }
+
+  .staff-desk-full {
+    display: contents;
+  }
+}
+
+@media print {
+  .staff-m-header,
+  .staff-m-backdrop,
+  .staff-m-drawer,
+  .staff-m-dock {
+    display: none !important;
+  }
+}

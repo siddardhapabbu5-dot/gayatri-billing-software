@@ -36,6 +36,7 @@ export function hallDayStatus(state, hallId, date) {
     return {
       hallId,
       hallName: hall?.name || "",
+      bookingId: r.bookingId || booking?.id || "",
       slotType: r.slotType || "full-day",
       start: r.start,
       end: r.end,

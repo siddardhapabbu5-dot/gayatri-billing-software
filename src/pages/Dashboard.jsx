@@ -128,7 +128,7 @@ function bookingMatchesAsset(state, bookingId, asset) {
   return true;
 }
 
-export default function Dashboard({ state, go }) {
+export default function Dashboard({ state, go, staffUser }) {
   const today = todayISO();
   const currentMonthStart = startOfMonthISO(new Date(`${today}T12:00:00`));
   const yearStart = `${today.slice(0, 4)}-01-01`;
@@ -550,8 +550,174 @@ export default function Dashboard({ state, go }) {
     applyDate(today);
   }
 
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 17) return "Good Afternoon";
+    return "Good Evening";
+  }, []);
+
+  const greetName = staffUser?.name || staffUser?.roleLabel || "Staff";
+  const greetDate = new Date(`${today}T12:00:00`).toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  const mobileDayCards = useMemo(() => {
+    const focus = selectedDate || today;
+    const cards = [];
+    for (const r of state.hallReservations || []) {
+      if (r.status === "Cancelled") continue;
+      if (!hallOccupiesDate(r, focus)) continue;
+      if (filterAsset.startsWith("hall:") && r.hallId !== filterAsset.slice(5)) continue;
+      if (filterAsset === "retreat" || filterAsset.startsWith("roomType:")) continue;
+      const hall = (state.halls || []).find((h) => h.id === r.hallId);
+      const b = (state.bookings || []).find((x) => x.id === r.bookingId);
+      if (b && !isActiveBooking(b)) continue;
+      cards.push({
+        key: `h-${r.id}`,
+        bookingId: r.bookingId,
+        venue: hall?.name || "Hall",
+        title: b?.eventName || b?.type || r.occasion || "Function",
+        time: [r.startTime, r.endTime].filter(Boolean).join(" – ") || b?.eventTime || "",
+        status: b?.status || r.status || "Confirmed",
+      });
+    }
+    for (const r of state.roomReservations || []) {
+      if (["Cancelled", "Checked out"].includes(r.status)) continue;
+      if (!(roomOccupiesDate(r, focus) || r.checkIn === focus)) continue;
+      if (filterAsset.startsWith("hall:") || filterAsset === "retreat") continue;
+      if (filterAsset.startsWith("roomType:") && !roomScopeIds.has(r.roomId)) continue;
+      const room = (state.rooms || []).find((x) => x.id === r.roomId);
+      const b = (state.bookings || []).find((x) => x.id === r.bookingId);
+      if (b && !isActiveBooking(b)) continue;
+      cards.push({
+        key: `r-${r.id}`,
+        bookingId: r.bookingId,
+        venue: room?.number ? `Room ${room.number}` : room?.name || "Room",
+        title: b?.type || b?.eventName || "Room stay",
+        time: r.checkIn === focus ? "Check-in" : r.checkOut === focus ? "Check-out" : "In-house",
+        status: r.status || b?.status || "Confirmed",
+      });
+    }
+    return cards;
+  }, [state, selectedDate, today, filterAsset, roomScopeIds]);
+
+  const todayBookingCount = mobileDayCards.length;
+  const hallCount = (state.halls || []).length;
+
+  function statusTone(status) {
+    const s = String(status || "").toLowerCase();
+    if (s.includes("cancel") || s.includes("refund")) return "is-bad";
+    if (s.includes("pending") || s.includes("hold") || s.includes("draft")) return "is-warn";
+    return "is-ok";
+  }
+
   return (
     <>
+      <section className="staff-m-dash" aria-label="Phone dashboard">
+        <div className="staff-m-dash-greet">
+          <p className="hi">{greeting}</p>
+          <strong>{greetName}</strong>
+          <span className="when">{greetDate}</span>
+        </div>
+
+        <div className="staff-m-asset-row" role="tablist" aria-label="Hall or rooms">
+          {assetOptions.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              role="tab"
+              aria-selected={filterAsset === opt.id}
+              className={`staff-m-chip${filterAsset === opt.id ? " on" : ""}`}
+              onClick={() => setFilterAsset(opt.id)}
+            >
+              {opt.id === "all" ? "All" : opt.label}
+            </button>
+          ))}
+        </div>
+
+        {showHallPanel && selectedHall ? (
+          <div className="staff-m-hall-panel">
+            <h3>{selectedHall.name}</h3>
+            <div className="staff-m-hall-row">
+              <span>Today&apos;s status</span>
+              <strong className={`staff-m-status ${hallBooked ? "is-warn" : "is-ok"}`}>
+                {hallBooked ? "Booked" : "Available"}
+              </strong>
+            </div>
+            <div className="staff-m-hall-row">
+              <span>This month</span>
+              <strong>{monthBookings} bookings</strong>
+            </div>
+            <div className="staff-m-hall-row">
+              <span>Revenue</span>
+              <strong>{m(monthIncome)}</strong>
+            </div>
+            <div className="staff-m-hall-row">
+              <span>Pending</span>
+              <strong>{m(due)}</strong>
+            </div>
+          </div>
+        ) : null}
+
+        <h3 className="staff-m-sec">Today&apos;s Overview</h3>
+        <div className="staff-m-ov-grid">
+          <button type="button" className="staff-m-ov-card" onClick={() => go("calendar")}>
+                  <span className="n">{String(todayBookingCount)}</span>
+                  <span className="l">Bookings</span>
+                </button>
+                <button type="button" className="staff-m-ov-card" onClick={() => go("calendar")}>
+                  <span className="n">{String(upcomingEvents)}</span>
+                  <span className="l">Events</span>
+                </button>
+                <button type="button" className="staff-m-ov-card" onClick={() => go("rooms")}>
+                  <span className="n">{String(availableToday)}</span>
+                  <span className="l">Rooms</span>
+                </button>
+                <button type="button" className="staff-m-ov-card" onClick={() => go("venues")}>
+                  <span className="n">{String(hallCount)}</span>
+                  <span className="l">Halls</span>
+          </button>
+        </div>
+
+        <div className="staff-m-rev">
+          <span className="l">Today&apos;s Revenue</span>
+          <span className="n">{m(dayIncome)}</span>
+        </div>
+
+        <h3 className="staff-m-sec">Today&apos;s Bookings</h3>
+        {mobileDayCards.length ? (
+          <div className="staff-m-book-list">
+            {mobileDayCards.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                className="staff-m-book-card"
+                onClick={() => (c.bookingId ? go("billing", { bookingId: c.bookingId }) : go("calendar"))}
+              >
+                <span className="hall">{c.venue}</span>
+                <span className="title">{c.title}</span>
+                <span className="meta">{c.time || formatDate(focusDay)}</span>
+                <span className="foot">
+                  <span className={`staff-m-status ${statusTone(c.status)}`}>{c.status}</span>
+                  <span aria-hidden="true">›</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="staff-m-empty">
+            <p>No bookings scheduled for this date.</p>
+            <button type="button" className="btn" onClick={() => go("reserve")}>
+              Create Booking
+            </button>
+          </div>
+        )}
+      </section>
+
+      <div className="staff-desk-full">
       <PageHead title="Dashboard" sub={`${state.property.name} · ${formatDate(today)}`}>
         <button className="btn ghost" onClick={() => go("expenses")}>
           Expense entry
@@ -1108,6 +1274,7 @@ export default function Dashboard({ state, go }) {
           <div className="v">{m(periodBook.byKind?.settlement || 0)}</div>
           <div className="s">Kind · settlement</div>
         </div>
+      </div>
       </div>
     </>
   );

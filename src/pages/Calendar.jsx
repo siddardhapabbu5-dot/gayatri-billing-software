@@ -153,7 +153,93 @@ export default function Calendar({ state, go, focusDate }) {
         </button>
       </PageHead>
 
-      <div className="cal-easy">
+      {/* Phone-only compact calendar */}
+      <section className="staff-m-cal" aria-label="Phone calendar">
+        <div className="staff-m-cal-nav">
+          <button type="button" className="staff-m-icon-btn" aria-label="Previous" onClick={() => shift(-1)}>
+            ‹
+          </button>
+          <strong>{view === "week" ? `Week of ${formatDate(week[0])}` : monthTitle}</strong>
+          <button type="button" className="staff-m-icon-btn" aria-label="Next" onClick={() => shift(1)}>
+            ›
+          </button>
+        </div>
+        <div className="staff-m-asset-row" role="tablist" aria-label="Dates">
+          {week.map((iso) => {
+            const day = parseISO(iso);
+            const m = marksOn(state, iso);
+            const busy = m.hallN + m.roomN > 0;
+            return (
+              <button
+                key={iso}
+                type="button"
+                role="tab"
+                aria-selected={iso === cursor}
+                className={`staff-m-cal-day${iso === cursor ? " on" : ""}${iso === today ? " today" : ""}${busy ? " busy" : ""}`}
+                onClick={() => setCursor(iso)}
+              >
+                <b>{day.getDate()}</b>
+                <span>{WEEK[day.getDay()].slice(0, 3)}</span>
+              </button>
+            );
+          })}
+        </div>
+        <h3 className="staff-m-sec">Day&apos;s Events</h3>
+        <div className="staff-m-book-list">
+          {selected.halls
+            .filter((h) => h.booked)
+            .flatMap(({ hall, slots }) =>
+              (slots.length ? slots : [{}]).map((slot, i) => (
+                <button
+                  key={`${hall.id}-${i}`}
+                  type="button"
+                  className="staff-m-book-card"
+                  onClick={() => (slot.bookingId ? go("billing", { bookingId: slot.bookingId }) : go("reserve", { date: cursor }))}
+                >
+                  <span className="hall">{hall.name}</span>
+                  <span className="title">{slot.guestName || slot.occasion || "Function"}</span>
+                  <span className="meta">
+                    {[slotWords(slot.slotType), slot.windowLabel].filter(Boolean).join(" · ") || "Booked"}
+                  </span>
+                  <span className="foot">
+                    <span className="staff-m-status is-ok">Confirmed</span>
+                    <span aria-hidden="true">›</span>
+                  </span>
+                </button>
+              ))
+            )}
+          {selected.rooms
+            .filter((r) => r.busy)
+            .map(({ room, res, guest, label, booking }) => (
+              <button
+                key={room.id}
+                type="button"
+                className="staff-m-book-card"
+                onClick={() => (booking?.id || res?.bookingId ? go("billing", { bookingId: booking?.id || res.bookingId }) : go("rooms"))}
+              >
+                <span className="hall">Room {room.number}</span>
+                <span className="title">{guest?.name || "Guest"}</span>
+                <span className="meta">
+                  {formatDate(res.checkIn)} → {formatDate(res.checkOut)}
+                </span>
+                <span className="foot">
+                  <span className={`staff-m-status ${label === "Reserved" ? "is-warn" : "is-ok"}`}>{label}</span>
+                  <span aria-hidden="true">›</span>
+                </span>
+              </button>
+            ))}
+          {!selected.hallN && !selected.roomN ? (
+            <div className="staff-m-empty">
+              <p>No events on this date.</p>
+              <button type="button" className="btn" onClick={() => go("reserve", { date: cursor })}>
+                Create Booking
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="cal-easy staff-desk-cal">
         <div className="panel">
           <div className="cal-head">
             <button className="btn ghost small" type="button" onClick={() => shift(-1)}>

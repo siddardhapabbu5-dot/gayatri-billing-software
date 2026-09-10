@@ -884,7 +884,64 @@ export default function Reservations({ state, presetDate, presetGuest, onSave, o
           Cancelled ({cancelledRows.length})
         </button>
       </div>
-      <div className="panel">
+
+      <section className="staff-m-reserve" aria-label="Phone reservations">
+        {!rows.length ? (
+          <div className="staff-m-empty">
+            <p>{listTab === "cancelled" ? "No cancelled bookings." : "No active bookings."}</p>
+            {listTab === "active" ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setDraft(draftFromGuest(state.property, null, presetDate || todayISO()));
+                  setError("");
+                  setMode("form");
+                }}
+              >
+                Create Booking
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="staff-m-book-list">
+            {rows.map((b) => {
+              const g = state.guests.find((x) => x.id === b.guestId);
+              const st = String(b.status || "");
+              const tone = /cancel|refund/i.test(st) ? "is-bad" : /pending|hold|draft/i.test(st) ? "is-warn" : "is-ok";
+              return (
+                <div key={b.id} className="staff-m-book-card staff-m-book-card-static">
+                  <span className="hall">{b.type || "Booking"}</span>
+                  <span className="title">{g?.name || "Guest"}</span>
+                  <span className="meta">
+                    {b.number} · {b.eventDate || "—"}
+                    {g?.phone ? ` · ${g.phone}` : ""}
+                  </span>
+                  <span className="foot">
+                    <span className={`staff-m-status ${tone}`}>{b.status}</span>
+                  </span>
+                  <div className="staff-m-card-actions">
+                    <button type="button" className="btn small" onClick={() => onOpen(b.id)}>
+                      Payment
+                    </button>
+                    {b.status !== "Cancelled" ? (
+                      <button type="button" className="btn danger small" onClick={() => onCancel(b.id)}>
+                        Cancel
+                      </button>
+                    ) : (
+                      <button type="button" className="btn ghost small" onClick={() => openCancelDetail(b.id)}>
+                        Details
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="panel staff-desk-reserve-table">
         <table>
           <thead>
             <tr>

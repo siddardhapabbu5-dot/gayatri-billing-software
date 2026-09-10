@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import { syncAppModeFromUrl } from "./lib/appMode.js";
 import "./index.css";
+import "./staff-mobile.css";
 
 syncAppModeFromUrl();
 
