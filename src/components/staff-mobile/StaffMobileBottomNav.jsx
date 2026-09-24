@@ -7,10 +7,16 @@ const ITEMS = [
   { id: "more", label: "More", icon: "☰" },
 ];
 
-export default function StaffMobileBottomNav({ page, onNavigate, onMore }) {
+export default function StaffMobileBottomNav({ page, onNavigate, onMore, canAccess }) {
+  const visible = ITEMS.filter((item) => {
+    if (item.id === "more") return true;
+    if (typeof canAccess !== "function") return true;
+    return canAccess(item.id);
+  });
+
   return (
     <nav className="staff-m-dock no-print" aria-label="Staff phone navigation">
-      {ITEMS.map((item) => {
+      {visible.map((item) => {
         const active = item.id === "more" ? false : page === item.id;
         return (
           <button

@@ -7,8 +7,18 @@ import StaffMobileHeader from "./components/staff-mobile/StaffMobileHeader.jsx";
 import StaffMobileDrawer from "./components/staff-mobile/StaffMobileDrawer.jsx";
 import StaffMobileBottomNav from "./components/staff-mobile/StaffMobileBottomNav.jsx";
 import { initPwaInstallCapture } from "./lib/pwaInstall.js";
-import { enableStaffAppMode, syncAppModeFromUrl } from "./lib/appMode.js";
-import { ROLES } from "./seed";
+import {
+  enablePublicAppMode,
+  enableStaffAppMode,
+  isStaffEntryUnsigned,
+  isStaffPath,
+  publicHomeHref,
+  redirectLegacyStaffHost,
+  staffLoginHref,
+  staffPageHref,
+  syncAppModeFromUrl,
+} from "./lib/appMode.js";
+import { normalizeRole, ROLES } from "./seed";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
 import { money } from "./lib";
@@ -147,8 +157,14 @@ const GROUPS = [
   },
 ];
 
-function can(role, perm) {
-  const list = ROLES[role]?.permissions || [];
+function can(role, perm, permissionList) {
+  const key = normalizeRole(role);
+  const fromSeed = ROLES[key]?.permissions || [];
+  if (fromSeed.includes("*")) return true;
+  const list =
+    Array.isArray(permissionList) && permissionList.length
+      ? permissionList
+      : fromSeed;
   return list.includes("*") || list.includes(perm);
 }
 
@@ -161,19 +177,23 @@ function permForPage(pageId) {
 }
 
 /** First staff page this role is allowed to open (Housekeeping has no Dashboard). */
-function homeStaffPage(role) {
-  const r = String(role || "").toLowerCase();
+function homeStaffPage(role, permissionList) {
+  const r = normalizeRole(role);
   const preferred = ["desk", "rooms", "calendar", "reserve", "billing", "reports"];
   for (const id of preferred) {
-    if (can(r, permForPage(id))) return id;
+    if (can(r, permForPage(id), permissionList)) return id;
   }
   for (const g of GROUPS) {
     for (const i of g.items) {
       if (i.id === "home" || i.id === "portal") continue;
-      if (can(r, i.perm)) return i.id;
+      if (can(r, i.perm, permissionList)) return i.id;
     }
   }
   return "rooms";
+}
+
+function isStaffEntryGate() {
+  return isStaffEntryUnsigned();
 }
 
 const STAFF_PAGES = new Set(
@@ -215,12 +235,44 @@ function readNavOpen() {
 }
 
 function staffHref(id) {
-  if (id === "home" || id === "portal") return `${window.location.pathname}${window.location.search}#home`;
-  return `${window.location.pathname}${window.location.search}#staff/${id}`;
+  return staffPageHref(id);
+}
+
+function goPublicHome() {
+  enablePublicAppMode();
+  const href = publicHomeHref();
+  if (`${window.location.pathname}${window.location.hash}` !== "/#home") {
+    window.history.pushState(null, "", href);
+  }
+}
+
+function ensureStaffLoginUrl() {
+  const target = staffLoginHref();
+  const cur = `${window.location.pathname}${window.location.hash}`;
+  if (cur !== "/staff#staff/login" && cur !== "/staff/#staff/login") {
+    window.history.replaceState(null, "", target);
+  }
 }
 
 function pageFromHash() {
   const full = String(window.location.hash || "").replace(/^#/, "");
+  const onStaff = isStaffPath();
+
+  if (onStaff) {
+    if (!full || full === "home" || full === "staff") {
+      return getToken() && getAuthUser() ? "desk" : "login";
+    }
+    if (full.startsWith("staff/")) {
+      const id = full.slice(6).split(/[/?#]/)[0];
+      if (id === "login") return "login";
+      if (STAFF_PAGES.has(id)) return id;
+      return "desk";
+    }
+    const raw = full.split(/[/?]/)[0];
+    if (STAFF_PAGES.has(raw)) return raw;
+    return "desk";
+  }
+
   if (!full || full === "home") return "home";
   if (full === "portal") return "portal";
   if (full.startsWith("staff/")) {
@@ -254,13 +306,14 @@ export default function App() {
   const [navStack, setNavStack] = useState([]);
   const [authUser, setAuthUser] = useState(() => (getToken() ? getAuthUser() : null));
   const [staffGate, setStaffGate] = useState(() => {
+    if (isStaffEntryGate()) return true;
     const fromHash = pageFromHash();
     if (fromHash === "login") return true;
     return Boolean(fromHash && fromHash !== "home" && fromHash !== "portal" && !(getToken() && getAuthUser()));
   });
   const [pendingStaffPage, setPendingStaffPage] = useState(() => {
     const fromHash = pageFromHash();
-    if (fromHash === "login") return "desk";
+    if (fromHash === "login" || isStaffEntryGate()) return "desk";
     return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
   });
   const [openNavGroup, setOpenNavGroup] = useState(() => groupForPage(page));
@@ -308,8 +361,16 @@ export default function App() {
   }, [mobileDrawerOpen]);
 
   useEffect(() => {
+    if (redirectLegacyStaffHost()) return;
     syncAppModeFromUrl();
     initPwaInstallCapture();
+    // /staff (or legacy app host) → staff email/password login, not the public site.
+    if (isStaffEntryGate()) {
+      enableStaffAppMode();
+      setStaffGate(true);
+      setPendingStaffPage("desk");
+      ensureStaffLoginUrl();
+    }
   }, []);
 
   useEffect(() => {
@@ -359,10 +420,19 @@ export default function App() {
         if (!(getToken() && getAuthUser())) {
           setPendingStaffPage("desk");
           setStaffGate(true);
+          ensureStaffLoginUrl();
         }
         return;
       }
       if (next === "home" || next === "portal") {
+        // On /staff, unsigned visitors stay on staff login (not the marketing site).
+        if (isStaffEntryGate()) {
+          enableStaffAppMode();
+          setPendingStaffPage("desk");
+          setStaffGate(true);
+          ensureStaffLoginUrl();
+          return;
+        }
         setStaffGate(false);
         setPage(next);
         syncAppModeFromUrl();
@@ -372,6 +442,7 @@ export default function App() {
         enableStaffAppMode();
         setPendingStaffPage(next);
         setStaffGate(true);
+        ensureStaffLoginUrl();
         return;
       }
       enableStaffAppMode();
@@ -397,15 +468,17 @@ export default function App() {
   }, [staffGate, authUser]);
 
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
-  const role = String(authUser?.role || user.role || "").toLowerCase();
+  const role = normalizeRole(authUser?.role || user.role || "");
+  const rolePerms = authUser?.permissions;
+  const isDeskAdmin = role === "admin" || role === "manager";
 
   // Block deep-links to pages this role cannot open (menu alone is not enough).
   useEffect(() => {
     if (!authUser) return;
     if (page === "home" || page === "portal") return;
     const need = permForPage(page);
-    if (!can(role, need)) {
-      go(homeStaffPage(role));
+    if (!can(role, need, rolePerms)) {
+      go(homeStaffPage(role, rolePerms));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- guard on page/role only
   }, [authUser, page, role]);
@@ -416,7 +489,7 @@ export default function App() {
       const u = getAuthUser();
       setAuthUser(u);
       setStaffGate(false);
-      go(homeStaffPage(u.role));
+      go(homeStaffPage(u.role, u.permissions));
       return;
     }
     document.documentElement.classList.remove("lux-page");
@@ -424,17 +497,15 @@ export default function App() {
     document.body.style.overflow = "";
     setPendingStaffPage("desk");
     setStaffGate(true);
-    const loginHash = `${window.location.pathname}${window.location.search}#staff/login`;
-    if (window.location.hash !== "#staff/login") {
-      window.history.pushState(null, "", loginHash);
-    }
+    ensureStaffLoginUrl();
   }
 
   function logoutStaff() {
     clearAuth();
     setAuthUser(null);
     setStaffGate(false);
-    go("home");
+    goPublicHome();
+    setPage("home");
   }
 
   function go(id, extra = {}) {
@@ -534,9 +605,11 @@ export default function App() {
       <>
         <InstallPrompt />
         <StaffLogin
+          lockToDesk={isStaffPath() || isStaffEntryGate()}
           onBack={() => {
+            goPublicHome();
             setStaffGate(false);
-            go("home");
+            setPage("home");
           }}
           onSuccess={(u) => {
             enableStaffAppMode();
@@ -544,7 +617,9 @@ export default function App() {
             setStaffGate(false);
             setState(applyAuthUser(u));
             const want = pendingStaffPage || "desk";
-            const dest = can(u.role, permForPage(want)) ? want : homeStaffPage(u.role);
+            const dest = can(u.role, permForPage(want), u.permissions)
+              ? want
+              : homeStaffPage(u.role, u.permissions);
             go(dest);
           }}
         />
@@ -575,13 +650,19 @@ export default function App() {
       <>
         <InstallPrompt />
         <StaffLogin
-          onBack={() => go("home")}
+          lockToDesk={isStaffPath() || isStaffEntryGate()}
+          onBack={() => {
+            goPublicHome();
+            setPage("home");
+          }}
           onSuccess={(u) => {
             enableStaffAppMode();
             setAuthUser(u);
             setState(applyAuthUser(u));
             const want = pendingStaffPage || "desk";
-            const dest = can(u.role, permForPage(want)) ? want : homeStaffPage(u.role);
+            const dest = can(u.role, permForPage(want), u.permissions)
+              ? want
+              : homeStaffPage(u.role, u.permissions);
             go(dest);
           }}
         />
@@ -606,7 +687,7 @@ export default function App() {
         brand={state.property.brandName || "Gayatri"}
         groups={GROUPS.map((g) => ({
           ...g,
-          items: g.items.filter((i) => i.id !== "home" && can(role, i.perm)),
+          items: g.items.filter((i) => i.id !== "home" && can(role, i.perm, rolePerms)),
         })).filter((g) => g.items.length)}
         openGroup={mobileDrawerGroup}
         onToggleGroup={(label) => setMobileDrawerGroup((cur) => (cur === label ? null : label))}
@@ -636,7 +717,7 @@ export default function App() {
         </div>
         <div className="nav-scroll">
           {GROUPS.map((g) => {
-            const items = g.items.filter((i) => can(role, i.perm));
+            const items = g.items.filter((i) => can(role, i.perm, rolePerms));
             if (!items.length) return null;
             const open = openNavGroup === g.label;
             return (
@@ -980,24 +1061,34 @@ export default function App() {
             {page === "settings" && (
               <Settings
                 state={state}
+                authRole={role}
+                canManageUsers={isDeskAdmin}
                 onProperty={(p) => setState(updateProperty(p))}
                 onPublishTerms={(sections) => setState(publishTermSets(sections))}
                 onUser={() => {}}
-                onReset={() => {
-                  if (window.confirm("Reload the Palagummi demo property? Current local data will be replaced.")) {
-                    setState(resetDemo());
-                  }
-                }}
-                onClearBookings={handleClearAllBookings}
-                onLoadDeskCases={() => {
-                  const out = loadDeskCaseBookings();
-                  if (out?.error) {
-                    window.alert(out.error);
-                    return;
-                  }
-                  setState(getState());
-                  window.alert("Loaded: Sriram, Siddhu, Siddardha.");
-                }}
+                onReset={
+                  role === "admin"
+                    ? () => {
+                        if (window.confirm("Reload the Palagummi demo property? Current local data will be replaced.")) {
+                          setState(resetDemo());
+                        }
+                      }
+                    : null
+                }
+                onClearBookings={role === "admin" ? handleClearAllBookings : null}
+                onLoadDeskCases={
+                  role === "admin"
+                    ? () => {
+                        const out = loadDeskCaseBookings();
+                        if (out?.error) {
+                          window.alert(out.error);
+                          return;
+                        }
+                        setState(getState());
+                        window.alert("Loaded: Sriram, Siddhu, Siddardha.");
+                      }
+                    : null
+                }
               />
             )}
           </Suspense>
@@ -1005,6 +1096,7 @@ export default function App() {
       </div>
       <StaffMobileBottomNav
         page={page}
+        canAccess={(id) => can(role, permForPage(id), rolePerms)}
         onNavigate={(id) => go(id)}
         onMore={openMobileDrawer}
       />

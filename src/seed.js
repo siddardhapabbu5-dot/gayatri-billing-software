@@ -4,30 +4,22 @@ export { termsLines } from "./policies";
 
 export const ROLES = {
   admin: {
-    label: "Administrator",
+    label: "Owner administrator",
     permissions: ["*"],
   },
   manager: {
     label: "Property manager",
-    permissions: [
-      "dashboard",
-      "calendar",
-      "venues",
-      "rooms",
-      "reservations",
-      "guests",
-      "events",
-      "catering",
-      "vendors",
-      "billing",
-      "reports",
-      "documents",
-      "expenses",
-      "settings.property",
-    ],
+    /** Same full desk access as owner (including creating staff accounts). */
+    permissions: ["*"],
   },
   frontdesk: {
-    label: "Front desk",
+    label: "Staff",
+    /** Day-to-day desk: bookings, guests, rooms, payments, docs, expense entry. */
+    permissions: ["dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"],
+  },
+  /** Alias used in create-user forms — same as frontdesk. */
+  staff: {
+    label: "Staff",
     permissions: ["dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"],
   },
   housekeeping: {
@@ -39,6 +31,15 @@ export const ROLES = {
     permissions: ["dashboard", "billing", "reports", "vendors", "expenses"],
   },
 };
+
+/** Normalize API / form role keys to seed.js ROLES keys. */
+export function normalizeRole(role) {
+  const key = String(role || "").toLowerCase().replace(/-/g, "_");
+  if (key === "owner" || key === "administrator") return "admin";
+  if (key === "staff" || key === "front_desk") return "frontdesk";
+  if (key === "duty_manager" || key === "property_manager") return "manager";
+  return key;
+}
 
 export const DEFAULT_EVENT_TYPES = [
   "Marriage",

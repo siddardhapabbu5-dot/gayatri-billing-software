@@ -2,13 +2,12 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { healthCheck, login } from "../api/client";
 import InstallAppButton from "../components/InstallAppButton.jsx";
 
-export default function StaffLogin({ onSuccess, onBack }) {
-  const [email, setEmail] = useState("owner@gayatrifunctionhall.com");
+export default function StaffLogin({ onSuccess, onBack, lockToDesk = false }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [apiUp, setApiUp] = useState(null);
-  const [showDemo, setShowDemo] = useState(false);
 
   useLayoutEffect(() => {
     document.documentElement.classList.remove("lux-page");
@@ -28,7 +27,7 @@ export default function StaffLogin({ onSuccess, onBack }) {
       const up = await healthCheck();
       setApiUp(up);
       if (!up) {
-        setError("Backend is not reachable on :8080. Start Postgres + Spring Boot (see backend/README.md).");
+        setError("Backend is not reachable. Start the API or check VITE_API_BASE.");
         return;
       }
       const out = await login(email.trim(), password);
@@ -63,13 +62,6 @@ export default function StaffLogin({ onSuccess, onBack }) {
               Use your role account
               {apiUp === false ? " · API offline" : apiUp ? " · API online" : ""}
             </p>
-            <button
-              type="button"
-              className={`staff-login-demo-toggle${showDemo ? " is-on" : ""}`}
-              onClick={() => setShowDemo((v) => !v)}
-            >
-              {showDemo ? "Hide demo accounts" : "Demo accounts"}
-            </button>
           </div>
 
           <form className="staff-login-form" onSubmit={submit}>
@@ -100,34 +92,12 @@ export default function StaffLogin({ onSuccess, onBack }) {
               </button>
               {onBack && (
                 <button className="btn ghost staff-login-back" type="button" onClick={onBack}>
-                  Public site
+                  {lockToDesk ? "Public website" : "Public site"}
                 </button>
               )}
             </div>
           </form>
         </div>
-
-        {showDemo && (
-          <div className="staff-login-hint muted">
-            <ul>
-              <li>
-                <span>Owner</span>
-                <code>owner@gayatrifunctionhall.com</code>
-                <code>Owner@123</code>
-              </li>
-              <li>
-                <span>Manager</span>
-                <code>desk@gayatrifunctionhall.com</code>
-                <code>Manager@123</code>
-              </li>
-              <li>
-                <span>Housekeeping</span>
-                <code>hk@gayatrifunctionhall.com</code>
-                <code>Hk@123</code>
-              </li>
-            </ul>
-          </div>
-        )}
       </section>
     </div>
   );

@@ -10,11 +10,14 @@ import java.util.Set;
  * Staff roles aligned with the React desk (src/seed.js ROLES).
  */
 public enum StaffRole {
+  /** Owner / administrator — full desk + create users. */
   ADMIN(Set.of("*")),
-  MANAGER(Set.of(
-      "dashboard", "calendar", "venues", "rooms", "reservations", "guests",
-      "events", "catering", "vendors", "billing", "reports", "documents", "expenses", "settings.property"
-  )),
+  /** Duty manager — same desk access as owner (including staff accounts). */
+  MANAGER(Set.of("*")),
+  /**
+   * Desk staff (front desk): day-to-day ops only.
+   * No venues master, vendors, reports, or property settings.
+   */
   FRONTDESK(Set.of(
       "dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"
   )),
@@ -50,7 +53,7 @@ public enum StaffRole {
     if ("PROPERTY_MANAGER".equals(key) || "DUTY_MANAGER".equals(key) || "MANAGER".equals(key)) {
       return MANAGER;
     }
-    if ("FRONT_DESK".equals(key) || "FRONTDESK".equals(key)) {
+    if ("FRONT_DESK".equals(key) || "FRONTDESK".equals(key) || "STAFF".equals(key)) {
       return FRONTDESK;
     }
     return Arrays.stream(values())

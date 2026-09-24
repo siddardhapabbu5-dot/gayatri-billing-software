@@ -6,8 +6,12 @@ export const APP_MODE_KEY = "gayatri-app-mode";
 export const MODE_PUBLIC = "public";
 export const MODE_STAFF = "staff";
 
+/** Preferred staff entry on the main domain (Hostinger VPS). */
+export const STAFF_PATH = "/staff";
+
 /** Production hosts (custom domains). */
 export const PUBLIC_HOSTS = new Set(["gayatriconvention.com", "www.gayatriconvention.com"]);
+/** Legacy staff subdomain — still recognised; prefer /staff on the main domain. */
 export const STAFF_HOSTS = new Set(["app.gayatriconvention.com"]);
 
 const listeners = new Set();
@@ -41,9 +45,20 @@ export function currentHostname() {
   return String(window.location.hostname || "").toLowerCase();
 }
 
+export function currentPathname() {
+  if (typeof window === "undefined") return "/";
+  return String(window.location.pathname || "/");
+}
+
+/** True for `/staff` and `/staff/...` (trailing slash ignored). */
+export function isStaffPath(pathname = currentPathname()) {
+  const p = String(pathname || "/").replace(/\/+$/, "") || "/";
+  return p === STAFF_PATH || p.startsWith(`${STAFF_PATH}/`);
+}
+
 /**
  * Custom-domain host → fixed mode.
- * Railway / localhost return null (use ?mode= / hash / storage).
+ * Railway / localhost return null (use ?mode= / path / hash / storage).
  */
 export function modeFromHostname(hostname = currentHostname()) {
   const h = String(hostname || "").toLowerCase();
@@ -53,9 +68,30 @@ export function modeFromHostname(hostname = currentHostname()) {
   return null;
 }
 
-/** URL forces staff mode: ?mode=staff, #staff, #staff/... */
+/** Staff desk entry without a session: `/staff` path or legacy app. subdomain. */
+export function isStaffEntryUnsigned() {
+  if (isStaffSignedIn()) return false;
+  if (isStaffPath()) return true;
+  return modeFromHostname() === MODE_STAFF;
+}
+
+export function staffLoginHref() {
+  return `${STAFF_PATH}#staff/login`;
+}
+
+export function staffPageHref(pageId = "desk") {
+  if (pageId === "home" || pageId === "portal") return "/#home";
+  return `${STAFF_PATH}#staff/${pageId}`;
+}
+
+export function publicHomeHref() {
+  return "/#home";
+}
+
+/** URL forces staff mode: /staff, ?mode=staff, #staff, #staff/... */
 export function urlRequestsStaffMode() {
   if (typeof window === "undefined") return false;
+  if (isStaffPath()) return true;
   try {
     const q = new URLSearchParams(window.location.search);
     if (q.get("mode") === MODE_STAFF) return true;
@@ -70,6 +106,7 @@ export function urlRequestsStaffMode() {
 
 export function urlRequestsPublicMode() {
   if (typeof window === "undefined") return false;
+  if (isStaffPath()) return false;
   try {
     return new URLSearchParams(window.location.search).get("mode") === MODE_PUBLIC;
   } catch {
@@ -81,9 +118,10 @@ export function urlRequestsPublicMode() {
  * Staff app: Staff link in nav + desk entry.
  * Public app: visual site only (Home → Terms).
  *
- * Priority: explicit ?mode= → signed-in / #staff → custom domain host → storage → public.
+ * Priority: /staff path → explicit ?mode= → signed-in / #staff → host → storage → public.
  */
 export function getAppMode() {
+  if (isStaffPath()) return MODE_STAFF;
   if (urlRequestsPublicMode() && !isStaffSignedIn()) return MODE_PUBLIC;
   if (urlRequestsStaffMode() || isStaffSignedIn()) return MODE_STAFF;
   const fromHost = modeFromHostname();
@@ -117,8 +155,11 @@ export function enablePublicAppMode() {
   return setAppMode(MODE_PUBLIC);
 }
 
-/** Sync mode from host / URL (hash / query). */
+/** Sync mode from host / URL (path / hash / query). */
 export function syncAppModeFromUrl() {
+  if (isStaffPath()) {
+    return setAppMode(MODE_STAFF);
+  }
   if (urlRequestsPublicMode() && !isStaffSignedIn()) {
     return setAppMode(MODE_PUBLIC);
   }
@@ -131,6 +172,21 @@ export function syncAppModeFromUrl() {
   }
   applyManifestForMode(getAppMode());
   return getAppMode();
+}
+
+/**
+ * One-time: legacy app.gayatriconvention.com → main domain /staff.
+ * No-op on localhost / when already on a public host path.
+ */
+export function redirectLegacyStaffHost() {
+  if (typeof window === "undefined") return false;
+  const host = currentHostname();
+  if (!STAFF_HOSTS.has(host)) return false;
+  const targetHost = "gayatriconvention.com";
+  const hash = window.location.hash || "#staff/login";
+  const nextHash = hash.startsWith("#staff") ? hash : "#staff/login";
+  window.location.replace(`https://${targetHost}${STAFF_PATH}${nextHash}`);
+  return true;
 }
 
 export function staffManifestHref() {

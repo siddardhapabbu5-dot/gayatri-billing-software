@@ -50,12 +50,16 @@ GET /api/auth/me
 Authorization: Bearer <token>
 ```
 
-Admin-only user management:
+Admin / manager user management:
 
 ```http
 GET  /api/admin/users
 POST /api/admin/users
 ```
+
+Body for create: `{ "email", "password", "fullName", "role" }` where role is
+`ADMIN` | `MANAGER` | `FRONTDESK` (staff) | `HOUSEKEEPING` | `ACCOUNTS`.
+Only `ADMIN` may create another `ADMIN`.
 
 ## Main APIs (JWT required)
 

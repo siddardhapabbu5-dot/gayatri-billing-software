@@ -78,11 +78,17 @@ export async function login(email, password) {
     body: JSON.stringify({ email, password }),
   });
   const role = String(data.user.role || "").toLowerCase();
+  const normalized =
+    role === "staff" || role === "front_desk"
+      ? "frontdesk"
+      : role === "owner" || role === "administrator"
+        ? "admin"
+        : role;
   const user = {
     id: `api-${data.user.id}`,
     name: data.user.fullName,
     email: data.user.email,
-    role,
+    role: normalized,
     permissions: data.user.permissions || [],
     roleLabel: data.user.roleLabel,
   };
@@ -93,11 +99,17 @@ export async function login(email, password) {
 export async function fetchMe() {
   const data = await api("/api/auth/me");
   const role = String(data.role || "").toLowerCase();
+  const normalized =
+    role === "staff" || role === "front_desk"
+      ? "frontdesk"
+      : role === "owner" || role === "administrator"
+        ? "admin"
+        : role;
   const user = {
     id: `api-${data.id}`,
     name: data.fullName,
     email: data.email,
-    role,
+    role: normalized,
     permissions: data.permissions || [],
     roleLabel: data.roleLabel,
   };
@@ -112,4 +124,35 @@ export async function healthCheck() {
   } catch {
     return false;
   }
+}
+
+export async function listStaffUsers() {
+  const data = await api("/api/admin/users");
+  return (data || []).map((u) => ({
+    id: `api-${u.id}`,
+    name: u.fullName,
+    email: u.email,
+    role: String(u.role || "").toLowerCase(),
+    roleLabel: u.roleLabel,
+    permissions: u.permissions || [],
+  }));
+}
+
+export async function createStaffUser({ email, password, fullName, role }) {
+  const data = await api("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ email, password, fullName, role }),
+  });
+  return {
+    id: `api-${data.id}`,
+    name: data.fullName,
+    email: data.email,
+    role: String(data.role || "").toLowerCase(),
+    roleLabel: data.roleLabel,
+    permissions: data.permissions || [],
+  };
+}
+
+export async function fetchStaffRoles() {
+  return api("/api/auth/roles");
 }

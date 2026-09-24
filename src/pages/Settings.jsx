@@ -2,6 +2,7 @@ import { useState } from "react";
 import { formatDateTime } from "../lib";
 import { DEFAULT_POLICIES, TERM_LANGS, TERM_SECTIONS, policiesOf, termSetsOf } from "../policies";
 import { PageHead } from "../ui";
+import StaffUsersPanel from "../components/StaffUsersPanel.jsx";
 
 const INTEGRATIONS = [
   { name: "Payment gateway", note: "UPI, cards, net banking, international cards — connect in Phase 4." },
@@ -20,7 +21,17 @@ const TABS = [
   ["system", "Users & audit"],
 ];
 
-export default function Settings({ state, onProperty, onPublishTerms, onUser, onReset, onClearBookings, onLoadDeskCases }) {
+export default function Settings({
+  state,
+  onProperty,
+  onPublishTerms,
+  onUser,
+  onReset,
+  onClearBookings,
+  onLoadDeskCases,
+  authRole,
+  canManageUsers = false,
+}) {
   const p = state.property;
   const [tab, setTab] = useState("terms");
   const [sec, setSec] = useState("hall");
@@ -303,20 +314,21 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
       {tab === "system" && (
         <>
           <div className="g2">
+            <StaffUsersPanel canManage={canManageUsers} authRole={authRole} />
             <div className="panel">
-              <h3>Users & roles</h3>
-              <table>
-                <tbody>
-                  {state.users.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.name}</td>
-                      <td className="muted">{u.email}</td>
-                      <td>{u.role}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="muted" style={{ marginTop: 8 }}>Roles: Administrator, Manager, Front desk, Housekeeping, Accounts. Switch user in the left footer.</p>
+              <h3>Document storage</h3>
+              <p className="muted">
+                Guest ID, hall contracts and payment proofs are saved on this computer (browser IndexedDB). View in the software,
+                Save copy to Downloads, or re-upload if you open Gayatri on another PC. PDF or image up to 8 MB; video (MP4, MOV, WebM) up to 100 MB.
+              </p>
+            </div>
+          </div>
+          {authRole === "admin" && (onClearBookings || onLoadDeskCases || onReset) ? (
+            <div className="panel" style={{ marginTop: 12 }}>
+              <h3>Owner maintenance</h3>
+              <p className="muted" style={{ marginBottom: 8 }}>
+                These tools reset local demo data on this browser only. Use carefully.
+              </p>
               {onClearBookings ? (
                 <button className="btn danger small" style={{ marginTop: 8, marginRight: 8 }} type="button" onClick={onClearBookings}>
                   Clear all bookings (dashboard zero)
@@ -341,16 +353,13 @@ export default function Settings({ state, onProperty, onPublishTerms, onUser, on
                   Load Sriram / Siddhu cases
                 </button>
               ) : null}
-              <button className="btn danger small" style={{ marginTop: 8 }} type="button" onClick={onReset}>Reload demo property data</button>
+              {onReset ? (
+                <button className="btn danger small" style={{ marginTop: 8 }} type="button" onClick={onReset}>
+                  Reload demo property data
+                </button>
+              ) : null}
             </div>
-            <div className="panel">
-              <h3>Document storage</h3>
-              <p className="muted">
-                Guest ID, hall contracts and payment proofs are saved on this computer (browser IndexedDB). View in the software,
-                Save copy to Downloads, or re-upload if you open Gayatri on another PC. PDF or image up to 8 MB; video (MP4, MOV, WebM) up to 100 MB.
-              </p>
-            </div>
-          </div>
+          ) : null}
           <div className="panel" style={{ marginTop: 12 }}>
             <h3>Audit log</h3>
             <table>

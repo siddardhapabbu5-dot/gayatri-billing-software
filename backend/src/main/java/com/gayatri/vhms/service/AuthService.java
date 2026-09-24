@@ -63,14 +63,20 @@ public class AuthService {
   }
 
   @Transactional
-  public UserResponse createUser(CreateUserRequest req) {
+  public UserResponse createUser(CreateUserRequest req, StaffUserDetails principal) {
     if (users.existsByEmailIgnoreCase(req.email())) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already registered");
+    }
+    StaffRole newRole = StaffRole.from(req.role());
+    StaffRole actor = principal.getUser().getRole();
+    // Only the owner (ADMIN) may create another ADMIN account.
+    if (newRole == StaffRole.ADMIN && actor != StaffRole.ADMIN) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can create administrator accounts");
     }
     AppUser user = new AppUser();
     user.setEmail(req.email().trim().toLowerCase());
     user.setFullName(req.fullName().trim());
-    user.setRole(StaffRole.from(req.role()));
+    user.setRole(newRole);
     user.setPasswordHash(encoder.encode(req.password()));
     user.setActive(true);
     return toUser(users.save(user));
@@ -93,9 +99,9 @@ public class AuthService {
 
   private static String label(StaffRole role) {
     return switch (role) {
-      case ADMIN -> "Administrator";
+      case ADMIN -> "Owner administrator";
       case MANAGER -> "Property manager";
-      case FRONTDESK -> "Front desk";
+      case FRONTDESK -> "Staff";
       case HOUSEKEEPING -> "Housekeeping";
       case ACCOUNTS -> "Accounts";
     };

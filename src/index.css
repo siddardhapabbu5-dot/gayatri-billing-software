@@ -214,57 +214,6 @@ a { color: inherit; }
   border-color: #755821 !important;
   filter: none;
 }
-.staff-login-demo-toggle {
-  border: 0;
-  background: transparent;
-  color: #8a6a2f;
-  font-family: Jost, "Segoe UI", sans-serif;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  padding: 0;
-}
-.staff-login-demo-toggle:hover,
-.staff-login-demo-toggle.is-on {
-  color: #5c471c;
-}
-.staff-login-hint {
-  max-width: 920px;
-  margin: 0.9rem auto 0;
-  padding-top: 0.85rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  text-align: left;
-}
-.staff-login-hint ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 14px;
-}
-.staff-login-hint li {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 3px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-.staff-login-hint li span {
-  color: var(--ink);
-  font-weight: 500;
-}
-.staff-login-hint li code {
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 11px;
-  background: #f4f1ea;
-  border: 1px solid #e4ddd0;
-  border-radius: 8px;
-  padding: 3px 8px;
-  overflow-wrap: anywhere;
-}
 @keyframes staffLoginIn {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
@@ -286,9 +235,6 @@ a { color: inherit; }
   }
   .staff-login-submit {
     flex: 1 1 auto;
-  }
-  .staff-login-hint ul {
-    grid-template-columns: 1fr;
   }
   .staff-login-hero {
     justify-content: flex-end;

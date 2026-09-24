@@ -47,7 +47,7 @@ public class AuthController {
 
 @RestController
 @RequestMapping("/api/admin/users")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 class AdminUserController {
   private final AuthService auth;
 
@@ -62,8 +62,11 @@ class AdminUserController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public UserResponse create(@Valid @RequestBody CreateUserRequest req) {
-    return auth.createUser(req);
+  public UserResponse create(
+      @Valid @RequestBody CreateUserRequest req,
+      @AuthenticationPrincipal StaffUserDetails principal
+  ) {
+    return auth.createUser(req, principal);
   }
 }
 

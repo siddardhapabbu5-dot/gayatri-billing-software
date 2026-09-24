@@ -104,7 +104,7 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
       } catch {
         /* ignore */
       }
-      const url = `${window.location.pathname}?mode=staff#home`;
+      const url = staffMode ? "/staff?mode=staff#staff/desk" : `${window.location.pathname}?mode=public#home`;
       window.location.assign(url);
       return true;
     }
@@ -190,7 +190,7 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
                     {staffMode ? (
                       <>
                         {" "}
-                        at <code>/?mode=staff</code>
+                        at <code>/staff</code>
                       </>
                     ) : null}
                   </li>
@@ -208,7 +208,7 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
                     {staffMode ? (
                       <>
                         {" "}
-                        on <code>/?mode=staff</code>
+                        on <code>/staff</code>
                       </>
                     ) : (
                       <>
@@ -227,7 +227,7 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
               )}
 
               {staffMode ? (
-                <a className="btn ghost install-app-close" href="/?mode=staff#staff/desk">
+                <a className="btn ghost install-app-close" href="/staff#staff/login">
                   Open Staff login instead
                 </a>
               ) : null}
