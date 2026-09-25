@@ -29,7 +29,6 @@ export const STAFF_PAGE_SLUGS = {
   roles: "roles",
   settings: "settings",
   master: "master",
-  assistant: "assistant",
 };
 
 /** Slug → page id (includes legacy aliases). */
@@ -38,6 +37,8 @@ export const STAFF_SLUG_TO_PAGE = {
   reserve: "reserve",
   login: "login",
   desk: "desk",
+  /** Retired route — deep links land on the dashboard. */
+  assistant: "desk",
 };
 
 /** Production hosts (custom domains). */

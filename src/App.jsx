@@ -87,7 +87,6 @@ const UserManagement = lazy(() => import("./pages/UserManagement.jsx"));
 const RolesPermissions = lazy(() => import("./pages/RolesPermissions.jsx"));
 const Master = lazy(() => import("./pages/Master.jsx"));
 const Documents = lazy(() => import("./pages/Documents.jsx"));
-const Assistant = lazy(() => import("./pages/Assistant.jsx"));
 
 function StaffPageFallback() {
   return (
@@ -151,7 +150,6 @@ const GROUPS = [
     label: "System",
     icon: "🛠",
     items: [
-      { id: "assistant", label: "Assistant", perm: "dashboard" },
       { id: "users", label: "User Management", perm: "user.manage" },
       { id: "roles", label: "Roles & Permissions", perm: "users.permissions" },
       { id: "settings", label: "Settings", perm: "settings.property" },
@@ -504,9 +502,14 @@ export default function App() {
   const canEditRolePermissions = can(role, "users.permissions", rolePerms);
 
   // Block deep-links to pages this role cannot open (menu alone is not enough).
+  // Retired Assistant route always returns to the dashboard.
   useEffect(() => {
     if (!authUser) return;
     if (page === "home" || page === "portal") return;
+    if (page === "assistant") {
+      go("desk");
+      return;
+    }
     if (!canOpenPage(role, page, rolePerms)) {
       go(homeStaffPage(role, rolePerms));
     }
@@ -543,6 +546,9 @@ export default function App() {
   }
 
   function go(id, extra = {}) {
+    if (id === "assistant") {
+      id = "desk";
+    }
     if (id === "home" || id === "portal") {
       setNavStack([]);
       setPresetDate("");
@@ -620,8 +626,9 @@ export default function App() {
     reports: "Reports",
     settings: "Settings",
     master: "Master data",
+    users: "User Management",
+    roles: "Roles & Permissions",
     portal: "Guest portal",
-    assistant: "Assistant",
   };
 
   if (staffGate && !authUser) {
@@ -629,11 +636,6 @@ export default function App() {
       <>
         <StaffLogin
           lockToDesk={isStaffPath() || isStaffEntryGate()}
-          onBack={() => {
-            goPublicHome();
-            setStaffGate(false);
-            setPage("home");
-          }}
           onSuccess={(u) => {
             enableStaffAppMode();
             setAuthUser(u);
@@ -679,10 +681,6 @@ export default function App() {
       <>
         <StaffLogin
           lockToDesk={isStaffPath() || isStaffEntryGate()}
-          onBack={() => {
-            goPublicHome();
-            setPage("home");
-          }}
           onSuccess={(u) => {
             enableStaffAppMode();
             setAuthUser(u);
@@ -727,7 +725,6 @@ export default function App() {
           closeMobileDrawer();
           logoutStaff();
         }}
-        onPublicSite={() => navigateMobile("home")}
       />
       <aside className="nav no-print" aria-hidden={!navOpen}>
         <div className="brand">
@@ -807,9 +804,6 @@ export default function App() {
           <div className="row">
             <span className="muted">{state.notifications[0]?.title}</span>
             <InstallAppButton tone="dark" />
-            <a className="btn ghost small" href={staffHref("home")} onClick={(e) => openNav(e, "home")}>
-              Public site
-            </a>
             <button className="btn ghost small" type="button" onClick={logoutStaff}>
               Logout
             </button>
@@ -1064,7 +1058,6 @@ export default function App() {
               />
             )}
             {page === "reports" && <Reports state={state} go={go} />}
-            {page === "assistant" && <Assistant state={state} />}
             {page === "master" && (
               <Master
                 state={state}

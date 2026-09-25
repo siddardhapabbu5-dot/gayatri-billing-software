@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { healthCheck, login } from "../api/client";
 import InstallAppButton from "../components/InstallAppButton.jsx";
 
-export default function StaffLogin({ onSuccess, onBack, lockToDesk = false }) {
+export default function StaffLogin({ onSuccess, lockToDesk = false }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -90,14 +90,6 @@ export default function StaffLogin({ onSuccess, onBack, lockToDesk = false }) {
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
-
-          {onBack && (
-            <div className="staff-login-panel-foot">
-              <button className="staff-login-public" type="button" onClick={onBack}>
-                {lockToDesk ? "Public website" : "Public site"}
-              </button>
-            </div>
-          )}
         </div>
       </section>
     </div>

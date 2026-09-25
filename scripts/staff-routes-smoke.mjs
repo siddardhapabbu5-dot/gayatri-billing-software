@@ -19,7 +19,6 @@ const PATHS = [
   "/staff/billing",
   "/staff/expenses",
   "/staff/reports",
-  "/staff/assistant",
   "/staff/users",
   "/staff/roles",
   "/staff/settings",

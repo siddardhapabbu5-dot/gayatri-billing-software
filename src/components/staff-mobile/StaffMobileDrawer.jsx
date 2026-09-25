@@ -14,7 +14,6 @@ export default function StaffMobileDrawer({
   onNavigate,
   onClose,
   onLogout,
-  onPublicSite,
 }) {
   return (
     <>
@@ -75,10 +74,6 @@ export default function StaffMobileDrawer({
               </div>
             );
           })}
-
-          <button type="button" className="staff-m-drawer-link" onClick={onPublicSite}>
-            <span aria-hidden="true">🌐</span> Public site
-          </button>
         </div>
 
         <div className="staff-m-drawer-foot">
