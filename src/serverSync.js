@@ -6,6 +6,7 @@
 import { KEY } from "./lib";
 import { getState } from "./store";
 import { fetchDeskSnapshot } from "./api/ops";
+import { mapHall } from "./lib/mapHall.js";
 
 function sid(prefix, id) {
   return id == null ? "" : `${prefix}${id}`;
@@ -26,20 +27,6 @@ function mapGuest(g) {
     emergency: "",
     preferences: "",
     tags: [],
-  };
-}
-
-function mapHall(h, i) {
-  return {
-    id: sid("api-h-", h.id),
-    serverId: h.id,
-    code: h.code,
-    name: h.name,
-    capacity: h.capacity || 0,
-    halfDayRate: Number(h.halfDayRate || 0),
-    fullDayRate: Number(h.fullDayRate || 0),
-    active: h.active !== false,
-    sort: i,
   };
 }
 
@@ -224,7 +211,7 @@ function foliosFromBookings(bookings) {
 }
 
 export function applyDeskSnapshot(snap, base = getState()) {
-  const halls = (snap.halls || []).map(mapHall);
+  const halls = (snap.halls || []).map((h, i) => mapHall(h, i, base.halls));
   const rooms = (snap.rooms || []).map(mapRoom);
   const guests = (snap.guests || []).map(mapGuest);
   const bookings = (snap.bookings || []).map(mapBooking);
