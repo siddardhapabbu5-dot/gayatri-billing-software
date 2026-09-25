@@ -96,15 +96,14 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
   const appLabel = staffMode ? "Gayatri Staff" : "Gayatri";
 
   function ensureInstallUrl() {
-    // #staff on the public site flips staff mode, but Chrome needs ?mode=staff
-    // (and the staff manifest) on the URL for a reliable install prompt.
+    // Staff install uses clean /staff (?mode=staff helps Chrome pick the staff manifest).
     if (staffMode && !hasStaffModeQuery()) {
       try {
         sessionStorage.setItem(OPEN_INSTALL_KEY, "1");
       } catch {
         /* ignore */
       }
-      const url = staffMode ? "/staff?mode=staff#staff/desk" : `${window.location.pathname}?mode=public#home`;
+      const url = staffMode ? "/staff?mode=staff" : `${window.location.pathname}?mode=public#home`;
       window.location.assign(url);
       return true;
     }

@@ -84,7 +84,17 @@ location / {
 }
 ```
 
-`/staff` is handled by the SPA inside the app — no separate static upload of `dist/` is required when using this Docker image.
+The Docker image serves the Vite build from Spring Boot. **`SpaForwardController`** forwards `/staff` and `/staff/**` to `index.html`, so a refresh or deep link such as `https://gayatriconvention.com/staff/calendar` works through this proxy.
+
+If you ever serve `dist/` as static files from nginx instead of the container, use:
+
+```nginx
+location / {
+  try_files $uri $uri/ /index.html;
+}
+```
+
+Staff URLs are path-based (no `#`): `/staff` (login or dashboard), `/staff/calendar`, `/staff/rooms`, `/staff/reservations`, etc. Old bookmarks like `/staff#staff/desk` are rewritten by the app to `/staff`.
 
 ---
 
@@ -108,5 +118,6 @@ Older desk data may still sit in each browser as `localStorage` key `gayatri-vhm
 3. Upload document → open on second device; still present after `docker compose up -d --no-deps gayatri-app`.
 4. Double-book same hall/date → 409 / clear error (no fake booking number).
 5. Roles: Staff cannot hit `/api/admin/users`; Owner can create staff; only Owner creates another Owner.
-6. `/staff` login; `/` public site; existing owner email still logs in; PWA start URL `/staff`.
-7. Logs show demo seed **SKIPPED**; live owner account unchanged.
+6. `/staff` login (signed out) / dashboard (signed in); nested paths `/staff/calendar`, `/staff/rooms`, `/staff/reservations`, etc.; never `#staff/login` or `#staff/desk` after navigation; `/` public site; existing owner email still logs in; PWA start URL `/staff`.
+7. Direct open / refresh of `/staff/calendar` returns the SPA (200), not nginx/Spring 404.
+8. Logs show demo seed **SKIPPED**; live owner account unchanged.

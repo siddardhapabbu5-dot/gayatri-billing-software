@@ -9,6 +9,35 @@ export const MODE_STAFF = "staff";
 /** Preferred staff entry on the main domain (Hostinger VPS). */
 export const STAFF_PATH = "/staff";
 
+/**
+ * Internal page id → clean URL slug under /staff/...
+ * Dashboard uses bare /staff (no /desk suffix) when signed in.
+ */
+export const STAFF_PAGE_SLUGS = {
+  desk: "desk",
+  calendar: "calendar",
+  venues: "venues",
+  rooms: "rooms",
+  reserve: "reservations",
+  guests: "guests",
+  documents: "documents",
+  vendors: "vendors",
+  billing: "billing",
+  expenses: "expenses",
+  reports: "reports",
+  settings: "settings",
+  master: "master",
+  assistant: "assistant",
+};
+
+/** Slug → page id (includes legacy aliases). */
+export const STAFF_SLUG_TO_PAGE = {
+  ...Object.fromEntries(Object.entries(STAFF_PAGE_SLUGS).map(([page, slug]) => [slug, page])),
+  reserve: "reserve",
+  login: "login",
+  desk: "desk",
+};
+
 /** Production hosts (custom domains). */
 export const PUBLIC_HOSTS = new Set(["gayatriconvention.com", "www.gayatriconvention.com"]);
 /** Legacy staff subdomain — still recognised; prefer /staff on the main domain. */
@@ -50,9 +79,14 @@ export function currentPathname() {
   return String(window.location.pathname || "/");
 }
 
+function normalizePath(pathname = currentPathname()) {
+  const p = String(pathname || "/").replace(/\/+$/, "") || "/";
+  return p;
+}
+
 /** True for `/staff` and `/staff/...` (trailing slash ignored). */
 export function isStaffPath(pathname = currentPathname()) {
-  const p = String(pathname || "/").replace(/\/+$/, "") || "/";
+  const p = normalizePath(pathname);
   return p === STAFF_PATH || p.startsWith(`${STAFF_PATH}/`);
 }
 
@@ -76,21 +110,69 @@ export function isStaffEntryUnsigned() {
 }
 
 export function staffLoginHref() {
-  /** Clean staff entry — no hash in the address bar. */
   return STAFF_PATH;
 }
 
+/**
+ * Clean staff URLs — never emit #staff/... fragments.
+ * /staff → login (unsigned) or dashboard (signed in)
+ * /staff/calendar → calendar, /staff/reservations → reserve, etc.
+ */
 export function staffPageHref(pageId = "desk") {
-  if (pageId === "home" || pageId === "portal") return "/#home";
-  if (pageId === "login") return STAFF_PATH;
-  return `${STAFF_PATH}#staff/${pageId}`;
+  if (pageId === "home" || pageId === "portal") return "/";
+  if (pageId === "login" || pageId === "desk") return STAFF_PATH;
+  const slug = STAFF_PAGE_SLUGS[pageId] || pageId;
+  return `${STAFF_PATH}/${slug}`;
 }
 
 export function publicHomeHref() {
-  return "/#home";
+  return "/";
 }
 
-/** URL forces staff mode: /staff, ?mode=staff, #staff, #staff/... */
+/**
+ * Resolve staff page id from pathname.
+ * Returns "login" for bare /staff when the caller should show the gate;
+ * returns "desk" for bare /staff when signed in (pass signedIn=true).
+ */
+export function pageFromStaffPath(pathname = currentPathname(), { signedIn = isStaffSignedIn() } = {}) {
+  const p = normalizePath(pathname);
+  if (p === STAFF_PATH) return signedIn ? "desk" : "login";
+  if (!p.startsWith(`${STAFF_PATH}/`)) return null;
+  const slug = p.slice(STAFF_PATH.length + 1).split(/[/?#]/)[0];
+  if (!slug || slug === "login") return signedIn ? "desk" : "login";
+  if (slug === "desk") return "desk";
+  return STAFF_SLUG_TO_PAGE[slug] || null;
+}
+
+/**
+ * Rewrite legacy `#staff/...` bookmarks to clean `/staff/...` paths (strips the hash).
+ * Returns true if the URL was changed.
+ */
+export function migrateStaffHashToPath() {
+  if (typeof window === "undefined") return false;
+  const hash = String(window.location.hash || "").replace(/^#/, "");
+  if (!hash || !(hash === "staff" || hash.startsWith("staff/"))) return false;
+
+  let pageId = "desk";
+  if (hash === "staff" || hash === "staff/login") {
+    pageId = "login";
+  } else {
+    const id = hash.slice(6).split(/[/?#]/)[0];
+    if (!id || id === "desk") pageId = "desk";
+    else if (id === "login") pageId = "login";
+    else pageId = STAFF_SLUG_TO_PAGE[id] || id;
+  }
+
+  const target = pageId === "login" || pageId === "desk" ? STAFF_PATH : staffPageHref(pageId);
+  const search = window.location.search || "";
+  const next = `${target}${search}`;
+  const here = `${window.location.pathname}${window.location.search || ""}`;
+  if (here === next && !window.location.hash) return false;
+  window.history.replaceState(null, "", next);
+  return true;
+}
+
+/** URL forces staff mode: /staff, ?mode=staff, legacy #staff */
 export function urlRequestsStaffMode() {
   if (typeof window === "undefined") return false;
   if (isStaffPath()) return true;
@@ -119,8 +201,6 @@ export function urlRequestsPublicMode() {
 /**
  * Staff app: Staff link in nav + desk entry.
  * Public app: visual site only (Home → Terms).
- *
- * Priority: /staff path → explicit ?mode= → signed-in / #staff → host → storage → public.
  */
 export function getAppMode() {
   if (isStaffPath()) return MODE_STAFF;
@@ -177,17 +257,26 @@ export function syncAppModeFromUrl() {
 }
 
 /**
- * One-time: legacy app.gayatriconvention.com → main domain /staff.
- * No-op on localhost / when already on a public host path.
+ * Legacy app.gayatriconvention.com → main domain /staff (path, not hash).
  */
 export function redirectLegacyStaffHost() {
   if (typeof window === "undefined") return false;
   const host = currentHostname();
   if (!STAFF_HOSTS.has(host)) return false;
   const targetHost = "gayatriconvention.com";
-  const hash = window.location.hash || "";
-  const nextHash = hash.startsWith("#staff/") && hash !== "#staff/login" ? hash : "";
-  window.location.replace(`https://${targetHost}${STAFF_PATH}${nextHash}`);
+  const path = normalizePath();
+  const staffTail = isStaffPath(path) && path !== STAFF_PATH ? path.slice(STAFF_PATH.length) : "";
+  const hash = String(window.location.hash || "").replace(/^#/, "");
+  let dest = STAFF_PATH;
+  if (staffTail) {
+    dest = `${STAFF_PATH}${staffTail}`;
+  } else if (hash === "staff" || hash === "staff/login") {
+    dest = STAFF_PATH;
+  } else if (hash.startsWith("staff/")) {
+    const id = hash.slice(6).split(/[/?#]/)[0];
+    dest = id && id !== "login" && id !== "desk" ? staffPageHref(STAFF_SLUG_TO_PAGE[id] || id) : STAFF_PATH;
+  }
+  window.location.replace(`https://${targetHost}${dest}`);
   return true;
 }
 

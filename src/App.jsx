@@ -12,6 +12,8 @@ import {
   enableStaffAppMode,
   isStaffEntryUnsigned,
   isStaffPath,
+  migrateStaffHashToPath,
+  pageFromStaffPath,
   publicHomeHref,
   redirectLegacyStaffHost,
   STAFF_PATH,
@@ -241,53 +243,45 @@ function staffHref(id) {
 function goPublicHome() {
   enablePublicAppMode();
   const href = publicHomeHref();
-  if (`${window.location.pathname}${window.location.hash}` !== "/#home") {
+  const here = `${window.location.pathname}${window.location.search || ""}${window.location.hash || ""}`;
+  if (here !== href && here !== "/#home") {
     window.history.pushState(null, "", href);
   }
 }
 
 /**
- * Ensure we are on /staff for the login gate.
- * Does not append #staff/login — keep the address bar as /staff on fresh visits.
- * Leaves an existing #staff/login (or other #staff/…) bookmark hash alone.
+ * Keep the visitor on a clean /staff path for the login gate.
+ * Deep links like /staff/calendar are preserved (no rewrite to /staff, no # fragments).
  */
 function ensureStaffLoginUrl() {
-  const path = String(window.location.pathname || "/").replace(/\/+$/, "") || "/";
-  const hash = String(window.location.hash || "");
-  if (path === STAFF_PATH || path.startsWith(`${STAFF_PATH}/`)) return;
-  const keepHash = hash === "#staff/login" || (hash.startsWith("#staff/") && hash !== "#staff/login");
-  window.history.replaceState(null, "", keepHash ? `${STAFF_PATH}${hash}` : STAFF_PATH);
+  migrateStaffHashToPath();
+  if (isStaffPath()) return;
+  window.history.replaceState(null, "", STAFF_PATH);
 }
 
-function pageFromHash() {
-  const full = String(window.location.hash || "").replace(/^#/, "");
-  const onStaff = isStaffPath();
+/**
+ * Resolve the current route from pathname (staff) or public hash sections.
+ * Legacy #staff/... bookmarks are rewritten to /staff/... first.
+ */
+function pageFromLocation() {
+  migrateStaffHashToPath();
 
-  if (onStaff) {
-    if (!full || full === "home" || full === "staff") {
-      return getToken() && getAuthUser() ? "desk" : "login";
+  if (isStaffPath()) {
+    const signedIn = Boolean(getToken() && getAuthUser());
+    const staffPage = pageFromStaffPath(undefined, { signedIn });
+    if (staffPage) {
+      if (STAFF_PAGES.has(staffPage) || staffPage === "login" || staffPage === "desk") {
+        return staffPage;
+      }
     }
-    if (full.startsWith("staff/")) {
-      const id = full.slice(6).split(/[/?#]/)[0];
-      if (id === "login") return "login";
-      if (STAFF_PAGES.has(id)) return id;
-      return "desk";
-    }
-    const raw = full.split(/[/?]/)[0];
-    if (STAFF_PAGES.has(raw)) return raw;
-    return "desk";
+    return signedIn ? "desk" : "login";
   }
 
+  const full = String(window.location.hash || "").replace(/^#/, "");
   if (!full || full === "home") return "home";
   if (full === "portal") return "portal";
-  if (full.startsWith("staff/")) {
-    const id = full.slice(6).split(/[/?#]/)[0];
-    if (id === "login") return "login";
-    if (STAFF_PAGES.has(id)) return id;
-    return "desk";
-  }
   const raw = full.split(/[/?]/)[0];
-  // Logged-in refresh on #venues used to jump into staff Venues — keep public hashes on the website.
+  // Logged-in refresh on #venues must stay on the public website.
   if (PUBLIC_SITE_HASHES.has(raw)) return "home";
   if (STAFF_PAGES.has(raw)) return raw;
   return null;
@@ -296,12 +290,12 @@ function pageFromHash() {
 export default function App() {
   const [state, setState] = useState(getState);
   const [page, setPage] = useState(() => {
-    const fromHash = pageFromHash();
-    if (fromHash === "login") return "home";
-    if (fromHash && fromHash !== "home" && fromHash !== "portal" && getToken() && getAuthUser()) {
-      return fromHash;
+    const fromLoc = pageFromLocation();
+    if (fromLoc === "login") return "home";
+    if (fromLoc && fromLoc !== "home" && fromLoc !== "portal" && getToken() && getAuthUser()) {
+      return fromLoc;
     }
-    if (fromHash === "home" || fromHash === "portal") return fromHash;
+    if (fromLoc === "home" || fromLoc === "portal") return fromLoc;
     return "home";
   });
   const [presetDate, setPresetDate] = useState("");
@@ -312,14 +306,14 @@ export default function App() {
   const [authUser, setAuthUser] = useState(() => (getToken() ? getAuthUser() : null));
   const [staffGate, setStaffGate] = useState(() => {
     if (isStaffEntryGate()) return true;
-    const fromHash = pageFromHash();
-    if (fromHash === "login") return true;
-    return Boolean(fromHash && fromHash !== "home" && fromHash !== "portal" && !(getToken() && getAuthUser()));
+    const fromLoc = pageFromLocation();
+    if (fromLoc === "login") return true;
+    return Boolean(fromLoc && fromLoc !== "home" && fromLoc !== "portal" && !(getToken() && getAuthUser()));
   });
   const [pendingStaffPage, setPendingStaffPage] = useState(() => {
-    const fromHash = pageFromHash();
-    if (fromHash === "login" || isStaffEntryGate()) return "desk";
-    return fromHash && fromHash !== "home" && fromHash !== "portal" ? fromHash : "desk";
+    const fromLoc = pageFromLocation();
+    if (fromLoc && fromLoc !== "home" && fromLoc !== "portal" && fromLoc !== "login") return fromLoc;
+    return "desk";
   });
   const [openNavGroup, setOpenNavGroup] = useState(() => groupForPage(page));
   const [navOpen, setNavOpen] = useState(readNavOpen);
@@ -367,13 +361,19 @@ export default function App() {
 
   useEffect(() => {
     if (redirectLegacyStaffHost()) return;
+    migrateStaffHashToPath();
     syncAppModeFromUrl();
     initPwaInstallCapture();
     // /staff (or legacy app host) → staff email/password login, not the public site.
     if (isStaffEntryGate()) {
       enableStaffAppMode();
       setStaffGate(true);
-      setPendingStaffPage("desk");
+      const fromLoc = pageFromLocation();
+      if (fromLoc && fromLoc !== "login" && fromLoc !== "home" && fromLoc !== "portal") {
+        setPendingStaffPage(fromLoc);
+      } else {
+        setPendingStaffPage("desk");
+      }
       ensureStaffLoginUrl();
     }
   }, []);
@@ -436,15 +436,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    function applyHash() {
-      const next = pageFromHash();
+    function applyLocation() {
+      const next = pageFromLocation();
       if (!next) return;
       if (next === "login") {
         enableStaffAppMode();
         if (!(getToken() && getAuthUser())) {
-          setPendingStaffPage("desk");
+          setPendingStaffPage((prev) => {
+            const deep = pageFromStaffPath(undefined, { signedIn: false });
+            if (deep && deep !== "login" && STAFF_PAGES.has(deep)) return deep;
+            return prev || "desk";
+          });
           setStaffGate(true);
           ensureStaffLoginUrl();
+        } else {
+          setStaffGate(false);
+          setPage("desk");
+          const href = staffHref("desk");
+          if (window.location.pathname !== href) {
+            window.history.replaceState(null, "", href);
+          }
         }
         return;
       }
@@ -452,7 +463,8 @@ export default function App() {
         // On /staff, unsigned visitors stay on staff login (not the marketing site).
         if (isStaffEntryGate()) {
           enableStaffAppMode();
-          setPendingStaffPage("desk");
+          const deep = pageFromStaffPath(undefined, { signedIn: false });
+          setPendingStaffPage(deep && deep !== "login" && STAFF_PAGES.has(deep) ? deep : "desk");
           setStaffGate(true);
           ensureStaffLoginUrl();
           return;
@@ -474,11 +486,11 @@ export default function App() {
       setStaffGate(false);
       setPage(next);
     }
-    window.addEventListener("hashchange", applyHash);
-    window.addEventListener("popstate", applyHash);
+    window.addEventListener("hashchange", applyLocation);
+    window.addEventListener("popstate", applyLocation);
     return () => {
-      window.removeEventListener("hashchange", applyHash);
-      window.removeEventListener("popstate", applyHash);
+      window.removeEventListener("hashchange", applyLocation);
+      window.removeEventListener("popstate", applyLocation);
     };
   }, []);
 
@@ -533,6 +545,17 @@ export default function App() {
   }
 
   function go(id, extra = {}) {
+    if (id === "home" || id === "portal") {
+      setNavStack([]);
+      setPresetDate("");
+      setPresetGuestId("");
+      setFocusGuestId("");
+      setBookingId(null);
+      setStaffGate(false);
+      goPublicHome();
+      setPage(id === "portal" ? "portal" : "home");
+      return;
+    }
     const drilling = Boolean(extra.bookingId) && (id === "billing" || id === "documents");
     if (drilling) {
       setNavStack((s) => [
@@ -556,8 +579,9 @@ export default function App() {
     if (extra.bookingId) setBookingId(extra.bookingId);
     else setBookingId(null);
     const href = staffHref(id);
-    const nextHash = href.includes("#") ? `#${href.split("#")[1]}` : "";
-    if (window.location.hash !== nextHash) {
+    const pathNow = String(window.location.pathname || "/").replace(/\/+$/, "") || "/";
+    const pathNext = String(href || "/").replace(/\/+$/, "") || "/";
+    if (pathNow !== pathNext || window.location.hash) {
       window.history.pushState(null, "", href);
     }
     setPage(id);
