@@ -39,14 +39,6 @@ export default function StaffMobileDrawer({
         </div>
 
         <div className="staff-m-drawer-scroll">
-          <button
-            type="button"
-            className={`staff-m-drawer-link${page === "desk" ? " is-on" : ""}`}
-            onClick={() => onNavigate("desk")}
-          >
-            <span aria-hidden="true">🏠</span> Home
-          </button>
-
           {groups.map((g) => {
             const isOpen = openGroup === g.label;
             return (

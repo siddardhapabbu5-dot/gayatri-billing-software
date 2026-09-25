@@ -120,7 +120,6 @@ const GROUPS = [
     label: "Operations",
     icon: "⚙",
     items: [
-      { id: "home", label: "Home", perm: "dashboard" },
       { id: "desk", label: "Dashboard", perm: "dashboard" },
       { id: "calendar", label: "Calendar", perm: "calendar" },
       { id: "venues", label: "Venues", perm: "venues" },

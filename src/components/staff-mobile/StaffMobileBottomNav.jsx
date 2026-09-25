@@ -1,6 +1,6 @@
 /** Phone-only staff bottom dock. Hidden on tablet/desktop via CSS. */
 const ITEMS = [
-  { id: "desk", label: "Home", icon: "🏠" },
+  { id: "desk", label: "Desk", icon: "🏠" },
   { id: "calendar", label: "Calendar", icon: "📅" },
   { id: "reserve", label: "Booking", icon: "+", primary: true },
   { id: "billing", label: "Payments", icon: "₹" },
