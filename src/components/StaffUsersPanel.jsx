@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { createStaffUser, listStaffUsers, updateStaffUser } from "../api/client";
 
+const ROLE_LABEL = {
+  ADMIN: "Owner",
+  MANAGER: "Manager",
+  FRONTDESK: "Staff / Front Desk",
+  STAFF: "Staff / Front Desk",
+  ACCOUNTS: "Accounts",
+  HOUSEKEEPING: "Housekeeping",
+};
+
 const CREATE_ROLES_OWNER = [
-  { value: "FRONTDESK", label: "Staff (desk)" },
-  { value: "HOUSEKEEPING", label: "Housekeeping" },
+  { value: "FRONTDESK", label: "Staff / Front Desk" },
+  { value: "MANAGER", label: "Manager" },
   { value: "ACCOUNTS", label: "Accounts" },
-  { value: "MANAGER", label: "Property manager" },
-  { value: "ADMIN", label: "Owner administrator" },
+  { value: "HOUSEKEEPING", label: "Housekeeping" },
 ];
 
-const CREATE_ROLES_MANAGER = [{ value: "FRONTDESK", label: "Staff (desk)" }];
+const CREATE_ROLES_MANAGER = [{ value: "FRONTDESK", label: "Staff / Front Desk" }];
 
-export default function StaffUsersPanel({ canManage, authRole }) {
+function roleName(role) {
+  const key = String(role || "").toUpperCase();
+  return ROLE_LABEL[key] || key || "—";
+}
+
+export default function StaffUsersPanel({ canManage, authRole, standalone = false }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -90,141 +103,157 @@ export default function StaffUsersPanel({ canManage, authRole }) {
   if (!canManage) {
     return (
       <div className="panel">
-        <h3>Users & roles</h3>
-        <p className="muted">Only the owner or property manager can view and create staff accounts.</p>
+        <h3>User Management</h3>
+        <p className="muted">Only the Owner or Manager can open this page.</p>
       </div>
     );
   }
 
   return (
-    <div className="panel">
-      <h3>Users & roles</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>
-        {isOwner
-          ? "Create, deactivate, change role, or reset password. The last active Owner cannot be deactivated or demoted."
-          : "Managers may create and manage Staff (Front Desk) accounts only. Owner and Manager accounts are Owner-controlled."}
-        {" "}Every change is audited on the server.
-      </p>
+    <div className={`users-mgmt${standalone ? " users-mgmt-standalone" : ""}`}>
+      <div className="panel">
+        <h3>Staff accounts</h3>
+        <p className="muted" style={{ marginBottom: 10 }}>
+          {isOwner
+            ? "Create Manager or Staff accounts, change roles, deactivate, or reset passwords. The last active Owner cannot be deactivated or demoted."
+            : "Managers may create and manage Front Desk Staff only. Owner and Manager accounts are Owner-controlled."}
+        </p>
 
-      {loading ? <p className="muted">Loading accounts…</p> : null}
-      {error ? <p className="staff-login-error" style={{ marginBottom: 8 }}>{error}</p> : null}
-      {note ? <p className="muted" style={{ marginBottom: 8 }}>{note}</p> : null}
+        {loading ? <p className="muted">Loading accounts…</p> : null}
+        {error ? <p className="staff-login-error" style={{ marginBottom: 8 }}>{error}</p> : null}
+        {note ? <p className="pill ok" style={{ marginBottom: 8 }}>{note}</p> : null}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>{u.name}</td>
-              <td className="muted">{u.email}</td>
-              <td>
-                {canEditRow(u) ? (
-                  <select
-                    value={String(u.role || "").toUpperCase()}
-                    disabled={busy}
-                    onChange={(e) => patchUser(u, { role: e.target.value })}
-                  >
-                    {roleOptions.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  String(u.role || "").toUpperCase()
-                )}
-              </td>
-              <td>{u.active ? "Active" : "Inactive"}</td>
-              <td className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                {canEditRow(u) ? (
-                  <>
-                    <button
-                      type="button"
-                      className="btn ghost small"
-                      disabled={busy}
-                      onClick={() => patchUser(u, { active: !u.active })}
-                    >
-                      {u.active ? "Deactivate" : "Activate"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn ghost small"
-                      disabled={busy}
-                      onClick={() => {
-                        const pw = window.prompt("New password (min 8 characters)");
-                        if (pw) patchUser(u, { newPassword: pw });
-                      }}
-                    >
-                      Reset password
-                    </button>
-                  </>
-                ) : (
-                  <span className="muted">Owner only</span>
-                )}
-              </td>
-            </tr>
-          ))}
-          {!loading && !users.length ? (
-            <tr>
-              <td colSpan={5} className="muted">
-                No API users yet.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+        <div className="table-wrap">
+          <table className="users-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const roleKey = String(u.role || "").toUpperCase();
+                return (
+                  <tr key={u.id} className={u.active ? undefined : "muted"}>
+                    <td>{u.name}</td>
+                    <td className="muted">{u.email}</td>
+                    <td>
+                      {canEditRow(u) ? (
+                        <select
+                          value={roleKey === "STAFF" ? "FRONTDESK" : roleKey}
+                          disabled={busy}
+                          onChange={(e) => patchUser(u, { role: e.target.value })}
+                          aria-label={`Role for ${u.name}`}
+                        >
+                          {roleOptions.map((r) => (
+                            <option key={r.value} value={r.value}>
+                              {r.label}
+                            </option>
+                          ))}
+                          {isOwner && roleKey === "ADMIN" ? (
+                            <option value="ADMIN">Owner</option>
+                          ) : null}
+                        </select>
+                      ) : (
+                        <strong>{roleName(u.role)}</strong>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`user-status${u.active ? " is-active" : " is-inactive"}`}>
+                        {u.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      {canEditRow(u) ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn ghost small"
+                            disabled={busy}
+                            onClick={() => patchUser(u, { active: !u.active })}
+                          >
+                            {u.active ? "Deactivate" : "Activate"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn ghost small"
+                            disabled={busy}
+                            onClick={() => {
+                              const pw = window.prompt("New password (min 8 characters)");
+                              if (pw) patchUser(u, { newPassword: pw });
+                            }}
+                          >
+                            Reset password
+                          </button>
+                        </>
+                      ) : (
+                        <span className="muted">Owner only</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!loading && !users.length ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    No staff accounts yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      <h3 style={{ marginTop: 16 }}>Create staff account</h3>
-      <form className="fields two" onSubmit={submit} style={{ marginTop: 8 }}>
-        <label>
-          Full name
-          <input
-            required
-            value={form.fullName}
-            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-          />
-        </label>
-        <label>
-          Email
-          <input
-            required
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-        </label>
-        <label>
-          Temporary password
-          <input
-            required
-            type="password"
-            minLength={8}
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-        </label>
-        <label>
-          Role
-          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            {roleOptions.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className="btn" disabled={busy}>
-          {busy ? "Saving…" : "Create account"}
-        </button>
-      </form>
+      <div className="panel" style={{ marginTop: 12 }}>
+        <h3>Create account</h3>
+        <form className="fields two" onSubmit={submit} style={{ marginTop: 8 }}>
+          <label>
+            Full name
+            <input
+              required
+              value={form.fullName}
+              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            />
+          </label>
+          <label>
+            Email
+            <input
+              required
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </label>
+          <label>
+            Temporary password
+            <input
+              required
+              type="password"
+              minLength={8}
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+          </label>
+          <label>
+            Role
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              {roleOptions.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="btn" disabled={busy}>
+            {busy ? "Saving…" : "Create account"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

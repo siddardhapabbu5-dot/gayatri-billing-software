@@ -3,8 +3,6 @@ import { fetchRbacSettings, saveBookingPolicies } from "../api/client";
 import { formatDateTime } from "../lib";
 import { DEFAULT_POLICIES, TERM_LANGS, TERM_SECTIONS, policiesOf, termSetsOf } from "../policies";
 import { PageHead } from "../ui";
-import StaffUsersPanel from "../components/StaffUsersPanel.jsx";
-import RolesPermissionsPanel from "../components/RolesPermissionsPanel.jsx";
 
 const INTEGRATIONS = [
   { name: "Payment gateway", note: "UPI, cards, net banking, international cards — connect in Phase 4." },
@@ -20,28 +18,21 @@ const TABS = [
   ["terms", "Terms & Conditions"],
   ["policies", "Booking policies"],
   ["agreements", "Guest agreements"],
-  ["system", "Users & audit"],
-  ["roles", "Roles & permissions"],
 ];
 
 export default function Settings({
   state,
   onProperty,
   onPublishTerms,
-  onUser,
-  onReset,
-  onClearBookings,
-  onLoadDeskCases,
   authRole,
   permissions,
-  canManageUsers = false,
-  canEditRolePermissions = false,
 }) {
   const p = state.property;
-  const canProperty = authRole === "admin" || canEditRolePermissions || (Array.isArray(permissions) && permissions.includes("settings.property"));
+  const canProperty =
+    authRole === "admin" ||
+    (Array.isArray(permissions) &&
+      (permissions.includes("*") || permissions.includes("settings.property")));
   const visibleTabs = TABS.filter(([id]) => {
-    if (id === "roles") return canEditRolePermissions || authRole === "admin";
-    if (id === "system") return canManageUsers || authRole === "admin";
     if (id === "property" || id === "terms" || id === "policies") return canProperty || authRole === "admin";
     return true;
   });
@@ -72,7 +63,6 @@ export default function Settings({
     return () => {
       cancelled = true;
     };
-    // Load once on mount for multi-device sync
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,7 +88,7 @@ export default function Settings({
 
   return (
     <>
-      <PageHead title="Settings" sub="Property, terms, booking policies, guest agreements, users and audit." />
+      <PageHead title="Settings" sub="Property, terms, booking policies, and guest agreements." />
       {note && <p className="pill ok" style={{ marginBottom: 10 }}>{note}</p>}
       <div className="chips" style={{ marginBottom: 12 }}>
         {visibleTabs.map(([id, label]) => (
@@ -140,6 +130,14 @@ export default function Settings({
               </tbody>
             </table>
           </div>
+          <div className="panel" style={{ gridColumn: "1 / -1" }}>
+            <h3>Document storage</h3>
+            <p className="muted" style={{ margin: 0 }}>
+              Guest ID, hall contracts and payment proofs are saved on this computer (browser IndexedDB).
+              View in the software, save a copy to Downloads, or re-upload on another PC. PDF or image up to 8 MB;
+              video (MP4, MOV, WebM) up to 100 MB.
+            </p>
+          </div>
         </div>
       )}
 
@@ -180,7 +178,7 @@ export default function Settings({
             />
           </label>
           <p className="muted" style={{ marginTop: 8 }}>
-            These are a software / business-policy template, not a substitute for a lawyer's contract.
+            These are a software / business-policy template, not a substitute for a lawyer&apos;s contract.
             Have the final version reviewed for Andhra Pradesh / India law before using them as a binding agreement.
           </p>
           <button className="btn" type="button" style={{ marginTop: 8 }} onClick={publishTerms}>
@@ -350,77 +348,6 @@ export default function Settings({
           {!(state.agreements || []).length && <p className="muted">No agreements yet. Confirm a reservation or a website booking with the T&C boxes ticked.</p>}
         </div>
       )}
-
-      {tab === "system" && (
-        <>
-          <div className="g2">
-            <StaffUsersPanel canManage={canManageUsers} authRole={authRole} />
-            <div className="panel">
-              <h3>Document storage</h3>
-              <p className="muted">
-                Guest ID, hall contracts and payment proofs are saved on this computer (browser IndexedDB). View in the software,
-                Save copy to Downloads, or re-upload if you open Gayatri on another PC. PDF or image up to 8 MB; video (MP4, MOV, WebM) up to 100 MB.
-              </p>
-            </div>
-          </div>
-          {authRole === "admin" && (onClearBookings || onLoadDeskCases || onReset) ? (
-            <div className="panel" style={{ marginTop: 12 }}>
-              <h3>Owner maintenance</h3>
-              <p className="muted" style={{ marginBottom: 8 }}>
-                These tools reset local demo data on this browser only. Use carefully.
-              </p>
-              {onClearBookings ? (
-                <button className="btn danger small" style={{ marginTop: 8, marginRight: 8 }} type="button" onClick={onClearBookings}>
-                  Clear all bookings (dashboard zero)
-                </button>
-              ) : null}
-              {onLoadDeskCases ? (
-                <button
-                  className="btn small"
-                  style={{ marginTop: 8, marginRight: 8 }}
-                  type="button"
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        "Load Sriram / Siddhu / Siddardha desk cases?\n\nReplaces only those three guests (phones 7204301777–779) with payment + refund history."
-                      )
-                    ) {
-                      return;
-                    }
-                    onLoadDeskCases();
-                  }}
-                >
-                  Load Sriram / Siddhu cases
-                </button>
-              ) : null}
-              {onReset ? (
-                <button className="btn danger small" style={{ marginTop: 8 }} type="button" onClick={onReset}>
-                  Reload demo property data
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="panel" style={{ marginTop: 12 }}>
-            <h3>Audit log</h3>
-            <table>
-              <thead><tr><th>When</th><th>User</th><th>Action</th><th>Entity</th><th>Detail</th></tr></thead>
-              <tbody>
-                {state.audit.slice(0, 40).map((a) => (
-                  <tr key={a.id}>
-                    <td>{formatDateTime(a.at)}</td>
-                    <td>{a.user}</td>
-                    <td>{a.action}</td>
-                    <td>{a.entity}</td>
-                    <td className="muted">{a.detail}{a.oldValue != null ? ` (${a.oldValue} → ${a.newValue})` : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {tab === "roles" && <RolesPermissionsPanel canEdit={canEditRolePermissions} />}
     </>
   );
 }

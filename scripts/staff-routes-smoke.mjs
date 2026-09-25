@@ -20,6 +20,8 @@ const PATHS = [
   "/staff/expenses",
   "/staff/reports",
   "/staff/assistant",
+  "/staff/users",
+  "/staff/roles",
   "/staff/settings",
   "/staff/master",
 ];

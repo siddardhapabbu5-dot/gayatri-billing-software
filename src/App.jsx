@@ -39,18 +39,15 @@ import {
   cancelRoomStay,
   checkInRoom,
   checkOutRoom,
-  clearAllBookings,
   createReservation,
   getState,
   issueDocument,
-  loadDeskCaseBookings,
   processCancellation,
   processRefund,
   approveRefund,
   reversePayment,
   removeDocument,
   removeGuest,
-  resetDemo,
   publishTermSets,
   saveHall,
   saveRoom,
@@ -86,6 +83,8 @@ const Billing = lazy(() => import("./pages/Billing.jsx"));
 const Reports = lazy(() => import("./pages/Reports.jsx"));
 const Expenses = lazy(() => import("./pages/Expenses.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
+const UserManagement = lazy(() => import("./pages/UserManagement.jsx"));
+const RolesPermissions = lazy(() => import("./pages/RolesPermissions.jsx"));
 const Master = lazy(() => import("./pages/Master.jsx"));
 const Documents = lazy(() => import("./pages/Documents.jsx"));
 const Assistant = lazy(() => import("./pages/Assistant.jsx"));
@@ -153,6 +152,8 @@ const GROUPS = [
     icon: "🛠",
     items: [
       { id: "assistant", label: "Assistant", perm: "dashboard" },
+      { id: "users", label: "User Management", perm: "user.manage" },
+      { id: "roles", label: "Roles & Permissions", perm: "users.permissions" },
       { id: "settings", label: "Settings", perm: "settings.property" },
       { id: "master", label: "Master data", perm: "settings.property" },
     ],
@@ -178,12 +179,18 @@ function permForPage(pageId) {
 }
 
 function canOpenPage(role, pageId, permissionList) {
-  if (pageId === "settings") {
+  if (pageId === "users") {
     return (
-      can(role, "settings.property", permissionList) ||
-      can(role, "users.permissions", permissionList) ||
-      can(role, "user.manage", permissionList)
+      can(role, "user.manage", permissionList) ||
+      can(role, "user.create.staff", permissionList) ||
+      can(role, "user.create.any", permissionList)
     );
+  }
+  if (pageId === "roles") {
+    return can(role, "users.permissions", permissionList) || normalizeRole(role) === "admin";
+  }
+  if (pageId === "settings") {
+    return can(role, "settings.property", permissionList);
   }
   return can(role, permForPage(pageId), permissionList);
 }
@@ -420,32 +427,6 @@ export default function App() {
   }, [authUser]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("clearAll") !== "1") return;
-    params.delete("clearAll");
-    const qs = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`);
-    void handleClearAllBookings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL clear
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("loadDesk") !== "1") return;
-    params.delete("loadDesk");
-    const qs = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`);
-    const out = loadDeskCaseBookings();
-    if (out?.error) {
-      window.alert(out.error);
-      return;
-    }
-    setState(getState());
-    window.alert("Loaded desk cases: Sriram, Siddhu, Siddardha (with payment + refund history).");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL load
-  }, []);
-
-  useEffect(() => {
     function applyLocation() {
       const next = pageFromLocation();
       if (!next) return;
@@ -604,28 +585,6 @@ export default function App() {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
     e.preventDefault();
     go(id);
-  }
-
-  async function handleClearAllBookings() {
-    if (
-      !window.confirm(
-        "Clear ALL bookings, guests, payments, invoices and uploaded documents?\n\nMaster data (halls, rooms, rates) is kept. Dashboard, Calendar and Documents will be empty."
-      )
-    ) {
-      return;
-    }
-    const next = await clearAllBookings();
-    setState(next);
-    setBookingId(null);
-    setPresetDate("");
-    setPresetGuestId("");
-    setFocusGuestId("");
-    setNavStack([]);
-    window.alert(
-      "Clean start complete.\n\nAll bookings, guests, payments, bills, document vault files and calendar entries are cleared."
-    );
-    go("desk");
-    window.location.reload();
   }
 
   function goBack() {
@@ -1133,35 +1092,15 @@ export default function App() {
                 state={state}
                 authRole={role}
                 permissions={rolePerms}
-                canManageUsers={canManageUsers}
-                canEditRolePermissions={canEditRolePermissions}
                 onProperty={(p) => setState(updateProperty(p))}
                 onPublishTerms={(sections) => setState(publishTermSets(sections))}
-                onUser={() => {}}
-                onReset={
-                  role === "admin"
-                    ? () => {
-                        if (window.confirm("Reload the Palagummi demo property? Current local data will be replaced.")) {
-                          setState(resetDemo());
-                        }
-                      }
-                    : null
-                }
-                onClearBookings={role === "admin" ? handleClearAllBookings : null}
-                onLoadDeskCases={
-                  role === "admin"
-                    ? () => {
-                        const out = loadDeskCaseBookings();
-                        if (out?.error) {
-                          window.alert(out.error);
-                          return;
-                        }
-                        setState(getState());
-                        window.alert("Loaded: Sriram, Siddhu, Siddardha.");
-                      }
-                    : null
-                }
               />
+            )}
+            {page === "users" && (
+              <UserManagement authRole={role} canManage={canManageUsers} />
+            )}
+            {page === "roles" && (
+              <RolesPermissions canEdit={canEditRolePermissions || role === "admin"} />
             )}
           </Suspense>
         </div>

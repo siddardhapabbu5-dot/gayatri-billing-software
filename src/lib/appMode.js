@@ -25,6 +25,8 @@ export const STAFF_PAGE_SLUGS = {
   billing: "billing",
   expenses: "expenses",
   reports: "reports",
+  users: "users",
+  roles: "roles",
   settings: "settings",
   master: "master",
   assistant: "assistant",
