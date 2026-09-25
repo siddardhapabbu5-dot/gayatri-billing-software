@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { createStaffUser, listStaffUsers, updateStaffUser } from "../api/client";
 
-const CREATE_ROLES = [
+const CREATE_ROLES_OWNER = [
   { value: "FRONTDESK", label: "Staff (desk)" },
   { value: "HOUSEKEEPING", label: "Housekeeping" },
   { value: "ACCOUNTS", label: "Accounts" },
   { value: "MANAGER", label: "Property manager" },
   { value: "ADMIN", label: "Owner administrator" },
 ];
+
+const CREATE_ROLES_MANAGER = [{ value: "FRONTDESK", label: "Staff (desk)" }];
 
 export default function StaffUsersPanel({ canManage, authRole }) {
   const [users, setUsers] = useState([]);
@@ -22,8 +24,14 @@ export default function StaffUsersPanel({ canManage, authRole }) {
     role: "FRONTDESK",
   });
 
-  const roleOptions =
-    authRole === "admin" ? CREATE_ROLES : CREATE_ROLES.filter((r) => r.value !== "ADMIN");
+  const isOwner = authRole === "admin";
+  const roleOptions = isOwner ? CREATE_ROLES_OWNER : CREATE_ROLES_MANAGER;
+
+  function canEditRow(u) {
+    const role = String(u.role || "").toUpperCase();
+    if (isOwner) return true;
+    return role === "FRONTDESK" || role === "STAFF";
+  }
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -92,8 +100,10 @@ export default function StaffUsersPanel({ canManage, authRole }) {
     <div className="panel">
       <h3>Users & roles</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
-        Create, deactivate, change role, or reset password. The last active Owner cannot be deactivated or demoted.
-        Every change is audited on the server.
+        {isOwner
+          ? "Create, deactivate, change role, or reset password. The last active Owner cannot be deactivated or demoted."
+          : "Managers may create and manage Staff (Front Desk) accounts only. Owner and Manager accounts are Owner-controlled."}
+        {" "}Every change is audited on the server.
       </p>
 
       {loading ? <p className="muted">Loading accounts…</p> : null}
@@ -116,39 +126,49 @@ export default function StaffUsersPanel({ canManage, authRole }) {
               <td>{u.name}</td>
               <td className="muted">{u.email}</td>
               <td>
-                <select
-                  value={String(u.role || "").toUpperCase()}
-                  disabled={busy}
-                  onChange={(e) => patchUser(u, { role: e.target.value })}
-                >
-                  {roleOptions.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+                {canEditRow(u) ? (
+                  <select
+                    value={String(u.role || "").toUpperCase()}
+                    disabled={busy}
+                    onChange={(e) => patchUser(u, { role: e.target.value })}
+                  >
+                    {roleOptions.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  String(u.role || "").toUpperCase()
+                )}
               </td>
               <td>{u.active ? "Active" : "Inactive"}</td>
               <td className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className="btn ghost small"
-                  disabled={busy}
-                  onClick={() => patchUser(u, { active: !u.active })}
-                >
-                  {u.active ? "Deactivate" : "Activate"}
-                </button>
-                <button
-                  type="button"
-                  className="btn ghost small"
-                  disabled={busy}
-                  onClick={() => {
-                    const pw = window.prompt("New password (min 8 characters)");
-                    if (pw) patchUser(u, { newPassword: pw });
-                  }}
-                >
-                  Reset password
-                </button>
+                {canEditRow(u) ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={busy}
+                      onClick={() => patchUser(u, { active: !u.active })}
+                    >
+                      {u.active ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={busy}
+                      onClick={() => {
+                        const pw = window.prompt("New password (min 8 characters)");
+                        if (pw) patchUser(u, { newPassword: pw });
+                      }}
+                    >
+                      Reset password
+                    </button>
+                  </>
+                ) : (
+                  <span className="muted">Owner only</span>
+                )}
               </td>
             </tr>
           ))}

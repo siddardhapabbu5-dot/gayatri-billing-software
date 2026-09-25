@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/admin/users")
-@PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_USER_CREATE_STAFF') or hasAuthority('PERM_USER_MANAGE') or hasAuthority('PERM_USER_CREATE_ANY')")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
 class AdminUserController {
   private final AuthService auth;
 

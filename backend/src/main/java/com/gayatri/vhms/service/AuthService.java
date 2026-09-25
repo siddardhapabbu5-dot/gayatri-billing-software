@@ -1,7 +1,6 @@
 package com.gayatri.vhms.service;
 
 import com.gayatri.vhms.config.JwtProperties;
-import com.gayatri.vhms.domain.PermissionKeys;
 import com.gayatri.vhms.domain.StaffRole;
 import com.gayatri.vhms.dto.AuthDtos.CreateUserRequest;
 import com.gayatri.vhms.dto.AuthDtos.LoginRequest;
@@ -91,9 +90,20 @@ public class AuthService {
 
   @Transactional
   public UserResponse updateUser(Long id, UpdateUserRequest req, StaffUserDetails principal) {
-    permissions.require(principal, PermissionKeys.USER_MANAGE);
     AppUser user = users.findById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    // Hard hierarchy: Manager may only touch Front Desk; only Owner may touch Owner/Manager.
+    assertCanManageAccount(principal, user);
+
+    boolean mutating =
+        (req.fullName() != null && !req.fullName().isBlank())
+            || (req.role() != null && !req.role().isBlank())
+            || req.active() != null
+            || (req.newPassword() != null && !req.newPassword().isBlank());
+    if (!mutating) {
+      return toUser(user);
+    }
 
     if (req.fullName() != null && !req.fullName().isBlank()) {
       user.setFullName(req.fullName().trim());
@@ -123,20 +133,59 @@ public class AuthService {
     return out;
   }
 
-  private void assertCanCreate(StaffUserDetails principal, StaffRole newRole) {
-    if (newRole == StaffRole.ADMIN) {
-      if (!permissions.can(principal, PermissionKeys.USER_CREATE_ANY)
-          && principal.getRole() != StaffRole.ADMIN) {
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can create administrator accounts");
+  /**
+   * System rules (not permission-toggleable):
+   * Owner may create any role; Manager may create Front Desk only; everyone else is denied.
+   */
+  void assertCanCreate(StaffUserDetails principal, StaffRole newRole) {
+    if (principal == null) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication required");
+    }
+    StaffRole actor = principal.getRole();
+    if (actor == StaffRole.ADMIN) {
+      return;
+    }
+    if (actor == StaffRole.MANAGER) {
+      if (newRole != StaffRole.FRONTDESK) {
+        throw new ResponseStatusException(
+            HttpStatus.FORBIDDEN,
+            "Manager may only create Staff (Front Desk) accounts"
+        );
       }
       return;
     }
-    if (!permissions.can(principal, PermissionKeys.USER_CREATE_STAFF)
-        && !permissions.can(principal, PermissionKeys.USER_CREATE_ANY)
-        && !permissions.can(principal, PermissionKeys.USER_MANAGE)
-        && !permissions.can(principal, PermissionKeys.ALL)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Missing permission to create staff");
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only Owner or Manager can create accounts");
+  }
+
+  /**
+   * System rules: only Owner may create/edit/deactivate/reset/change-role of Owner or Manager.
+   * Manager may manage Front Desk accounts only.
+   */
+  void assertCanManageAccount(StaffUserDetails principal, AppUser target) {
+    if (principal == null || target == null) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication required");
     }
+    StaffRole actor = principal.getRole();
+    StaffRole targetRole = target.getRole();
+    if (actor == StaffRole.ADMIN) {
+      return;
+    }
+    if (actor == StaffRole.MANAGER) {
+      if (targetRole == StaffRole.ADMIN || targetRole == StaffRole.MANAGER) {
+        throw new ResponseStatusException(
+            HttpStatus.FORBIDDEN,
+            "Only the Owner can manage Owner or Manager accounts"
+        );
+      }
+      if (targetRole != StaffRole.FRONTDESK) {
+        throw new ResponseStatusException(
+            HttpStatus.FORBIDDEN,
+            "Manager may only manage Staff (Front Desk) accounts"
+        );
+      }
+      return;
+    }
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Missing permission to manage users");
   }
 
   private void protectLastOwner(AppUser target) {

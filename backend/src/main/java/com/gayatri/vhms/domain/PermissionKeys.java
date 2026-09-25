@@ -54,7 +54,11 @@ public final class PermissionKeys {
   public static final String USER_MANAGE = "user.manage";
   public static final String USERS_PERMISSIONS = "users.permissions";
 
-  /** Catalog shown on Owner Roles & Permissions screen (editable day-to-day keys). */
+  /**
+   * Catalog on Owner Roles & Permissions screen.
+   * Account-hierarchy keys ({@link #USER_CREATE_STAFF}, {@link #USER_MANAGE}, Owner-only keys)
+   * are NOT editable — AuthService hard-codes who may create/manage which roles.
+   */
   public static final List<String> EDITABLE = List.of(
       DASHBOARD, CALENDAR, VENUES, ROOMS, RESERVATIONS, GUESTS, BILLING, DOCUMENTS, EXPENSES, VENDORS,
       REPORTS, SETTINGS_PROPERTY,
@@ -65,13 +69,20 @@ public final class PermissionKeys {
       VENUES_EDIT, PRICES_EDIT,
       ROOMS_HOUSEKEEPING, ROOMS_STATUS,
       GUESTS_VIEW, GUESTS_EDIT,
-      REPORTS_FINANCE, REPORTS_ALL,
-      USER_CREATE_STAFF, USER_MANAGE
+      REPORTS_FINANCE, REPORTS_ALL
   );
 
   /** Never grant via UI to non-Owner; Owner-only system keys. */
   public static final Set<String> OWNER_ONLY = Set.of(
       USERS_PERMISSIONS, USER_CREATE_ANY, SETTINGS_ROLES, ALL
+  );
+
+  /**
+   * Account-control keys: fixed by role hierarchy. Stripped from non-Owner/non-Manager
+   * even if a stale role_permissions row tries to grant them.
+   */
+  public static final Set<String> ACCOUNT_CONTROL = Set.of(
+      USER_CREATE_STAFF, USER_CREATE_ANY, USER_MANAGE, USERS_PERMISSIONS
   );
 
   public static String toAuthority(String permission) {

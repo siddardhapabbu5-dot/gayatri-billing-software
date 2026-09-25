@@ -51,6 +51,10 @@ public class PermissionService {
     if (role != StaffRole.ADMIN) {
       base.removeAll(PermissionKeys.OWNER_ONLY);
     }
+    // Account-control keys never stick on Front Desk / Accounts / Housekeeping via DB
+    if (role != StaffRole.ADMIN && role != StaffRole.MANAGER) {
+      base.removeAll(PermissionKeys.ACCOUNT_CONTROL);
+    }
     return CollectionsUnmodifiable(base);
   }
 
@@ -121,7 +125,9 @@ public class PermissionService {
     Instant now = Instant.now();
     for (Map.Entry<String, Boolean> e : desired.entrySet()) {
       String key = e.getKey();
-      if (!PermissionKeys.EDITABLE.contains(key) || PermissionKeys.OWNER_ONLY.contains(key)) {
+      if (!PermissionKeys.EDITABLE.contains(key)
+          || PermissionKeys.OWNER_ONLY.contains(key)
+          || PermissionKeys.ACCOUNT_CONTROL.contains(key)) {
         continue;
       }
       boolean want = Boolean.TRUE.equals(e.getValue());
