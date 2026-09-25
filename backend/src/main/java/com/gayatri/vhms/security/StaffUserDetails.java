@@ -60,11 +60,15 @@ public class StaffUserDetails implements UserDetails {
   public boolean isAccountNonExpired() { return true; }
 
   @Override
-  public boolean isAccountNonLocked() { return user.isActive(); }
+  public boolean isAccountNonLocked() {
+    return user.isActive() && !user.isRemoved();
+  }
 
   @Override
   public boolean isCredentialsNonExpired() { return true; }
 
   @Override
-  public boolean isEnabled() { return user.isActive(); }
+  public boolean isEnabled() {
+    return user.isActive() && !user.isRemoved();
+  }
 }

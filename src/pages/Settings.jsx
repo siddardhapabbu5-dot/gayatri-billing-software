@@ -133,9 +133,8 @@ export default function Settings({
           <div className="panel" style={{ gridColumn: "1 / -1" }}>
             <h3>Document storage</h3>
             <p className="muted" style={{ margin: 0 }}>
-              Guest ID, hall contracts and payment proofs are saved on this computer (browser IndexedDB).
-              View in the software, save a copy to Downloads, or re-upload on another PC. PDF or image up to 8 MB;
-              video (MP4, MOV, WebM) up to 100 MB.
+              Guest ID proofs, contracts and payment proofs are stored on the Gayatri server when you upload them from Documents.
+              PDF or image up to 8 MB; video (MP4, MOV, WebM) up to 100 MB.
             </p>
           </div>
         </div>

@@ -1263,6 +1263,11 @@ textarea.lang-hi { font-family: "Noto Sans Devanagari", inherit; }
 .user-status.is-inactive {
   color: var(--muted);
 }
+.user-status.is-removed {
+  color: var(--due);
+  border-color: #f0c7c3;
+  background: #fff5f4;
+}
 .rbac-page { display: flex; flex-direction: column; gap: 12px; }
 .rbac-banner { margin: 0; }
 .rbac-rules-list {

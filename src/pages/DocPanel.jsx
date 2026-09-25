@@ -70,7 +70,7 @@ export default function DocPanel({ state, bookingId, guestId, types: typeOverrid
       {cov && (
         <p className="muted">
           {cov.ok ? "All required documents are on file." : `${cov.missing.length} required document(s) missing.`}{" "}
-          Storage: this computer (IndexedDB) · PDF, image or video · images/PDF max 8 MB · videos max 100 MB. Wrong file? Use Delete, then Upload.
+          Storage: Gayatri server · PDF, image or video · images/PDF max 8 MB · videos max 100 MB. Wrong file? Use Delete, then Upload.
         </p>
       )}
       {err && <p style={{ color: "var(--due)" }}>{err}</p>}

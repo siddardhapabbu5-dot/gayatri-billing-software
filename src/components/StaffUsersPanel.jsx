@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createStaffUser, listStaffUsers, updateStaffUser } from "../api/client";
+import { createStaffUser, listStaffUsers, removeStaffUser, updateStaffUser } from "../api/client";
 
 const ROLE_LABEL = {
   ADMIN: "Owner",
@@ -26,6 +26,8 @@ function roleName(role) {
 
 export default function StaffUsersPanel({ canManage, authRole, standalone = false }) {
   const [users, setUsers] = useState([]);
+  const [archived, setArchived] = useState([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -46,18 +48,29 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
     return role === "FRONTDESK" || role === "STAFF";
   }
 
+  function canRemoveRow(u) {
+    if (u.removed) return false;
+    return canEditRow(u);
+  }
+
   const load = useCallback(async () => {
     if (!canManage) return;
     setLoading(true);
     setError("");
     try {
-      setUsers(await listStaffUsers());
+      const live = await listStaffUsers(false);
+      setUsers(live);
+      if (isOwner && showArchived) {
+        setArchived(await listStaffUsers(true));
+      } else {
+        setArchived([]);
+      }
     } catch (err) {
       setError(err.message || "Could not load users");
     } finally {
       setLoading(false);
     }
-  }, [canManage]);
+  }, [canManage, isOwner, showArchived]);
 
   useEffect(() => {
     load();
@@ -76,7 +89,7 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
         role: form.role,
       });
       setForm({ fullName: "", email: "", password: "", role: "FRONTDESK" });
-      setNote("Account created. They can sign in on the staff desk with this email and password.");
+      setNote("Account created.");
       await load();
     } catch (err) {
       setError(err.message || "Could not create user");
@@ -100,6 +113,30 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
     }
   }
 
+  async function removeUser(u) {
+    const name = u.name || "this account";
+    const email = u.email || "";
+    if (
+      !window.confirm(
+        `Remove account for ${name} (${email})?\n\nThey will not be able to sign in. Bookings, payments, documents and audit history stay on record.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      await removeStaffUser(u.serverId);
+      setNote(`Removed ${name}.`);
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not remove account");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!canManage) {
     return (
       <div className="panel">
@@ -109,17 +146,103 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
     );
   }
 
+  function renderRows(list, { archivedView = false } = {}) {
+    return list.map((u) => {
+      const roleKey = String(u.role || "").toUpperCase();
+      return (
+        <tr key={u.id} className={u.active && !u.removed ? undefined : "muted"}>
+          <td>{u.name}</td>
+          <td className="muted">{u.email}</td>
+          <td>
+            {!archivedView && canEditRow(u) ? (
+              <select
+                value={roleKey === "STAFF" ? "FRONTDESK" : roleKey}
+                disabled={busy}
+                onChange={(e) => patchUser(u, { role: e.target.value })}
+                aria-label={`Role for ${u.name}`}
+              >
+                {roleOptions.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+                {isOwner && roleKey === "ADMIN" ? <option value="ADMIN">Owner</option> : null}
+              </select>
+            ) : (
+              <strong>{roleName(u.role)}</strong>
+            )}
+          </td>
+          <td>
+            <span
+              className={`user-status${
+                u.removed ? " is-removed" : u.active ? " is-active" : " is-inactive"
+              }`}
+            >
+              {u.removed ? "Removed" : u.active ? "Active" : "Inactive"}
+            </span>
+          </td>
+          <td className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {!archivedView && canEditRow(u) ? (
+              <>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={busy}
+                  onClick={() => patchUser(u, { active: !u.active })}
+                >
+                  {u.active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={busy}
+                  onClick={() => {
+                    const pw = window.prompt("New password (min 8 characters)");
+                    if (pw) patchUser(u, { newPassword: pw });
+                  }}
+                >
+                  Reset password
+                </button>
+                {canRemoveRow(u) ? (
+                  <button
+                    type="button"
+                    className="btn danger small"
+                    disabled={busy}
+                    onClick={() => removeUser(u)}
+                  >
+                    Remove account
+                  </button>
+                ) : null}
+              </>
+            ) : archivedView ? (
+              <span className="muted">Archived</span>
+            ) : (
+              <span className="muted">Owner only</span>
+            )}
+          </td>
+        </tr>
+      );
+    });
+  }
+
   return (
     <div className={`users-mgmt${standalone ? " users-mgmt-standalone" : ""}`}>
       <div className="panel">
-        <h3>Staff accounts</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>
-          {isOwner
-            ? "Create Manager or Staff accounts, change roles, deactivate, or reset passwords. The last active Owner cannot be deactivated or demoted."
-            : "Managers may create and manage Front Desk Staff only. Owner and Manager accounts are Owner-controlled."}
-        </p>
+        <div className="panel-head">
+          <h3>Staff accounts</h3>
+          {isOwner ? (
+            <button
+              type="button"
+              className="btn ghost small"
+              disabled={busy}
+              onClick={() => setShowArchived((v) => !v)}
+            >
+              {showArchived ? "Hide archived" : "Show archived"}
+            </button>
+          ) : null}
+        </div>
 
-        {loading ? <p className="muted">Loading accounts…</p> : null}
+        {loading ? <p className="muted">Loading…</p> : null}
         {error ? <p className="staff-login-error" style={{ marginBottom: 8 }}>{error}</p> : null}
         {note ? <p className="pill ok" style={{ marginBottom: 8 }}>{note}</p> : null}
 
@@ -135,68 +258,7 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => {
-                const roleKey = String(u.role || "").toUpperCase();
-                return (
-                  <tr key={u.id} className={u.active ? undefined : "muted"}>
-                    <td>{u.name}</td>
-                    <td className="muted">{u.email}</td>
-                    <td>
-                      {canEditRow(u) ? (
-                        <select
-                          value={roleKey === "STAFF" ? "FRONTDESK" : roleKey}
-                          disabled={busy}
-                          onChange={(e) => patchUser(u, { role: e.target.value })}
-                          aria-label={`Role for ${u.name}`}
-                        >
-                          {roleOptions.map((r) => (
-                            <option key={r.value} value={r.value}>
-                              {r.label}
-                            </option>
-                          ))}
-                          {isOwner && roleKey === "ADMIN" ? (
-                            <option value="ADMIN">Owner</option>
-                          ) : null}
-                        </select>
-                      ) : (
-                        <strong>{roleName(u.role)}</strong>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`user-status${u.active ? " is-active" : " is-inactive"}`}>
-                        {u.active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                      {canEditRow(u) ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn ghost small"
-                            disabled={busy}
-                            onClick={() => patchUser(u, { active: !u.active })}
-                          >
-                            {u.active ? "Deactivate" : "Activate"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn ghost small"
-                            disabled={busy}
-                            onClick={() => {
-                              const pw = window.prompt("New password (min 8 characters)");
-                              if (pw) patchUser(u, { newPassword: pw });
-                            }}
-                          >
-                            Reset password
-                          </button>
-                        </>
-                      ) : (
-                        <span className="muted">Owner only</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {renderRows(users)}
               {!loading && !users.length ? (
                 <tr>
                   <td colSpan={5} className="muted">
@@ -208,6 +270,35 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
           </table>
         </div>
       </div>
+
+      {isOwner && showArchived ? (
+        <div className="panel" style={{ marginTop: 12 }}>
+          <h3>Archived accounts</h3>
+          <div className="table-wrap">
+            <table className="users-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {renderRows(archived, { archivedView: true })}
+                {!archived.length ? (
+                  <tr>
+                    <td colSpan={5} className="muted">
+                      No archived accounts.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       <div className="panel" style={{ marginTop: 12 }}>
         <h3>Create account</h3>

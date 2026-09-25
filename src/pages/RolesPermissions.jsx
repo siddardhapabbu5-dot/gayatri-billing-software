@@ -4,10 +4,7 @@ import { PageHead } from "../ui";
 export default function RolesPermissions({ canEdit }) {
   return (
     <>
-      <PageHead
-        title="Roles & Permissions"
-        sub="Owner controls for day-to-day staff actions, manager refund limit, and audit history."
-      />
+      <PageHead title="Roles & Permissions" sub="Staff actions and refund limit" />
       <RolesPermissionsPanel canEdit={canEdit} />
     </>
   );

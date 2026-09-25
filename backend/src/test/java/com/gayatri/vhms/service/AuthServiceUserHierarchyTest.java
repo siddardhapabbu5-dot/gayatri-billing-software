@@ -184,13 +184,58 @@ class AuthServiceUserHierarchyTest {
 
     AppUser soleOwner = stored(1L, "owner@test.local", StaffRole.ADMIN);
     when(users.findById(1L)).thenReturn(Optional.of(soleOwner));
-    when(users.countByRoleAndActiveTrue(StaffRole.ADMIN)).thenReturn(1L);
+    when(users.countByRoleAndActiveTrueAndRemovedAtIsNull(StaffRole.ADMIN)).thenReturn(1L);
 
     ResponseStatusException ex = assertThrows(
         ResponseStatusException.class,
         () -> auth.updateUser(1L, new UpdateUserRequest(null, null, false, null), owner)
     );
     assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+  }
+
+  @Test
+  void managerCanRemoveFrontDeskButNotManager() {
+    StaffUserDetails manager = principal(StaffRole.MANAGER);
+    AppUser staff = stored(10L, "staff@test.local", StaffRole.FRONTDESK);
+    when(users.findById(10L)).thenReturn(Optional.of(staff));
+    when(permissions.effectivePermissions(StaffRole.FRONTDESK)).thenReturn(Set.of("billing"));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    UserResponse out = auth.removeUser(10L, manager);
+    assertEquals(true, out.removed());
+    assertEquals(false, out.active());
+
+    AppUser otherMgr = stored(3L, "mgr2@test.local", StaffRole.MANAGER);
+    when(users.findById(3L)).thenReturn(Optional.of(otherMgr));
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class,
+        () -> auth.removeUser(3L, manager)
+    );
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+  }
+
+  @Test
+  void cannotRemoveLastActiveOwner() {
+    AppUser actor = stored(2L, "owner2@test.local", StaffRole.ADMIN);
+    StaffUserDetails owner = new StaffUserDetails(actor);
+    AppUser sole = stored(1L, "owner@test.local", StaffRole.ADMIN);
+    when(users.findById(1L)).thenReturn(Optional.of(sole));
+    when(users.countByRoleAndActiveTrueAndRemovedAtIsNull(StaffRole.ADMIN)).thenReturn(1L);
+
+    ResponseStatusException ex = assertThrows(
+        ResponseStatusException.class,
+        () -> auth.removeUser(1L, owner)
+    );
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+  }
+
+  @Test
+  void legacyInactiveDemoEmailsAreHiddenFromNormalList() {
+    AppUser demo = stored(8L, "desk@gayatrifunctionhall.com", StaffRole.FRONTDESK);
+    demo.setActive(false);
+    assertTrue(AuthService.isLegacyHiddenDemo(demo));
+    AppUser live = stored(9L, "desk@gayatri.local", StaffRole.FRONTDESK);
+    assertTrue(!AuthService.isLegacyHiddenDemo(live));
   }
 
   @Test

@@ -533,9 +533,13 @@ export default function App() {
   function logoutStaff() {
     clearAuth();
     setAuthUser(null);
-    setStaffGate(false);
-    goPublicHome();
-    setPage("home");
+    setBookingId(null);
+    setNavStack([]);
+    setPendingStaffPage("desk");
+    enableStaffAppMode();
+    window.history.replaceState(null, "", STAFF_PATH);
+    setStaffGate(true);
+    setPage("login");
   }
 
   function go(id, extra = {}) {

@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,8 +41,11 @@ class AdminUserController {
   }
 
   @GetMapping
-  public List<UserResponse> list() {
-    return auth.listUsers();
+  public List<UserResponse> list(
+      @RequestParam(defaultValue = "false") boolean archived,
+      @AuthenticationPrincipal StaffUserDetails principal
+  ) {
+    return auth.listUsers(archived, principal);
   }
 
   @PostMapping
@@ -60,6 +64,14 @@ class AdminUserController {
       @AuthenticationPrincipal StaffUserDetails principal
   ) {
     return auth.updateUser(id, req, principal);
+  }
+
+  @PostMapping("/{id}/remove")
+  public UserResponse remove(
+      @PathVariable Long id,
+      @AuthenticationPrincipal StaffUserDetails principal
+  ) {
+    return auth.removeUser(id, principal);
   }
 }
 

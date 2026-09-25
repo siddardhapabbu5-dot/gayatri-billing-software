@@ -31,7 +31,9 @@ public final class AuthDtos {
       StaffRole role,
       String roleLabel,
       Set<String> permissions,
-      boolean active
+      boolean active,
+      boolean removed,
+      java.time.Instant removedAt
   ) {}
 
   public record RoleInfo(String role, String label, Set<String> permissions) {}

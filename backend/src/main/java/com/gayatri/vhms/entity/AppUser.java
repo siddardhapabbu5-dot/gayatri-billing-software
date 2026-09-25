@@ -37,6 +37,10 @@ public class AppUser {
   @Column(nullable = false)
   private boolean active = true;
 
+  /** When set, the account is archived: no login, hidden from the normal user list. Row kept for history. */
+  @Column(name = "removed_at")
+  private Instant removedAt;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -67,6 +71,9 @@ public class AppUser {
   public void setRole(StaffRole role) { this.role = role; }
   public boolean isActive() { return active; }
   public void setActive(boolean active) { this.active = active; }
+  public Instant getRemovedAt() { return removedAt; }
+  public void setRemovedAt(Instant removedAt) { this.removedAt = removedAt; }
+  public boolean isRemoved() { return removedAt != null; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

@@ -188,12 +188,11 @@ export default function RolesPermissionsPanel({ canEdit }) {
         [role]: { ...(roles[role] || {}) },
       }));
       setDirty((d) => ({ ...d, [role]: false }));
-      setNote(`Saved permissions for ${ROLE_LABEL[role] || role}. Only this role was updated.`);
+      setNote(`Saved ${ROLE_LABEL[role] || role}.`);
       const a = await fetchRbacAudit().catch(() => []);
       setAudit(a || []);
     } catch (err) {
-      // Keep draft / dirty so the Owner can retry without losing toggles.
-      setError(err.message || "Save failed — your selections are still on screen.");
+      setError(err.message || "Save failed — selections kept.");
     } finally {
       setBusy(false);
     }
@@ -232,21 +231,17 @@ export default function RolesPermissionsPanel({ canEdit }) {
       {note ? <p className="pill ok rbac-banner">{note}</p> : null}
 
       <div className="panel rbac-rules">
-        <h3>Protected system rules</h3>
+        <h3>Protected rules</h3>
         <ul className="rbac-rules-list">
-          <li>Owner permissions are fixed and never edited here.</li>
-          <li>Only the Owner can create or manage Owner and Manager accounts.</li>
-          <li>Managers may create and manage Front Desk Staff only — not Accounts, Housekeeping, Manager, or Owner.</li>
-          <li>Account-control permissions cannot be granted through these toggles.</li>
-          <li>Saving updates one selected role only; other roles keep their saved settings.</li>
+          <li>Owner permissions are fixed.</li>
+          <li>Only Owner manages Owner and Manager accounts.</li>
+          <li>Manager manages Front Desk Staff only.</li>
+          <li>Save updates the selected role only.</li>
         </ul>
       </div>
 
       <div className="panel rbac-limit">
         <h3>Manager refund approval limit</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>
-          Separate from permission toggles. Managers may approve refunds up to this amount (₹). Larger refunds need Owner approval.
-        </p>
         <div className="rbac-limit-row">
           <label>
             Limit (₹)
@@ -270,13 +265,8 @@ export default function RolesPermissionsPanel({ canEdit }) {
 
       <div className="panel rbac-matrix">
         <div className="panel-head rbac-matrix-head">
-          <div>
-            <h3>Day-to-day permissions</h3>
-            <p className="muted" style={{ margin: "4px 0 0" }}>
-              Choose a role, adjust actions, then Save. Unsaved changes stay visible if Save fails.
-            </p>
-          </div>
-          {dirty[role] ? <span className="pill warn">Unsaved changes</span> : null}
+          <h3>Permissions</h3>
+          {dirty[role] ? <span className="pill warn">Unsaved</span> : null}
         </div>
 
         <div className="rbac-role-tabs" role="tablist" aria-label="Staff role">
@@ -353,9 +343,6 @@ export default function RolesPermissionsPanel({ canEdit }) {
 
       <div className="panel rbac-audit">
         <h3>Audit history</h3>
-        <p className="muted" style={{ marginBottom: 10 }}>
-          Account and permission changes recorded on the server.
-        </p>
         <div className="table-wrap">
           <table>
             <thead>
@@ -363,7 +350,7 @@ export default function RolesPermissionsPanel({ canEdit }) {
                 <th>Date</th>
                 <th>Actor</th>
                 <th>Action</th>
-                <th>Affected item</th>
+                <th>Item</th>
               </tr>
             </thead>
             <tbody>

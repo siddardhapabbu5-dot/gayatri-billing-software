@@ -195,4 +195,32 @@ class AdminUserHierarchyApiTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.active").value(false));
   }
+
+  @Test
+  void managerCanRemoveFrontDeskViaApi() throws Exception {
+    when(users.findById(10L)).thenReturn(Optional.of(stored(10L, "staff@gayatri.local", StaffRole.FRONTDESK)));
+    when(permissions.effectivePermissions(StaffRole.FRONTDESK)).thenReturn(Set.of("billing"));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    mvc.perform(post("/api/admin/users/10/remove")
+            .with(authentication(asManager()))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.removed").value(true))
+        .andExpect(jsonPath("$.active").value(false));
+  }
+
+  @Test
+  void managerCannotRemoveOwnerViaApi() throws Exception {
+    when(users.findById(1L)).thenReturn(Optional.of(stored(1L, "owner@gayatri.local", StaffRole.ADMIN)));
+
+    mvc.perform(post("/api/admin/users/1/remove")
+            .with(authentication(asManager()))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isForbidden());
+
+    verify(users, never()).save(any());
+  }
 }

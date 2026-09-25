@@ -12,8 +12,10 @@ import com.gayatri.vhms.entity.AppUser;
 import com.gayatri.vhms.repository.AppUserRepository;
 import com.gayatri.vhms.security.JwtService;
 import com.gayatri.vhms.security.StaffUserDetails;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -52,10 +54,17 @@ public class AuthService {
   }
 
   public LoginResponse login(LoginRequest req) {
+    AppUser existing = users.findByEmailIgnoreCase(req.email().trim().toLowerCase()).orElse(null);
+    if (existing != null && existing.isRemoved()) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "This account has been removed");
+    }
     var auth = authManager.authenticate(
         new UsernamePasswordAuthenticationToken(req.email().trim().toLowerCase(), req.password())
     );
     StaffUserDetails principal = (StaffUserDetails) auth.getPrincipal();
+    if (!principal.isEnabled()) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Account is inactive or removed");
+    }
     String token = jwtService.generateToken(principal);
     return new LoginResponse(token, "Bearer", jwtProperties.getExpirationMs(), toUser(principal.getUser()));
   }
@@ -83,6 +92,7 @@ public class AuthService {
     user.setRole(newRole);
     user.setPasswordHash(encoder.encode(req.password()));
     user.setActive(true);
+    user.setRemovedAt(null);
     UserResponse out = toUser(users.save(user));
     audit.record(principal, "user.create", "app_users", out.email() + " role=" + newRole.name());
     return out;
@@ -92,8 +102,10 @@ public class AuthService {
   public UserResponse updateUser(Long id, UpdateUserRequest req, StaffUserDetails principal) {
     AppUser user = users.findById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    if (user.isRemoved()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Account is already removed");
+    }
 
-    // Hard hierarchy: Manager may only touch Front Desk; only Owner may touch Owner/Manager.
     assertCanManageAccount(principal, user);
 
     boolean mutating =
@@ -134,9 +146,30 @@ public class AuthService {
   }
 
   /**
-   * System rules (not permission-toggleable):
-   * Owner may create any role; Manager may create Front Desk only; everyone else is denied.
+   * Soft-remove: sets removed_at, deactivates, keeps the row for booking/payment/audit FKs.
+   * Owner may remove Managers and Staff; Manager may remove Front Desk Staff only.
    */
+  @Transactional
+  public UserResponse removeUser(Long id, StaffUserDetails principal) {
+    AppUser user = users.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    if (user.isRemoved()) {
+      return toUser(user);
+    }
+    assertCanRemoveAccount(principal, user);
+    if (user.getRole() == StaffRole.ADMIN) {
+      protectLastOwner(user);
+    }
+    if (principal.getUser().getId().equals(user.getId())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot remove your own account");
+    }
+    user.setActive(false);
+    user.setRemovedAt(Instant.now());
+    UserResponse out = toUser(users.save(user));
+    audit.record(principal, "user.remove", "app_users", out.email() + " role=" + out.role().name());
+    return out;
+  }
+
   void assertCanCreate(StaffUserDetails principal, StaffRole newRole) {
     if (principal == null) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication required");
@@ -157,10 +190,6 @@ public class AuthService {
     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only Owner or Manager can create accounts");
   }
 
-  /**
-   * System rules: only Owner may create/edit/deactivate/reset/change-role of Owner or Manager.
-   * Manager may manage Front Desk accounts only.
-   */
   void assertCanManageAccount(StaffUserDetails principal, AppUser target) {
     if (principal == null || target == null) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication required");
@@ -188,17 +217,47 @@ public class AuthService {
     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Missing permission to manage users");
   }
 
-  private void protectLastOwner(AppUser target) {
-    long activeOwners = users.countByRoleAndActiveTrue(StaffRole.ADMIN);
-    if (target.isActive() && activeOwners <= 1) {
+  /** Owner: Managers + Staff roles. Manager: Front Desk only. Staff: never. */
+  void assertCanRemoveAccount(StaffUserDetails principal, AppUser target) {
+    assertCanManageAccount(principal, target);
+    StaffRole actor = principal.getRole();
+    if (actor == StaffRole.MANAGER && target.getRole() != StaffRole.FRONTDESK) {
       throw new ResponseStatusException(
-          HttpStatus.CONFLICT, "Cannot deactivate or demote the last active Owner account"
+          HttpStatus.FORBIDDEN,
+          "Manager may only remove Staff (Front Desk) accounts"
       );
     }
   }
 
-  public List<UserResponse> listUsers() {
-    return users.findAll().stream().map(this::toUser).toList();
+  private void protectLastOwner(AppUser target) {
+    long activeOwners = users.countByRoleAndActiveTrueAndRemovedAtIsNull(StaffRole.ADMIN);
+    if (target.isActive() && !target.isRemoved() && activeOwners <= 1) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Cannot deactivate or remove the last active Owner account"
+      );
+    }
+  }
+
+  /** Normal list excludes removed accounts and legacy inactive demo emails. */
+  public List<UserResponse> listUsers(boolean archived, StaffUserDetails principal) {
+    if (archived) {
+      if (principal == null || principal.getRole() != StaffRole.ADMIN) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the Owner can view archived accounts");
+      }
+      return users.findArchivedAccounts().stream().map(this::toUser).toList();
+    }
+    return users.findByRemovedAtIsNullOrderByFullNameAsc().stream()
+        .filter(u -> !isLegacyHiddenDemo(u))
+        .map(this::toUser)
+        .toList();
+  }
+
+  /** Inactive @gayatrifunctionhall.com demos stay hidden from the normal list until soft-removed by migration. */
+  static boolean isLegacyHiddenDemo(AppUser u) {
+    if (u.isRemoved()) return true;
+    if (u.isActive()) return false;
+    String email = u.getEmail() == null ? "" : u.getEmail().toLowerCase(Locale.ROOT);
+    return email.endsWith("@gayatrifunctionhall.com");
   }
 
   private UserResponse toUser(AppUser u) {
@@ -210,15 +269,17 @@ public class AuthService {
         u.getRole(),
         label(u.getRole()),
         perms,
-        u.isActive()
+        u.isActive(),
+        u.isRemoved(),
+        u.getRemovedAt()
     );
   }
 
   private static String label(StaffRole role) {
     return switch (role) {
-      case ADMIN -> "Owner administrator";
-      case MANAGER -> "Property manager";
-      case FRONTDESK -> "Staff";
+      case ADMIN -> "Owner";
+      case MANAGER -> "Manager";
+      case FRONTDESK -> "Staff / Front Desk";
       case HOUSEKEEPING -> "Housekeeping";
       case ACCOUNTS -> "Accounts";
     };

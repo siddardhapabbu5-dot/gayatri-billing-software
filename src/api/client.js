@@ -126,8 +126,9 @@ export async function healthCheck() {
   }
 }
 
-export async function listStaffUsers() {
-  const data = await api("/api/admin/users");
+export async function listStaffUsers(archived = false) {
+  const q = archived ? "?archived=true" : "";
+  const data = await api(`/api/admin/users${q}`);
   return (data || []).map((u) => ({
     id: `api-${u.id}`,
     serverId: u.id,
@@ -137,6 +138,8 @@ export async function listStaffUsers() {
     roleLabel: u.roleLabel,
     permissions: u.permissions || [],
     active: u.active !== false,
+    removed: Boolean(u.removed),
+    removedAt: u.removedAt || null,
   }));
 }
 
@@ -154,6 +157,8 @@ export async function createStaffUser({ email, password, fullName, role }) {
     roleLabel: data.roleLabel,
     permissions: data.permissions || [],
     active: data.active !== false,
+    removed: Boolean(data.removed),
+    removedAt: data.removedAt || null,
   };
 }
 
@@ -171,6 +176,27 @@ export async function updateStaffUser(serverId, patch) {
     roleLabel: data.roleLabel,
     permissions: data.permissions || [],
     active: data.active !== false,
+    removed: Boolean(data.removed),
+    removedAt: data.removedAt || null,
+  };
+}
+
+export async function removeStaffUser(serverId) {
+  const data = await api(`/api/admin/users/${serverId}/remove`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return {
+    id: `api-${data.id}`,
+    serverId: data.id,
+    name: data.fullName,
+    email: data.email,
+    role: String(data.role || "").toLowerCase(),
+    roleLabel: data.roleLabel,
+    permissions: data.permissions || [],
+    active: data.active !== false,
+    removed: Boolean(data.removed),
+    removedAt: data.removedAt || null,
   };
 }
 
