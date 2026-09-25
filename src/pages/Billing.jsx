@@ -10,6 +10,7 @@ import {
 import { bookingFolio, collectionsReport } from "../engine";
 import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
+import { canPerm, PERMS } from "../lib/permissions.js";
 import { PageHead, Pill } from "../ui";
 
 const DOCS = ["Quotation", "Proforma invoice", "Tax invoice", "Advance receipt", "Payment receipt", "Credit note", "Debit note", "Refund receipt", "Final invoice"];
@@ -130,6 +131,7 @@ function partyMatch(state, booking, pays, q) {
 export default function Billing({
   state,
   focusId,
+  permissions,
   onPay,
   onDiscount,
   onCharge,
@@ -159,6 +161,17 @@ export default function Billing({
   const cur = state.property.currency;
   const loc = state.property.locale;
   const m = (n) => money(n, cur, loc);
+  const canPay = canPerm(permissions, PERMS.PAYMENT_RECORD) || canPerm(permissions, PERMS.BILLING);
+  const canInvoice = canPerm(permissions, PERMS.INVOICE_ISSUE) || canPerm(permissions, PERMS.BILLING);
+  const canCancel =
+    canPerm(permissions, PERMS.BOOKING_CANCEL_APPROVE) || canPerm(permissions, PERMS.BOOKING_CANCEL_REQUEST);
+  const canRefundReq =
+    canPerm(permissions, PERMS.REFUND_REQUEST) ||
+    canPerm(permissions, PERMS.REFUND_APPROVE) ||
+    canPerm(permissions, PERMS.REFUND_PROCESS);
+  const canApproveRefund = canPerm(permissions, PERMS.REFUND_APPROVE);
+  const canProcessRefund =
+    canPerm(permissions, PERMS.REFUND_PROCESS) || canApproveRefund;
 
   useEffect(() => {
     try {
@@ -214,14 +227,16 @@ export default function Billing({
             {backLabel || "Back"}
           </button>
           <button className="btn ghost" onClick={() => onDocs?.(booking.id)}>KYC documents</button>
-          {booking.status !== "Cancelled" ? (
+          {booking.status !== "Cancelled" && canCancel ? (
             <button className="btn danger" type="button" onClick={() => setCancelOpen(true)}>
               Cancel booking
             </button>
           ) : null}
-          <button className="btn ghost" type="button" onClick={() => setRefundOpen(true)}>
-            Process refund
-          </button>
+          {canRefundReq ? (
+            <button className="btn ghost" type="button" onClick={() => setRefundOpen(true)}>
+              Process refund
+            </button>
+          ) : null}
           <button className="btn" onClick={() => window.print()}>Print / PDF</button>
         </PageHead>
         <BookingFinanceBar state={state} bookingId={booking.id} />
@@ -578,7 +593,7 @@ export default function Billing({
                 ))}
               </tbody>
             </table>
-            {folio && totals.balance > 0 ? (
+            {folio && totals.balance > 0 && canPay ? (
               <form
                 className="fields two"
                 style={{ marginTop: 10 }}
@@ -630,30 +645,36 @@ export default function Billing({
                 >
                   Discount
                 </button>
-                <button
-                  className="btn danger small"
-                  type="button"
-                  onClick={() => setRefundOpen(true)}
-                >
-                  Refund
-                </button>
+                {canRefundReq ? (
+                  <button
+                    className="btn danger small"
+                    type="button"
+                    onClick={() => setRefundOpen(true)}
+                  >
+                    Refund
+                  </button>
+                ) : null}
               </form>
             ) : folio ? (
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                <span className="muted">Fully paid — settlement form hidden.</span>
-                <button
-                  className="btn ghost small"
-                  type="button"
-                  onClick={() => {
-                    const d = window.prompt("Discount", folio.discount);
-                    if (d != null) onDiscount(folio.id, d);
-                  }}
-                >
-                  Discount
-                </button>
-                <button className="btn danger small" type="button" onClick={() => setRefundOpen(true)}>
-                  Refund
-                </button>
+                <span className="muted">{canPay ? "Fully paid — settlement form hidden." : "View only — recording payments requires permission."}</span>
+                {canPay ? (
+                  <button
+                    className="btn ghost small"
+                    type="button"
+                    onClick={() => {
+                      const d = window.prompt("Discount", folio.discount);
+                      if (d != null) onDiscount(folio.id, d);
+                    }}
+                  >
+                    Discount
+                  </button>
+                ) : null}
+                {canRefundReq ? (
+                  <button className="btn danger small" type="button" onClick={() => setRefundOpen(true)}>
+                    Refund
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -666,29 +687,31 @@ export default function Billing({
                 <span className="muted">{d.type} · {formatDate(d.at)}</span>
               </div>
             ))}
-            <label style={{ display: "block", marginTop: 10 }}>
-              <span className="muted">Issue document</span>
-              <select
-                defaultValue=""
-                onChange={(e) => {
-                  const t = e.target.value;
-                  e.target.value = "";
-                  if (t) onIssue(booking.id, t);
-                }}
-              >
-                <option value="" disabled>
-                  Choose type…
-                </option>
-                {DOCS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+            {canInvoice ? (
+              <label style={{ display: "block", marginTop: 10 }}>
+                <span className="muted">Issue document</span>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    e.target.value = "";
+                    if (t) onIssue(booking.id, t);
+                  }}
+                >
+                  <option value="" disabled>
+                    Choose type…
                   </option>
-                ))}
-              </select>
-            </label>
+                  {DOCS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
         </div>
-        {cancelOpen ? (
+        {cancelOpen && canCancel ? (
           <CancelBookingModal
             state={state}
             bookingId={booking.id}
@@ -702,7 +725,7 @@ export default function Billing({
             }}
           />
         ) : null}
-        {refundOpen ? (
+        {refundOpen && canRefundReq ? (
           <ProcessRefundModal
             state={state}
             bookingId={booking.id}
@@ -768,11 +791,13 @@ export default function Billing({
           Download Excel
         </button>
       </PageHead>
-      <PendingRefundsPanel
-        state={state}
-        onApprove={(id) => onApproveRefund?.(id)}
-        onReject={(id) => onRejectRefund?.(id)}
-      />
+      {canApproveRefund || canProcessRefund ? (
+        <PendingRefundsPanel
+          state={state}
+          onApprove={canApproveRefund ? (id) => onApproveRefund?.(id) : undefined}
+          onReject={canApproveRefund ? (id) => onRejectRefund?.(id) : undefined}
+        />
+      ) : null}
       <div className="panel no-print bill-filters staff-desk-bill-filters" style={{ marginBottom: 12 }}>
         <div className="fields bill-filter-grid">
           <label style={{ gridColumn: "1 / -1" }}>

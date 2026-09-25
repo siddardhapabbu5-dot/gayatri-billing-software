@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EXPENSE_CATEGORIES, EXPENSE_DEPARTMENTS, PAY_MODES, expenseLabel } from "../finance";
 import { getBlob, openBlob } from "../fileStore";
 import { downloadCsv, formatDateDMY, money, todayISO } from "../lib";
+import { canPerm, PERMS } from "../lib/permissions.js";
 import { PageHead } from "../ui";
 
 function expenseStatus(row) {
@@ -18,6 +19,7 @@ function statusClass(st) {
 
 export default function Expenses({
   state,
+  permissions,
   onAdd,
   onUpdate,
   onRemove,
@@ -25,6 +27,8 @@ export default function Expenses({
   onVerify,
 }) {
   const deskUser = state.users.find((u) => u.id === state.session?.userId);
+  const canCreate = canPerm(permissions, PERMS.EXPENSE_CREATE) || canPerm(permissions, PERMS.EXPENSES);
+  const canVerify = canPerm(permissions, PERMS.EXPENSE_VERIFY);
   const fileRef = useRef(null);
   const [editId, setEditId] = useState(null);
   const [uploadId, setUploadId] = useState(null);
@@ -191,6 +195,7 @@ export default function Expenses({
         onChange={onFileChosen}
       />
 
+      {canCreate ? (
       <div className="panel exp-panel">
         <h3 className="exp-section-title">{editId ? "Edit expense" : "Record expense"}</h3>
         <form className="exp-form" onSubmit={submit}>
@@ -279,6 +284,7 @@ export default function Expenses({
           </div>
         </form>
       </div>
+      ) : null}
 
       <div className="panel exp-panel">
         <div className="panel-head">
@@ -368,18 +374,22 @@ export default function Expenses({
                     </td>
                     <td>
                       <div className="exp-row-actions">
-                        <button className="btn ghost small" type="button" onClick={() => startEdit(r)}>
-                          Edit
-                        </button>
-                        <button
-                          className="btn ghost small"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => pickReceipt(r.id)}
-                        >
-                          {r.receiptId ? "Replace receipt" : "Upload receipt"}
-                        </button>
-                        {r.receiptId && st !== "Verified" ? (
+                        {canCreate ? (
+                          <button className="btn ghost small" type="button" onClick={() => startEdit(r)}>
+                            Edit
+                          </button>
+                        ) : null}
+                        {canCreate ? (
+                          <button
+                            className="btn ghost small"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => pickReceipt(r.id)}
+                          >
+                            {r.receiptId ? "Replace receipt" : "Upload receipt"}
+                          </button>
+                        ) : null}
+                        {r.receiptId && st !== "Verified" && canVerify ? (
                           <button
                             className="btn small"
                             type="button"
@@ -391,7 +401,7 @@ export default function Expenses({
                             Verify
                           </button>
                         ) : null}
-                        {st === "Verified" ? (
+                        {st === "Verified" && canVerify ? (
                           <button
                             className="btn ghost small"
                             type="button"
@@ -400,17 +410,19 @@ export default function Expenses({
                             Unverify
                           </button>
                         ) : null}
-                        <button
-                          className="btn ghost small danger"
-                          type="button"
-                          onClick={() => {
-                            if (!window.confirm("Remove this expense?")) return;
-                            if (String(editId) === String(r.id)) resetForm();
-                            onRemove?.(r.id);
-                          }}
-                        >
-                          Remove
-                        </button>
+                        {canCreate ? (
+                          <button
+                            className="btn ghost small danger"
+                            type="button"
+                            onClick={() => {
+                              if (!window.confirm("Remove this expense?")) return;
+                              if (String(editId) === String(r.id)) resetForm();
+                              onRemove?.(r.id);
+                            }}
+                          >
+                            Remove
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

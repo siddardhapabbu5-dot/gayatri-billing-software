@@ -11,6 +11,7 @@ import com.gayatri.vhms.dto.ApiDtos.RoomResponse;
 import com.gayatri.vhms.dto.ApiDtos.RoomStatusRequest;
 import com.gayatri.vhms.security.StaffUserDetails;
 import com.gayatri.vhms.service.OperationsService;
+import com.gayatri.vhms.service.PermissionService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -30,63 +31,92 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class OperationsController {
   private final OperationsService ops;
+  private final PermissionService permissions;
 
-  public OperationsController(OperationsService ops) {
+  public OperationsController(OperationsService ops, PermissionService permissions) {
     this.ops = ops;
+    this.permissions = permissions;
   }
 
   @GetMapping("/guests")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_GUESTS')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_GUESTS') or hasAuthority('PERM_GUESTS_VIEW') or hasAuthority('PERM_GUESTS_EDIT')")
   public List<GuestResponse> guests(@RequestParam(required = false) String q) {
     return ops.listGuests(q);
   }
 
   @PostMapping("/guests")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_GUESTS')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_GUESTS_EDIT') or hasAuthority('PERM_GUESTS')")
   public GuestResponse createGuest(@Valid @RequestBody GuestRequest req) {
     return ops.createGuest(req);
   }
 
   @PutMapping("/guests/{id}")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_GUESTS')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_GUESTS_EDIT') or hasAuthority('PERM_GUESTS')")
   public GuestResponse updateGuest(@PathVariable Long id, @Valid @RequestBody GuestRequest req) {
     return ops.updateGuest(id, req);
   }
 
   @GetMapping("/halls")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_VENUES') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_CALENDAR')")
-  public List<HallResponse> halls() {
-    return ops.listHalls();
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_VENUES') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_CALENDAR') or hasAuthority('PERM_BOOKING_CREATE')")
+  public List<HallResponse> halls(@AuthenticationPrincipal StaffUserDetails actor) {
+    List<HallResponse> halls = ops.listHalls();
+    if (permissions.can(actor, "prices.edit") || permissions.can(actor, "venues.edit") || permissions.can(actor, "*")) {
+      return halls;
+    }
+    // Hide commercial rates from roles that only need availability (e.g. housekeeping calendar).
+    if (!permissions.can(actor, "venues") && !permissions.can(actor, "reservations") && !permissions.can(actor, "billing")) {
+      return halls.stream()
+          .map(h -> new HallResponse(h.id(), h.code(), h.name(), h.capacity(), null, null, h.active()))
+          .toList();
+    }
+    return halls;
   }
 
   @GetMapping("/rooms")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_ROOMS')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_ROOMS') or hasAuthority('PERM_ROOMS_HOUSEKEEPING') or hasAuthority('PERM_ROOMS_STATUS')")
   public List<RoomResponse> rooms() {
     return ops.listRooms();
   }
 
   @PutMapping("/rooms/{id}/status")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_ROOMS')")
-  public RoomResponse roomStatus(@PathVariable Long id, @Valid @RequestBody RoomStatusRequest req) {
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_ROOMS_STATUS') or hasAuthority('PERM_ROOMS_HOUSEKEEPING') or hasAuthority('PERM_ROOMS')")
+  public RoomResponse roomStatus(
+      @PathVariable Long id,
+      @Valid @RequestBody RoomStatusRequest req,
+      @AuthenticationPrincipal StaffUserDetails actor
+  ) {
+    boolean hkOnly = permissions.can(actor, "rooms.housekeeping")
+        && !permissions.can(actor, "rooms.status")
+        && !permissions.can(actor, "*")
+        && !permissions.can(actor, "rooms");
+    if (hkOnly) {
+      // Housekeeping may only touch housekeeping status fields.
+      String status = req.status();
+      if (status != null && !status.isBlank()
+          && !List.of("Clean", "Dirty", "Cleaning", "Inspected").contains(status)
+          && req.hkStatus() == null) {
+        permissions.require(actor, "rooms.status");
+      }
+    }
     return ops.updateRoomStatus(id, req);
   }
 
   @GetMapping("/bookings")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_CALENDAR')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_CALENDAR') or hasAuthority('PERM_BOOKING_CREATE')")
   public List<BookingResponse> bookings(@RequestParam(required = false) String q) {
     return ops.listBookings(q);
   }
 
   @GetMapping("/bookings/{id}")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_BOOKING_CREATE')")
   public BookingResponse booking(@PathVariable Long id) {
     return ops.getBooking(id);
   }
 
   @PostMapping("/bookings")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_RESERVATIONS')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BOOKING_CREATE')")
   public BookingResponse createBooking(
       @Valid @RequestBody BookingRequest req,
       @AuthenticationPrincipal StaffUserDetails actor
@@ -95,20 +125,20 @@ public class OperationsController {
   }
 
   @PostMapping("/bookings/{id}/cancel")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_RESERVATIONS')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BOOKING_CANCEL_APPROVE')")
   public BookingResponse cancel(@PathVariable Long id) {
     return ops.cancelBooking(id);
   }
 
   @GetMapping("/bookings/{id}/payments")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_PAYMENT_RECORD')")
   public List<PaymentResponse> payments(@PathVariable Long id) {
     return ops.listPayments(id);
   }
 
   @PostMapping("/bookings/{id}/payments")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_PAYMENT_RECORD')")
   public PaymentResponse addPayment(
       @PathVariable Long id,
       @Valid @RequestBody PaymentRequest req,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createStaffUser, listStaffUsers } from "../api/client";
+import { createStaffUser, listStaffUsers, updateStaffUser } from "../api/client";
 
 const CREATE_ROLES = [
   { value: "FRONTDESK", label: "Staff (desk)" },
@@ -64,6 +64,21 @@ export default function StaffUsersPanel({ canManage, authRole }) {
     }
   }
 
+  async function patchUser(u, patch) {
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      await updateStaffUser(u.serverId, patch);
+      setNote("Account updated.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!canManage) {
     return (
       <div className="panel">
@@ -77,8 +92,8 @@ export default function StaffUsersPanel({ canManage, authRole }) {
     <div className="panel">
       <h3>Users & roles</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
-        Owner and manager can create staff accounts. Staff see bookings, guests, rooms, payments, documents and
-        expense entry — not venues master, vendors, reports or settings.
+        Create, deactivate, change role, or reset password. The last active Owner cannot be deactivated or demoted.
+        Every change is audited on the server.
       </p>
 
       {loading ? <p className="muted">Loading accounts…</p> : null}
@@ -91,6 +106,8 @@ export default function StaffUsersPanel({ canManage, authRole }) {
             <th>Name</th>
             <th>Email</th>
             <th>Role</th>
+            <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -98,12 +115,46 @@ export default function StaffUsersPanel({ canManage, authRole }) {
             <tr key={u.id}>
               <td>{u.name}</td>
               <td className="muted">{u.email}</td>
-              <td>{u.roleLabel || u.role}</td>
+              <td>
+                <select
+                  value={String(u.role || "").toUpperCase()}
+                  disabled={busy}
+                  onChange={(e) => patchUser(u, { role: e.target.value })}
+                >
+                  {roleOptions.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>{u.active ? "Active" : "Inactive"}</td>
+              <td className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={busy}
+                  onClick={() => patchUser(u, { active: !u.active })}
+                >
+                  {u.active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={busy}
+                  onClick={() => {
+                    const pw = window.prompt("New password (min 8 characters)");
+                    if (pw) patchUser(u, { newPassword: pw });
+                  }}
+                >
+                  Reset password
+                </button>
+              </td>
             </tr>
           ))}
           {!loading && !users.length ? (
             <tr>
-              <td colSpan={3} className="muted">
+              <td colSpan={5} className="muted">
                 No API users yet.
               </td>
             </tr>
@@ -118,36 +169,31 @@ export default function StaffUsersPanel({ canManage, authRole }) {
           <input
             required
             value={form.fullName}
-            onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
           />
         </label>
         <label>
           Email
           <input
-            type="email"
             required
-            autoComplete="off"
+            type="email"
             value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
         </label>
         <label>
           Temporary password
           <input
-            type="password"
             required
-            minLength={6}
-            autoComplete="new-password"
+            type="password"
+            minLength={8}
             value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
         </label>
         <label>
           Role
-          <select
-            value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-          >
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             {roleOptions.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -155,11 +201,9 @@ export default function StaffUsersPanel({ canManage, authRole }) {
             ))}
           </select>
         </label>
-        <div style={{ gridColumn: "1 / -1" }}>
-          <button className="btn" type="submit" disabled={busy}>
-            {busy ? "Creating…" : "Create account"}
-          </button>
-        </div>
+        <button type="submit" className="btn" disabled={busy}>
+          {busy ? "Saving…" : "Create account"}
+        </button>
       </form>
     </div>
   );

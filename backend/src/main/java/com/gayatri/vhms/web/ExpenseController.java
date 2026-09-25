@@ -4,6 +4,7 @@ import com.gayatri.vhms.dto.ApiDtos.ExpenseRequest;
 import com.gayatri.vhms.dto.ApiDtos.ExpenseResponse;
 import com.gayatri.vhms.security.StaffUserDetails;
 import com.gayatri.vhms.service.ExpenseService;
+import com.gayatri.vhms.service.PermissionService;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -23,12 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/expenses")
-@PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_EXPENSES')")
+@PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_EXPENSES') or hasAuthority('PERM_EXPENSE_CREATE') or hasAuthority('PERM_EXPENSE_VERIFY')")
 public class ExpenseController {
   private final ExpenseService expenses;
+  private final PermissionService permissions;
 
-  public ExpenseController(ExpenseService expenses) {
+  public ExpenseController(ExpenseService expenses, PermissionService permissions) {
     this.expenses = expenses;
+    this.permissions = permissions;
   }
 
   @GetMapping
@@ -41,6 +44,7 @@ public class ExpenseController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_EXPENSE_CREATE') or hasAuthority('PERM_EXPENSES')")
   public ExpenseResponse create(
       @Valid @RequestBody ExpenseRequest req,
       @AuthenticationPrincipal StaffUserDetails actor
@@ -48,16 +52,14 @@ public class ExpenseController {
     return expenses.create(req, actor);
   }
 
-  /**
-   * Only a duty manager or the owner may sign off an expense. Body-less: defaults to
-   * verifying, pass {@code ?verified=false} to undo.
-   */
   @PutMapping("/{id}/verify")
-  @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_EXPENSE_VERIFY')")
   public ExpenseResponse verify(
       @PathVariable Long id,
-      @RequestParam(required = false) Boolean verified
+      @RequestParam(required = false) Boolean verified,
+      @AuthenticationPrincipal StaffUserDetails actor
   ) {
-    return expenses.setVerified(id, verified == null || verified);
+    permissions.require(actor, "expense.verify");
+    return expenses.setVerified(id, verified == null || verified, actor);
   }
 }

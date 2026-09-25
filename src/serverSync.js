@@ -6,6 +6,8 @@
 import { KEY } from "./lib";
 import { getState } from "./store";
 import { fetchDeskSnapshot } from "./api/ops";
+import { fetchRbacSettings } from "./api/client";
+import { DEFAULT_POLICIES } from "./policies";
 import { mapHall } from "./lib/mapHall.js";
 
 function sid(prefix, id) {
@@ -271,7 +273,24 @@ export function applyDeskSnapshot(snap, base = getState()) {
 
 export async function hydrateDeskFromServer() {
   const snap = await fetchDeskSnapshot();
-  return applyDeskSnapshot(snap);
+  const next = applyDeskSnapshot(snap);
+  try {
+    const s = await fetchRbacSettings();
+    const raw = s?.settings?.["booking.policies.json"];
+    if (raw && raw !== "{}") {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        next.property = {
+          ...next.property,
+          policies: { ...DEFAULT_POLICIES, ...(next.property?.policies || {}), ...parsed },
+        };
+        localStorage.setItem(KEY, JSON.stringify(next));
+      }
+    }
+  } catch {
+    /* settings may be forbidden for some roles */
+  }
+  return next;
 }
 
 /** One-time export of local-only desk data for manual review / import tooling. */

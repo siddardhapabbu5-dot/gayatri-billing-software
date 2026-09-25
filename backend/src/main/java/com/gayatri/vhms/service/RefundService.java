@@ -25,11 +25,18 @@ public class RefundService {
   private final RefundRepository refunds;
   private final BookingRepository bookings;
   private final PaymentRepository payments;
+  private final PermissionService permissions;
 
-  public RefundService(RefundRepository refunds, BookingRepository bookings, PaymentRepository payments) {
+  public RefundService(
+      RefundRepository refunds,
+      BookingRepository bookings,
+      PaymentRepository payments,
+      PermissionService permissions
+  ) {
     this.refunds = refunds;
     this.bookings = bookings;
     this.payments = payments;
+    this.permissions = permissions;
   }
 
   @Transactional(readOnly = true)
@@ -63,17 +70,47 @@ public class RefundService {
     return toRefund(refunds.save(r));
   }
 
-  /** Approve / pay / reject. Restricted to ADMIN and MANAGER by the controller. */
+  /** Approve / pay / reject. Manager is capped by Owner-set refund limit. */
   @Transactional
   public RefundResponse decide(Long id, RefundDecisionRequest body, StaffUserDetails actor) {
     Refund r = refunds.findById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Refund not found"));
-    if (!"Pending".equalsIgnoreCase(r.getStatus())) {
-      throw new ResponseStatusException(
-          HttpStatus.CONFLICT, "Refund is already " + r.getStatus()
-      );
+    String decision = normalizeDecision(body == null ? null : body.status());
+
+    boolean canApprove = actor != null && permissions.can(actor, "refund.approve");
+    boolean canProcess = actor != null && permissions.can(actor, "refund.process");
+
+    if ("Paid".equals(decision)) {
+      if (!"Approved".equalsIgnoreCase(r.getStatus()) && !"Pending".equalsIgnoreCase(r.getStatus())) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund is already " + r.getStatus());
+      }
+      // Accounts: pay only already-approved; Owner/Manager may approve+pay in one step
+      if (!canApprove) {
+        if (!canProcess || !"Approved".equalsIgnoreCase(r.getStatus())) {
+          throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only approved refunds can be marked paid");
+        }
+      }
+    } else {
+      if (!"Pending".equalsIgnoreCase(r.getStatus())) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund is already " + r.getStatus());
+      }
+      if (!canApprove) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Missing permission: refund.approve");
+      }
     }
-    r.setStatus(normalizeDecision(body == null ? null : body.status()));
+
+    if (actor != null && actor.getRole() == com.gayatri.vhms.domain.StaffRole.MANAGER
+        && ("Approved".equals(decision) || ("Paid".equals(decision) && "Pending".equalsIgnoreCase(r.getStatus())))) {
+      BigDecimal limit = permissions.managerRefundLimit();
+      if (r.getAmount() != null && r.getAmount().compareTo(limit) > 0) {
+        throw new ResponseStatusException(
+            HttpStatus.FORBIDDEN,
+            "Refund exceeds manager limit of " + limit.toPlainString() + "; owner approval required"
+        );
+      }
+    }
+
+    r.setStatus(decision);
     if (body != null && body.note() != null && !body.note().isBlank()) {
       r.setReason(r.getReason() == null ? body.note() : r.getReason() + "\n" + body.note());
     }

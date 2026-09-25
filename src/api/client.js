@@ -130,11 +130,13 @@ export async function listStaffUsers() {
   const data = await api("/api/admin/users");
   return (data || []).map((u) => ({
     id: `api-${u.id}`,
+    serverId: u.id,
     name: u.fullName,
     email: u.email,
     role: String(u.role || "").toLowerCase(),
     roleLabel: u.roleLabel,
     permissions: u.permissions || [],
+    active: u.active !== false,
   }));
 }
 
@@ -145,12 +147,64 @@ export async function createStaffUser({ email, password, fullName, role }) {
   });
   return {
     id: `api-${data.id}`,
+    serverId: data.id,
     name: data.fullName,
     email: data.email,
     role: String(data.role || "").toLowerCase(),
     roleLabel: data.roleLabel,
     permissions: data.permissions || [],
+    active: data.active !== false,
   };
+}
+
+export async function updateStaffUser(serverId, patch) {
+  const data = await api(`/api/admin/users/${serverId}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+  return {
+    id: `api-${data.id}`,
+    serverId: data.id,
+    name: data.fullName,
+    email: data.email,
+    role: String(data.role || "").toLowerCase(),
+    roleLabel: data.roleLabel,
+    permissions: data.permissions || [],
+    active: data.active !== false,
+  };
+}
+
+export async function fetchRbacMatrix() {
+  return api("/api/admin/rbac/matrix");
+}
+
+export async function saveRolePermissions(role, permissions) {
+  return api("/api/admin/rbac/roles", {
+    method: "PUT",
+    body: JSON.stringify({ role, permissions }),
+  });
+}
+
+export async function fetchRbacSettings() {
+  return api("/api/admin/rbac/settings");
+}
+
+export async function saveManagerRefundLimit(amount) {
+  return api("/api/admin/rbac/settings/manager-refund-limit", {
+    method: "PUT",
+    body: JSON.stringify({ amount }),
+  });
+}
+
+export async function saveBookingPolicies(policies) {
+  return api("/api/admin/rbac/settings/booking-policies", {
+    method: "PUT",
+    body: JSON.stringify({ policiesJson: JSON.stringify(policies || {}) }),
+  });
+}
+
+export async function fetchRbacAudit() {
+  return api("/api/admin/rbac/audit");
 }
 
 export async function fetchStaffRoles() {

@@ -49,11 +49,16 @@ public class ExpenseService {
     return toExpense(expenses.save(e));
   }
 
-  /** Verification is a manager/admin control: the controller enforces the role. */
+  /** Accounts may verify others' expenses; Owner/Manager may verify any. Nobody verifies their own unless Owner. */
   @Transactional
-  public ExpenseResponse setVerified(Long id, boolean verified) {
+  public ExpenseResponse setVerified(Long id, boolean verified, StaffUserDetails actor) {
     Expense e = expenses.findById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Expense not found"));
+    if (actor != null && e.getCreatedBy() != null
+        && e.getCreatedBy().getId().equals(actor.getUser().getId())
+        && actor.getRole() != com.gayatri.vhms.domain.StaffRole.ADMIN) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot verify your own expense");
+    }
     e.setVerified(verified);
     return toExpense(expenses.save(e));
   }

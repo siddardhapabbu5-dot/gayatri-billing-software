@@ -9,26 +9,43 @@ export const ROLES = {
   },
   manager: {
     label: "Property manager",
-    /** Same full desk access as owner (including creating staff accounts). */
-    permissions: ["*"],
+    permissions: [
+      "dashboard", "calendar", "venues", "rooms", "reservations", "guests", "billing", "documents",
+      "expenses", "vendors", "reports", "settings.property",
+      "booking.create", "booking.cancel.request", "booking.cancel.approve",
+      "payment.record", "invoice.issue", "refund.request", "refund.approve", "refund.process",
+      "expense.create", "expense.verify", "venues.edit",
+      "rooms.housekeeping", "rooms.status", "guests.view", "guests.edit",
+      "reports.all", "reports.finance", "user.create.staff", "user.manage",
+    ],
   },
   frontdesk: {
     label: "Staff",
-    /** Day-to-day desk: bookings, guests, rooms, payments, docs, expense entry. */
-    permissions: ["dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"],
+    permissions: [
+      "dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses", "venues",
+      "booking.create", "booking.cancel.request", "payment.record", "invoice.issue", "refund.request",
+      "expense.create", "guests.view", "guests.edit", "rooms.status",
+    ],
   },
-  /** Alias used in create-user forms — same as frontdesk. */
   staff: {
     label: "Staff",
-    permissions: ["dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses"],
+    permissions: [
+      "dashboard", "calendar", "rooms", "reservations", "guests", "billing", "documents", "expenses", "venues",
+      "booking.create", "booking.cancel.request", "payment.record", "invoice.issue", "refund.request",
+      "expense.create", "guests.view", "guests.edit", "rooms.status",
+    ],
   },
   housekeeping: {
     label: "Housekeeping",
-    permissions: ["rooms", "calendar"],
+    permissions: ["calendar", "rooms", "rooms.housekeeping"],
   },
   accounts: {
     label: "Accounts",
-    permissions: ["dashboard", "billing", "reports", "vendors", "expenses"],
+    permissions: [
+      "dashboard", "calendar", "billing", "reports", "vendors", "expenses", "venues", "reservations", "guests",
+      "payment.record", "invoice.issue", "refund.request", "refund.process",
+      "expense.create", "expense.verify", "guests.view", "reports.finance",
+    ],
   },
 };
 

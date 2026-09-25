@@ -29,14 +29,14 @@ public class RefundController {
   }
 
   @GetMapping("/bookings/{id}/refunds")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_REFUND_REQUEST') or hasAuthority('PERM_REFUND_APPROVE') or hasAuthority('PERM_REFUND_PROCESS')")
   public List<RefundResponse> forBooking(@PathVariable Long id) {
     return refunds.listForBooking(id);
   }
 
   @PostMapping("/bookings/{id}/refunds")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_REFUND_REQUEST')")
   public RefundResponse request(
       @PathVariable Long id,
       @Valid @RequestBody RefundRequest req,
@@ -46,18 +46,13 @@ public class RefundController {
   }
 
   @GetMapping("/refunds")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_REFUND_REQUEST') or hasAuthority('PERM_REFUND_APPROVE') or hasAuthority('PERM_REFUND_PROCESS')")
   public List<RefundResponse> all() {
     return refunds.listAll();
   }
 
-  /**
-   * Money leaving the property needs owner / duty-manager sign-off.
-   * Body-less like {@code /bookings/{id}/cancel}: pass {@code status} (Approved by default,
-   * or Paid / Rejected) and an optional {@code note} as query parameters.
-   */
   @PostMapping("/refunds/{id}/approve")
-  @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_REFUND_APPROVE') or hasAuthority('PERM_REFUND_PROCESS')")
   public RefundResponse approve(
       @PathVariable Long id,
       @RequestParam(required = false) String status,

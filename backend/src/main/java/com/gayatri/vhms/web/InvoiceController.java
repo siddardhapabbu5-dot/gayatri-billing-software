@@ -25,20 +25,20 @@ public class InvoiceController {
   }
 
   @GetMapping("/invoices")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_INVOICE_ISSUE')")
   public List<InvoiceResponse> all() {
     return invoices.listAll();
   }
 
   @GetMapping("/bookings/{id}/invoices")
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING') or hasAuthority('PERM_INVOICE_ISSUE')")
   public List<InvoiceResponse> forBooking(@PathVariable Long id) {
     return invoices.listByBooking(id);
   }
 
   @PostMapping("/bookings/{id}/invoices")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BILLING')")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_INVOICE_ISSUE')")
   public InvoiceResponse issue(@PathVariable Long id, @Valid @RequestBody InvoiceIssueRequest req) {
     return invoices.issue(id, req.type());
   }

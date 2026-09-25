@@ -1,11 +1,13 @@
 package com.gayatri.vhms.service;
 
 import com.gayatri.vhms.config.JwtProperties;
+import com.gayatri.vhms.domain.PermissionKeys;
 import com.gayatri.vhms.domain.StaffRole;
 import com.gayatri.vhms.dto.AuthDtos.CreateUserRequest;
 import com.gayatri.vhms.dto.AuthDtos.LoginRequest;
 import com.gayatri.vhms.dto.AuthDtos.LoginResponse;
 import com.gayatri.vhms.dto.AuthDtos.RoleInfo;
+import com.gayatri.vhms.dto.AuthDtos.UpdateUserRequest;
 import com.gayatri.vhms.dto.AuthDtos.UserResponse;
 import com.gayatri.vhms.entity.AppUser;
 import com.gayatri.vhms.repository.AppUserRepository;
@@ -13,6 +15,7 @@ import com.gayatri.vhms.security.JwtService;
 import com.gayatri.vhms.security.StaffUserDetails;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,19 +31,25 @@ public class AuthService {
   private final JwtProperties jwtProperties;
   private final AppUserRepository users;
   private final PasswordEncoder encoder;
+  private final PermissionService permissions;
+  private final AuditService audit;
 
   public AuthService(
       AuthenticationManager authManager,
       JwtService jwtService,
       JwtProperties jwtProperties,
       AppUserRepository users,
-      PasswordEncoder encoder
+      PasswordEncoder encoder,
+      PermissionService permissions,
+      AuditService audit
   ) {
     this.authManager = authManager;
     this.jwtService = jwtService;
     this.jwtProperties = jwtProperties;
     this.users = users;
     this.encoder = encoder;
+    this.permissions = permissions;
+    this.audit = audit;
   }
 
   public LoginResponse login(LoginRequest req) {
@@ -58,20 +67,16 @@ public class AuthService {
 
   public List<RoleInfo> roles() {
     return Arrays.stream(StaffRole.values())
-        .map(r -> new RoleInfo(r.name(), label(r), r.getPermissions()))
+        .map(r -> new RoleInfo(r.name(), label(r), permissions.effectivePermissions(r)))
         .toList();
   }
 
   @Transactional
   public UserResponse createUser(CreateUserRequest req, StaffUserDetails principal) {
+    StaffRole newRole = StaffRole.from(req.role());
+    assertCanCreate(principal, newRole);
     if (users.existsByEmailIgnoreCase(req.email())) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already registered");
-    }
-    StaffRole newRole = StaffRole.from(req.role());
-    StaffRole actor = principal.getUser().getRole();
-    // Only the owner (ADMIN) may create another ADMIN account.
-    if (newRole == StaffRole.ADMIN && actor != StaffRole.ADMIN) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can create administrator accounts");
     }
     AppUser user = new AppUser();
     user.setEmail(req.email().trim().toLowerCase());
@@ -79,7 +84,68 @@ public class AuthService {
     user.setRole(newRole);
     user.setPasswordHash(encoder.encode(req.password()));
     user.setActive(true);
-    return toUser(users.save(user));
+    UserResponse out = toUser(users.save(user));
+    audit.record(principal, "user.create", "app_users", out.email() + " role=" + newRole.name());
+    return out;
+  }
+
+  @Transactional
+  public UserResponse updateUser(Long id, UpdateUserRequest req, StaffUserDetails principal) {
+    permissions.require(principal, PermissionKeys.USER_MANAGE);
+    AppUser user = users.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    if (req.fullName() != null && !req.fullName().isBlank()) {
+      user.setFullName(req.fullName().trim());
+    }
+    if (req.role() != null && !req.role().isBlank()) {
+      StaffRole next = StaffRole.from(req.role());
+      assertCanCreate(principal, next);
+      if (user.getRole() == StaffRole.ADMIN && next != StaffRole.ADMIN) {
+        protectLastOwner(user);
+      }
+      user.setRole(next);
+    }
+    if (req.active() != null) {
+      if (!req.active() && user.getRole() == StaffRole.ADMIN) {
+        protectLastOwner(user);
+      }
+      user.setActive(req.active());
+    }
+    if (req.newPassword() != null && !req.newPassword().isBlank()) {
+      if (req.newPassword().length() < 8) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters");
+      }
+      user.setPasswordHash(encoder.encode(req.newPassword()));
+    }
+    UserResponse out = toUser(users.save(user));
+    audit.record(principal, "user.update", "app_users", "id=" + id + " email=" + out.email());
+    return out;
+  }
+
+  private void assertCanCreate(StaffUserDetails principal, StaffRole newRole) {
+    if (newRole == StaffRole.ADMIN) {
+      if (!permissions.can(principal, PermissionKeys.USER_CREATE_ANY)
+          && principal.getRole() != StaffRole.ADMIN) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can create administrator accounts");
+      }
+      return;
+    }
+    if (!permissions.can(principal, PermissionKeys.USER_CREATE_STAFF)
+        && !permissions.can(principal, PermissionKeys.USER_CREATE_ANY)
+        && !permissions.can(principal, PermissionKeys.USER_MANAGE)
+        && !permissions.can(principal, PermissionKeys.ALL)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Missing permission to create staff");
+    }
+  }
+
+  private void protectLastOwner(AppUser target) {
+    long activeOwners = users.countByRoleAndActiveTrue(StaffRole.ADMIN);
+    if (target.isActive() && activeOwners <= 1) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Cannot deactivate or demote the last active Owner account"
+      );
+    }
   }
 
   public List<UserResponse> listUsers() {
@@ -87,13 +153,15 @@ public class AuthService {
   }
 
   private UserResponse toUser(AppUser u) {
+    Set<String> perms = permissions.effectivePermissions(u.getRole());
     return new UserResponse(
         u.getId(),
         u.getEmail(),
         u.getFullName(),
         u.getRole(),
         label(u.getRole()),
-        u.getRole().getPermissions()
+        perms,
+        u.isActive()
     );
   }
 

@@ -526,12 +526,16 @@ export function PendingRefundsPanel({ state, onApprove, onReject }) {
               <td>{m(r.amount)}</td>
               <td>{r.processedBy}</td>
               <td className="row">
-                <button type="button" className="btn small" onClick={() => onApprove?.(r.id)}>
-                  Approve
-                </button>
-                <button type="button" className="btn danger small" onClick={() => onReject?.(r.id)}>
-                  Reject
-                </button>
+                {onApprove ? (
+                  <button type="button" className="btn small" onClick={() => onApprove?.(r.id)}>
+                    Approve
+                  </button>
+                ) : null}
+                {onReject ? (
+                  <button type="button" className="btn danger small" onClick={() => onReject?.(r.id)}>
+                    Reject
+                  </button>
+                ) : null}
               </td>
             </tr>
           ))}

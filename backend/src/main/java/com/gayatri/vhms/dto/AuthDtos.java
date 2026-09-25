@@ -3,7 +3,10 @@ package com.gayatri.vhms.dto;
 import com.gayatri.vhms.domain.StaffRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class AuthDtos {
@@ -27,7 +30,8 @@ public final class AuthDtos {
       String fullName,
       StaffRole role,
       String roleLabel,
-      Set<String> permissions
+      Set<String> permissions,
+      boolean active
   ) {}
 
   public record RoleInfo(String role, String label, Set<String> permissions) {}
@@ -37,6 +41,30 @@ public final class AuthDtos {
       @NotBlank String password,
       @NotBlank String fullName,
       @NotBlank String role
+  ) {}
+
+  public record UpdateUserRequest(
+      String fullName,
+      String role,
+      Boolean active,
+      String newPassword
+  ) {}
+
+  public record RolePermissionsUpdateRequest(
+      @NotBlank String role,
+      @NotNull Map<String, Boolean> permissions
+  ) {}
+
+  public record ManagerRefundLimitRequest(@NotNull BigDecimal amount) {}
+
+  public record BookingPoliciesRequest(@NotBlank String policiesJson) {}
+
+  public record AppSettingsResponse(Map<String, String> settings) {}
+
+  public record RoleMatrixResponse(Map<String, Map<String, Boolean>> roles, List<String> catalog) {}
+
+  public record AuditEntryResponse(
+      Long id, Long userId, String action, String entity, String detail, java.time.Instant createdAt
   ) {}
 
   public record MessageResponse(String message) {}

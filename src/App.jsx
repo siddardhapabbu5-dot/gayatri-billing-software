@@ -20,6 +20,7 @@ import {
   syncAppModeFromUrl,
 } from "./lib/appMode.js";
 import { normalizeRole, ROLES } from "./seed";
+import { canPerm } from "./lib/permissions.js";
 import { coverage } from "./docTypes";
 import { bookingFolio } from "./engine";
 import { money } from "./lib";
@@ -161,12 +162,11 @@ const GROUPS = [
 function can(role, perm, permissionList) {
   const key = normalizeRole(role);
   const fromSeed = ROLES[key]?.permissions || [];
-  if (fromSeed.includes("*")) return true;
   const list =
     Array.isArray(permissionList) && permissionList.length
       ? permissionList
       : fromSeed;
-  return list.includes("*") || list.includes(perm);
+  return canPerm(list, perm);
 }
 
 function permForPage(pageId) {
@@ -177,17 +177,28 @@ function permForPage(pageId) {
   return "dashboard";
 }
 
+function canOpenPage(role, pageId, permissionList) {
+  if (pageId === "settings") {
+    return (
+      can(role, "settings.property", permissionList) ||
+      can(role, "users.permissions", permissionList) ||
+      can(role, "user.manage", permissionList)
+    );
+  }
+  return can(role, permForPage(pageId), permissionList);
+}
+
 /** First staff page this role is allowed to open (Housekeeping has no Dashboard). */
 function homeStaffPage(role, permissionList) {
   const r = normalizeRole(role);
   const preferred = ["desk", "rooms", "calendar", "reserve", "billing", "reports"];
   for (const id of preferred) {
-    if (can(r, permForPage(id), permissionList)) return id;
+    if (canOpenPage(r, id, permissionList)) return id;
   }
   for (const g of GROUPS) {
     for (const i of g.items) {
       if (i.id === "home" || i.id === "portal") continue;
-      if (can(r, i.perm, permissionList)) return i.id;
+      if (canOpenPage(r, i.id, permissionList)) return i.id;
     }
   }
   return "rooms";
@@ -505,14 +516,17 @@ export default function App() {
   const user = state.users.find((u) => u.id === state.session.userId) || state.users[0];
   const role = normalizeRole(authUser?.role || user.role || "");
   const rolePerms = authUser?.permissions;
-  const isDeskAdmin = role === "admin" || role === "manager";
+  const canManageUsers =
+    can(role, "user.manage", rolePerms) ||
+    can(role, "user.create.staff", rolePerms) ||
+    can(role, "user.create.any", rolePerms);
+  const canEditRolePermissions = can(role, "users.permissions", rolePerms);
 
   // Block deep-links to pages this role cannot open (menu alone is not enough).
   useEffect(() => {
     if (!authUser) return;
     if (page === "home" || page === "portal") return;
-    const need = permForPage(page);
-    if (!can(role, need, rolePerms)) {
+    if (!canOpenPage(role, page, rolePerms)) {
       go(homeStaffPage(role, rolePerms));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- guard on page/role only
@@ -663,7 +677,7 @@ export default function App() {
             setStaffGate(false);
             setState(applyAuthUser(u));
             const want = pendingStaffPage || "desk";
-            const dest = can(u.role, permForPage(want), u.permissions)
+            const dest = canOpenPage(u.role, want, u.permissions)
               ? want
               : homeStaffPage(u.role, u.permissions);
             go(dest);
@@ -711,7 +725,7 @@ export default function App() {
             setAuthUser(u);
             setState(applyAuthUser(u));
             const want = pendingStaffPage || "desk";
-            const dest = can(u.role, permForPage(want), u.permissions)
+            const dest = canOpenPage(u.role, want, u.permissions)
               ? want
               : homeStaffPage(u.role, u.permissions);
             go(dest);
@@ -737,7 +751,7 @@ export default function App() {
         brand={state.property.brandName || "Gayatri"}
         groups={GROUPS.map((g) => ({
           ...g,
-          items: g.items.filter((i) => i.id !== "home" && can(role, i.perm, rolePerms)),
+          items: g.items.filter((i) => i.id !== "home" && canOpenPage(role, i.id, rolePerms)),
         })).filter((g) => g.items.length)}
         openGroup={mobileDrawerGroup}
         onToggleGroup={(label) => setMobileDrawerGroup((cur) => (cur === label ? null : label))}
@@ -767,7 +781,7 @@ export default function App() {
         </div>
         <div className="nav-scroll">
           {GROUPS.map((g) => {
-            const items = g.items.filter((i) => can(role, i.perm, rolePerms));
+            const items = g.items.filter((i) => canOpenPage(role, i.id, rolePerms));
             if (!items.length) return null;
             const open = openNavGroup === g.label;
             return (
@@ -967,6 +981,7 @@ export default function App() {
                 key={bookingId || "list"}
                 state={state}
                 focusId={bookingId}
+                permissions={rolePerms}
                 backLabel={navStack.length ? "Back" : "All payments"}
                 onBack={goBack}
                 onClose={() => setBookingId(null)}
@@ -1054,6 +1069,7 @@ export default function App() {
             {page === "expenses" && (
               <Expenses
                 state={state}
+                permissions={rolePerms}
                 onAdd={(payload) => {
                   const out = addExpense(payload);
                   if (out?.error) return out;
@@ -1116,7 +1132,9 @@ export default function App() {
               <Settings
                 state={state}
                 authRole={role}
-                canManageUsers={isDeskAdmin}
+                permissions={rolePerms}
+                canManageUsers={canManageUsers}
+                canEditRolePermissions={canEditRolePermissions}
                 onProperty={(p) => setState(updateProperty(p))}
                 onPublishTerms={(sections) => setState(publishTermSets(sections))}
                 onUser={() => {}}
@@ -1150,7 +1168,7 @@ export default function App() {
       </div>
       <StaffMobileBottomNav
         page={page}
-        canAccess={(id) => can(role, permForPage(id), rolePerms)}
+        canAccess={(id) => canOpenPage(role, id, rolePerms)}
         onNavigate={(id) => go(id)}
         onMore={openMobileDrawer}
       />

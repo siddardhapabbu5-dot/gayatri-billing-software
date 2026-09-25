@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchRbacSettings, saveBookingPolicies } from "../api/client";
 import { formatDateTime } from "../lib";
 import { DEFAULT_POLICIES, TERM_LANGS, TERM_SECTIONS, policiesOf, termSetsOf } from "../policies";
 import { PageHead } from "../ui";
 import StaffUsersPanel from "../components/StaffUsersPanel.jsx";
+import RolesPermissionsPanel from "../components/RolesPermissionsPanel.jsx";
 
 const INTEGRATIONS = [
   { name: "Payment gateway", note: "UPI, cards, net banking, international cards — connect in Phase 4." },
@@ -19,6 +21,7 @@ const TABS = [
   ["policies", "Booking policies"],
   ["agreements", "Guest agreements"],
   ["system", "Users & audit"],
+  ["roles", "Roles & permissions"],
 ];
 
 export default function Settings({
@@ -30,10 +33,19 @@ export default function Settings({
   onClearBookings,
   onLoadDeskCases,
   authRole,
+  permissions,
   canManageUsers = false,
+  canEditRolePermissions = false,
 }) {
   const p = state.property;
-  const [tab, setTab] = useState("terms");
+  const canProperty = authRole === "admin" || canEditRolePermissions || (Array.isArray(permissions) && permissions.includes("settings.property"));
+  const visibleTabs = TABS.filter(([id]) => {
+    if (id === "roles") return canEditRolePermissions || authRole === "admin";
+    if (id === "system") return canManageUsers || authRole === "admin";
+    if (id === "property" || id === "terms" || id === "policies") return canProperty || authRole === "admin";
+    return true;
+  });
+  const [tab, setTab] = useState(() => visibleTabs[0]?.[0] || "terms");
   const [sec, setSec] = useState("hall");
   const [termLang, setTermLang] = useState("en");
   const [note, setNote] = useState("");
@@ -41,14 +53,42 @@ export default function Settings({
   const [pol, setPol] = useState(() => policiesOf(p));
   const sets = termSetsOf(p);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await fetchRbacSettings();
+        const raw = s?.settings?.["booking.policies.json"];
+        if (!raw || cancelled) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          setPol({ ...DEFAULT_POLICIES, ...parsed });
+          onProperty({ policies: { ...DEFAULT_POLICIES, ...parsed } });
+        }
+      } catch {
+        /* local policies remain */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Load once on mount for multi-device sync
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function ping(msg) {
     setNote(msg);
     window.setTimeout(() => setNote(""), 3200);
   }
 
-  function savePolicies() {
+  async function savePolicies() {
     onProperty({ policies: pol });
-    ping("Booking policies saved. Reservations and bills will use these numbers.");
+    try {
+      await saveBookingPolicies(pol);
+      ping("Booking policies saved to server. Other devices pick this up on next sync.");
+    } catch (err) {
+      ping(err.message || "Saved locally only — server save failed.");
+    }
   }
 
   function publishTerms() {
@@ -61,7 +101,7 @@ export default function Settings({
       <PageHead title="Settings" sub="Property, terms, booking policies, guest agreements, users and audit." />
       {note && <p className="pill ok" style={{ marginBottom: 10 }}>{note}</p>}
       <div className="chips" style={{ marginBottom: 12 }}>
-        {TABS.map(([id, label]) => (
+        {visibleTabs.map(([id, label]) => (
           <button key={id} type="button" className={`chip${tab === id ? " on" : ""}`} onClick={() => setTab(id)}>
             {label}
           </button>
@@ -379,6 +419,8 @@ export default function Settings({
           </div>
         </>
       )}
+
+      {tab === "roles" && <RolesPermissionsPanel canEdit={canEditRolePermissions} />}
     </>
   );
 }
