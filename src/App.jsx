@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import Home from "./pages/Home.jsx";
 import StaffLogin from "./pages/StaffLogin.jsx";
-import InstallPrompt from "./components/InstallPrompt.jsx";
 import InstallAppButton from "./components/InstallAppButton.jsx";
 import StaffMobileHeader from "./components/staff-mobile/StaffMobileHeader.jsx";
 import StaffMobileDrawer from "./components/staff-mobile/StaffMobileDrawer.jsx";
@@ -651,7 +650,6 @@ export default function App() {
   if (staffGate && !authUser) {
     return (
       <>
-        <InstallPrompt />
         <StaffLogin
           lockToDesk={isStaffPath() || isStaffEntryGate()}
           onBack={() => {
@@ -678,7 +676,6 @@ export default function App() {
   if (page === "home" || page === "portal") {
     return (
       <>
-        <InstallPrompt />
         <Home
           key="public-home"
           state={state}
@@ -703,7 +700,6 @@ export default function App() {
   if (!authUser) {
     return (
       <>
-        <InstallPrompt />
         <StaffLogin
           lockToDesk={isStaffPath() || isStaffEntryGate()}
           onBack={() => {
@@ -727,7 +723,6 @@ export default function App() {
 
   return (
     <>
-    <InstallPrompt />
     <div
       className={`shell is-staff-phone${navOpen ? "" : " is-nav-closed"}${mobileDrawerOpen ? " is-drawer-open" : ""}`}
     >

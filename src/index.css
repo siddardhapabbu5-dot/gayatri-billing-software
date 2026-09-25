@@ -2263,51 +2263,6 @@ tr.clickable.is-selected td { background: #edf7f6; }
   .master-letter h3, .master-letter table { break-inside: avoid; }
 }
 
-.pwa-install {
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  z-index: 10040;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(16, 32, 39, 0.96);
-  color: #f4efe4;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(196, 163, 90, 0.28);
-}
-.pwa-install-copy {
-  flex: 1 1 180px;
-  min-width: 0;
-}
-.pwa-install-copy strong {
-  display: block;
-  font-family: Outfit, "Segoe UI", sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-.pwa-install-copy p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(244, 239, 228, 0.82);
-}
-.pwa-install-copy em {
-  font-style: normal;
-  font-weight: 600;
-  color: #e6c98a;
-}
-.pwa-install-actions {
-  display: flex;
-  gap: 8px;
-  flex: 0 0 auto;
-}
 .pwa-install-btn {
   background: #c4a35a !important;
   border-color: #c4a35a !important;
@@ -2316,13 +2271,6 @@ tr.clickable.is-selected td { background: #edf7f6; }
   min-height: 36px;
   padding: 6px 14px;
   font-weight: 600;
-}
-.pwa-install-dismiss {
-  border-radius: 999px;
-  min-height: 36px;
-  padding: 6px 12px;
-  color: #f4efe4 !important;
-  border-color: rgba(244, 239, 228, 0.28) !important;
 }
 
 .install-app-btn {

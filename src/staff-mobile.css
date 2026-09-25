@@ -390,11 +390,6 @@
     outline-offset: 2px;
   }
 
-  /* Soften / tuck install banner on staff phone */
-  body:has(.shell.is-staff-phone) .pwa-install {
-    display: none !important;
-  }
-
   /* —— Mobile dashboard —— */
   .shell.is-staff-phone .staff-m-dash {
     display: block;
