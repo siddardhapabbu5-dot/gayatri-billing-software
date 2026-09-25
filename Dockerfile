@@ -23,5 +23,9 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=api /app/target/*.jar app.jar
 ENV PORT=8080
+ENV APP_UPLOAD_DIR=/data/uploads
+ENV APP_SEED_DEMO_USERS=false
+# Mount a named volume at /data/uploads in production (see deploy/docker-compose.prod.yml)
+RUN mkdir -p /data/uploads
 EXPOSE 8080
 CMD ["sh", "-c", "java -Dserver.port=${PORT} -jar app.jar"]

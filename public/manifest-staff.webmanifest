@@ -1,13 +1,13 @@
 {
-  "id": "/?mode=staff",
+  "id": "/staff",
   "name": "Gayatri Staff",
   "short_name": "Gayatri Staff",
-  "description": "Gayatri Convention staff desk — phone, tablet, desktop (app.gayatriconvention.com)",
+  "description": "Gayatri Convention staff desk — install from Chrome or Safari (Add to Home Screen). Opens /staff login.",
   "theme_color": "#102027",
   "background_color": "#102027",
   "display": "standalone",
   "orientation": "any",
-  "start_url": "/?mode=staff#home",
+  "start_url": "/staff",
   "scope": "/",
   "categories": ["business", "productivity"],
   "icons": [

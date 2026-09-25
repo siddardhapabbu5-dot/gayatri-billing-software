@@ -44,6 +44,8 @@ public class SecurityConfig {
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/health", "/api/auth/login", "/api/auth/roles").permitAll()
+            // Website forms (enquiry / contact) post without a token.
+            .requestMatchers("/api/public/**").permitAll()
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
             .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "MANAGER")
             .requestMatchers("/api/**").authenticated()

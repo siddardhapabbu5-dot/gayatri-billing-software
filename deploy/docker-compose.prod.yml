@@ -1,0 +1,68 @@
+# Gayatri production stack (Hostinger VPS KVM)
+#
+# Actual layout:
+#   - gayatri-db   → PostgreSQL 16 (persistent volume)
+#   - gayatri-app  → single image: React UI + Spring Boot API (root Dockerfile)
+#   - Nginx        → TLS + reverse proxy to gayatri-app:8080
+#   - Docker network shared by db + app
+#
+# Build from repo root:
+#   docker build -t gayatri-app:latest .
+#
+# Required env (file e.g. /opt/gayatri/.env — do NOT commit secrets):
+#   SPRING_DATASOURCE_URL=jdbc:postgresql://gayatri-db:5432/gayatri_vhms
+#   SPRING_DATASOURCE_USERNAME=gayatri
+#   SPRING_DATASOURCE_PASSWORD=<secret>
+#   APP_JWT_SECRET=<long-random>
+#   APP_SEED_DEMO_USERS=false
+#   APP_UPLOAD_DIR=/data/uploads
+#   PORT=8080
+#
+# Persistent volumes:
+#   gayatri_pgdata  → Postgres data (never delete in production)
+#   gayatri_uploads → document/receipt files (APP_UPLOAD_DIR)
+
+services:
+  gayatri-db:
+    image: postgres:16-alpine
+    container_name: gayatri-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gayatri_vhms
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME:-gayatri}
+      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-gayatri123}
+    volumes:
+      - gayatri_pgdata:/var/lib/postgresql/data
+    networks:
+      - gayatri_net
+    # Bind only on localhost if Nginx/app share the host; omit ports in prod if only Docker network is used.
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+  gayatri-app:
+    image: gayatri-app:latest
+    container_name: gayatri-app
+    restart: unless-stopped
+    depends_on:
+      - gayatri-db
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://gayatri-db:5432/gayatri_vhms
+      APP_SEED_DEMO_USERS: "false"
+      APP_UPLOAD_DIR: /data/uploads
+      PORT: "8080"
+    volumes:
+      - gayatri_uploads:/data/uploads
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - gayatri_net
+
+volumes:
+  gayatri_pgdata:
+  gayatri_uploads:
+
+networks:
+  gayatri_net:
+    name: gayatri_net

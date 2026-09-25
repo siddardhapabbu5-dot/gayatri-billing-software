@@ -11,6 +11,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
@@ -45,6 +46,12 @@ public class ApiExceptionHandler {
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<ApiError> illegal(IllegalArgumentException ex) {
     return ResponseEntity.badRequest().body(new ApiError(ex.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ResponseEntity<ApiError> tooLarge(MaxUploadSizeExceededException ex) {
+    return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+        .body(new ApiError("File is too large to upload", List.of()));
   }
 
   private String format(FieldError e) {

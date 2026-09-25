@@ -24,6 +24,7 @@ import { bookingFolio } from "./engine";
 import { money } from "./lib";
 import { KEY } from "./lib";
 import { clearAuth, getAuthUser, getToken } from "./api/client";
+import { hydrateDeskFromServer } from "./serverSync.js";
 import {
   addCatering,
   addEnquiry,
@@ -97,8 +98,8 @@ function StaffPageFallback() {
   );
 }
 
-function applyAuthUser(authUser) {
-  const state = getState();
+function applyAuthUser(authUser, incoming) {
+  const state = incoming || getState();
   const existing = state.users.find((u) => u.email?.toLowerCase() === authUser.email?.toLowerCase());
   const id = existing?.id || authUser.id;
   if (!existing) {
@@ -390,6 +391,25 @@ export default function App() {
   }, [authUser]);
 
   useEffect(() => {
+    if (!authUser || !getToken()) return undefined;
+    let cancelled = false;
+    async function sync() {
+      try {
+        const next = await hydrateDeskFromServer();
+        if (!cancelled) setState(applyAuthUser(authUser, next) || next);
+      } catch (err) {
+        console.warn("Desk sync failed", err);
+      }
+    }
+    sync();
+    const t = window.setInterval(sync, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [authUser]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("clearAll") !== "1") return;
     params.delete("clearAll");
@@ -639,9 +659,16 @@ export default function App() {
           key="public-home"
           state={state}
           onStaff={enterStaff}
-          onEnquire={(form) => {
-            const out = addEnquiry(form);
+          onEnquire={async (form) => {
+            const out = await addEnquiry(form);
             if (out.state) setState(out.state);
+            else if (getToken()) {
+              try {
+                setState(await hydrateDeskFromServer());
+              } catch {
+                /* ignore */
+              }
+            }
             return out;
           }}
         />
@@ -851,13 +878,13 @@ export default function App() {
                 presetDate={presetDate}
                 presetGuest={state.guests.find((g) => g.id === presetGuestId)}
                 onSave={async (draft) => {
-                  const out = createReservation(draft);
+                  const out = await createReservation(draft);
                   if (out.error) return out;
                   if (draft.pendingDocs?.length) {
                     const docs = await attachMany(out.booking.id, out.booking.guestId, draft.pendingDocs);
                     if (docs.error) window.alert(docs.error);
                   }
-                  setState(getState());
+                  setState(out.state || getState());
                   go("billing", { bookingId: out.booking.id });
                   return out;
                 }}
@@ -994,8 +1021,12 @@ export default function App() {
                   }
                   setState(out);
                 }}
-                onIssue={(id, t) => {
-                  const out = issueDocument(id, t);
+                onIssue={async (id, t) => {
+                  const out = await issueDocument(id, t);
+                  if (out?.error) {
+                    window.alert(out.error);
+                    return;
+                  }
                   setState(out.state);
                 }}
                 onDocs={(id) => go("documents", { bookingId: id })}

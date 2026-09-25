@@ -44,6 +44,11 @@ public final class ApiDtos {
       Integer guestsExpected,
       String notes,
       BigDecimal discount,
+      List<Long> hallIds,
+      List<Long> roomIds,
+      String slotType,
+      LocalDate roomCheckIn,
+      LocalDate roomCheckOut,
       BigDecimal advanceAmount,
       String advanceMethod,
       LocalDate advanceDate,
@@ -57,7 +62,9 @@ public final class ApiDtos {
   public record BookingResponse(
       Long id, String number, Long guestId, String guestName, String guestPhone,
       String type, String source, LocalDate eventDate, Integer guestsExpected,
-      String status, String notes, BigDecimal discount, Instant createdAt
+      String status, String notes, BigDecimal discount, Instant createdAt,
+      List<String> hallCodes, List<String> roomNumbers,
+      BigDecimal paymentsTotal, Long folioId
   ) {}
 
   public record PaymentRequest(
@@ -74,4 +81,84 @@ public final class ApiDtos {
   ) {}
 
   public record RoomStatusRequest(@NotBlank String status, String hkStatus) {}
+
+  /** Website contact / booking form. No auth — keep the surface small and validated. */
+  public record PublicEnquiryRequest(
+      @NotBlank String name,
+      String phone,
+      String email,
+      LocalDate date,
+      String hall,
+      Integer guests,
+      String message,
+      Boolean agreeHall,
+      Boolean agreeRoom
+  ) {}
+
+  public record EnquiryResponse(
+      Long id, String name, String phone, String email, LocalDate eventDate,
+      String hallCode, Integer guestsExpected, String message, String status,
+      Long bookingId, String bookingNumber, boolean agreeHall, boolean agreeRoom,
+      Instant createdAt
+  ) {}
+
+  public record ExpenseRequest(
+      @NotBlank String category,
+      @NotBlank String description,
+      @NotNull BigDecimal amount,
+      LocalDate spentOn,
+      String paymentMethod,
+      String vendor,
+      String notes,
+      Long receiptDocId
+  ) {}
+
+  public record ExpenseResponse(
+      Long id, String category, String description, BigDecimal amount, LocalDate spentOn,
+      String paymentMethod, String vendor, String notes, boolean verified, Long receiptDocId,
+      Long createdById, String createdByName, Instant createdAt, Instant updatedAt
+  ) {}
+
+  public record RefundRequest(
+      @NotNull BigDecimal amount,
+      String reason,
+      Long paymentId
+  ) {}
+
+  /** Optional body for the approve endpoint: Approved (default) | Paid | Rejected. */
+  public record RefundDecisionRequest(String status, String note) {}
+
+  public record RefundResponse(
+      Long id, Long bookingId, Long paymentId, BigDecimal amount, String status, String reason,
+      Long requestedById, String requestedByName, Long approvedById, String approvedByName,
+      Instant createdAt, Instant updatedAt
+  ) {}
+
+  public record DocumentResponse(
+      Long id, Long bookingId, Long guestId, String typeCode, String fileName,
+      String contentType, long sizeBytes, Long uploadedById, String uploadedByName,
+      Instant createdAt
+  ) {}
+
+  public record InvoiceIssueRequest(@NotBlank String type) {}
+
+  public record InvoiceResponse(
+      Long id, Long bookingId, String number, String type, String status,
+      Instant issuedAt, Instant createdAt
+  ) {}
+
+  /** One-shot read model so phones/tablets/desktops converge on the same server state. */
+  public record DeskSnapshot(
+      Instant generatedAt,
+      List<GuestResponse> guests,
+      List<HallResponse> halls,
+      List<RoomResponse> rooms,
+      List<BookingResponse> bookings,
+      List<PaymentResponse> payments,
+      List<EnquiryResponse> enquiries,
+      List<ExpenseResponse> expenses,
+      List<RefundResponse> refunds,
+      List<DocumentResponse> documents,
+      List<InvoiceResponse> invoices
+  ) {}
 }

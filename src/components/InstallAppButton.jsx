@@ -162,12 +162,12 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
             }}
           >
             <div className="install-app-sheet">
-              <h2>{staffMode ? "Install Staff app" : "Install public website app"}</h2>
+              <h2>{staffMode ? "Install Staff (home screen)" : "Install website (home screen)"}</h2>
               <p>
                 {staffMode
-                  ? "Adds Gayatri Staff to your home screen — website plus Staff desk."
-                  : "Adds the Gayatri website to your home screen (Home → Terms)."}{" "}
-                <strong>Not a Play Store / App Store download.</strong>
+                  ? "Adds Gayatri Staff to your phone or tablet home screen. Opens /staff for login, then the desk."
+                  : "Adds the Gayatri public website to your home screen."}{" "}
+                <strong>This is a Progressive Web App (PWA) — not an APK or App Store app.</strong>
               </p>
               {hint ? <p className="install-app-hint">{hint}</p> : null}
               {!swReady ? (
@@ -250,7 +250,7 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        Get app
+        Install app
       </button>
       {modal}
     </>

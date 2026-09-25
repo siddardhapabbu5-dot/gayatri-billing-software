@@ -16,6 +16,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  servlet:
+    multipart:
+      # Images/PDFs are capped at 8 MB in FileStorageService; videos at 100 MB.
+      max-file-size: ${APP_MAX_UPLOAD_SIZE:100MB}
+      max-request-size: ${APP_MAX_REQUEST_SIZE:110MB}
 
 server:
   port: ${PORT:8080}
@@ -27,6 +32,11 @@ app:
   cors:
     # "*" required on Railway: same-origin module/CSS requests send Origin and were 403'd
     allowed-origins: ${APP_CORS_ORIGINS:*}
+  # Mounted volume for guest IDs, contracts, receipts and event media.
+  upload-dir: ${APP_UPLOAD_DIR:/data/uploads}
+  seed:
+    # Never true in production: it would create staff logins with published passwords.
+    demo-users: ${APP_SEED_DEMO_USERS:false}
 
 logging:
   level:

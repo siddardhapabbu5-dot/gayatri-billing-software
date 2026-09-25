@@ -2,11 +2,14 @@ package com.gayatri.vhms.repository;
 
 import com.gayatri.vhms.entity.Guest;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface GuestRepository extends JpaRepository<Guest, Long> {
+  Optional<Guest> findFirstByPhoneOrderByIdAsc(String phone);
+
   @Query("""
       select g from Guest g
       where lower(g.name) like lower(concat('%', :q, '%'))

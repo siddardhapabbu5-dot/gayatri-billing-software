@@ -1180,7 +1180,7 @@ export default function Home({ state, onEnquire, onStaff }) {
             <form
               className="booking-form"
               noValidate
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!form.venue) {
                   setError("Please select a hall.");
@@ -1212,12 +1212,15 @@ export default function Home({ state, onEnquire, onStaff }) {
                   agreeHall: true,
                   agreeRoom: true,
                 };
-                const out = onEnquire(payload);
+                const out = await Promise.resolve(onEnquire(payload));
                 if (out?.error) {
                   setError(out.error);
                   return;
                 }
-                if (!out?.booking?.number) return;
+                if (!out?.booking?.number) {
+                  setError("The server did not confirm this booking request. Please try again or call the desk.");
+                  return;
+                }
                 const desk = BOOK_WHATSAPP;
                 const text = enquiryAlertText({ ...payload, number: out.booking.number });
                 const wa = waMe(desk, text);

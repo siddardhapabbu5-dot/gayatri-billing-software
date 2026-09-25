@@ -1,153 +1,112 @@
-# Gayatri on Hostinger VPS (KVM) + BigRock domain
+# Gayatri on Hostinger VPS — actual production layout
 
-One domain for public site + staff desk:
+## Architecture
 
-| URL | Purpose |
-|-----|---------|
-| `https://gayatriconvention.com/` | Public website |
-| `https://gayatriconvention.com/staff` | Staff login → desk (address bar stays `/staff`) |
+| Piece | Name / role |
+|--------|-------------|
+| App image | Root `Dockerfile` — React UI + Spring Boot in one container |
+| App container | `gayatri-app` |
+| Database | `gayatri-db` (Postgres 16) |
+| Network | Docker network `gayatri_net` |
+| Proxy | Nginx + TLS terminates HTTPS → `127.0.0.1:8080` |
+| Staff login | `https://gayatriconvention.com/staff` |
+| Public site | `https://gayatriconvention.com/` |
 
-You do **not** need `app.gayatriconvention.com` (legacy visits redirect to `/staff`).
-
----
-
-## 1. Remove nginx Basic Auth (popup)
-
-On the VPS:
-
-```bash
-# Find auth lines
-sudo grep -R "AuthUserFile\|AuthType Basic\|gayatri-staff.htpasswd" /etc/nginx/ 2>/dev/null
-
-# Edit the site config (name may differ)
-sudo nano /etc/nginx/sites-available/gayatriconvention.com
-```
-
-Delete or comment out:
-
-```nginx
-# AuthType Basic;
-# AuthName "Staff gate";
-# AuthUserFile /etc/nginx/gayatri-staff.htpasswd;
-# require valid-user;
-```
-
-Then:
-
-```bash
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-Optional: `sudo rm /etc/nginx/gayatri-staff.htpasswd`
+Postgres is the **source of truth** for guests, bookings, payments, enquiries, expenses, refunds and document metadata. Uploaded files live under `APP_UPLOAD_DIR` (must be a **persistent Docker volume**).
 
 ---
 
-## 2. Nginx SPA + `/staff` (example)
+## Environment variables
 
-Use the sample in `deploy/hostinger-nginx.conf`.
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `SPRING_DATASOURCE_URL` | Yes | e.g. `jdbc:postgresql://gayatri-db:5432/gayatri_vhms` |
+| `SPRING_DATASOURCE_USERNAME` | Yes | |
+| `SPRING_DATASOURCE_PASSWORD` | Yes | |
+| `APP_JWT_SECRET` | Yes | Long random string |
+| `APP_SEED_DEMO_USERS` | **Must be `false` in prod** | Default false — never create Owner@123-style demos |
+| `APP_UPLOAD_DIR` | Yes | `/data/uploads` inside container |
+| `PORT` | Optional | Default `8080` |
+| `VITE_API_BASE` | **Leave empty** for same-origin `/api` | Set only if UI is hosted separately |
 
-Essential bits:
+---
+
+## Volumes (do not omit)
+
+```bash
+# Postgres data
+docker volume create gayatri_pgdata
+
+# Document / receipt files — survives app container replace
+docker volume create gayatri_uploads
+```
+
+Compose file: `deploy/docker-compose.prod.yml`.
+
+---
+
+## Build & run (typical)
+
+```bash
+cd /opt/gayatri/repo   # or your clone path
+git pull origin main
+
+docker build -t gayatri-app:latest .
+
+# Ensure .env has DB password + APP_JWT_SECRET + APP_SEED_DEMO_USERS=false
+docker compose -f deploy/docker-compose.prod.yml up -d
+
+docker logs -f gayatri-app
+# Expect Flyway V3 applied; "Demo user seeding SKIPPED" when APP_SEED_DEMO_USERS=false
+```
+
+Replace app only (keep DB + uploads):
+
+```bash
+docker build -t gayatri-app:latest .
+docker compose -f deploy/docker-compose.prod.yml up -d --no-deps gayatri-app
+```
+
+---
+
+## Nginx (TLS)
+
+Proxy HTTPS to the app. **No AuthType Basic / htpasswd** (staff login is `/staff`).
 
 ```nginx
-root /var/www/gayatri;   # folder where you upload dist/
-index index.html;
-
 location / {
-  try_files $uri $uri/ /index.html;
+  proxy_pass http://127.0.0.1:8080;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  client_max_body_size 110M;
 }
-
-# Optional API reverse-proxy if Spring Boot runs on the same VPS:
-# location /api/ {
-#   proxy_pass http://127.0.0.1:8080/api/;
-#   proxy_set_header Host $host;
-#   proxy_set_header X-Real-IP $remote_addr;
-# }
 ```
 
-`try_files … /index.html` makes `/staff` load the React app (not a 404).
-
-Enable site + reload:
-
-```bash
-sudo ln -sf /etc/nginx/sites-available/gayatriconvention.com /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-SSL (if not already):
-
-```bash
-sudo certbot --nginx -d gayatriconvention.com -d www.gayatriconvention.com
-```
+`/staff` is handled by the SPA inside the app — no separate static upload of `dist/` is required when using this Docker image.
 
 ---
 
-## 3. Build frontend on your PC
+## Local browser data (optional import)
 
-In the project root (Cursor):
+Older desk data may still sit in each browser as `localStorage` key `gayatri-vhms-v3` and IndexedDB `gayatri-files-v1`.
 
-```bash
-npm install
-```
+**Safe procedure (does not auto-wipe):**
 
-**If API is on the same VPS** and nginx proxies `/api` → leave API base empty:
-
-```bash
-npm run build
-```
-
-**If API is on Railway** (or another host):
-
-```powershell
-$env:VITE_API_BASE="https://YOUR-API.up.railway.app"
-npm run build
-```
-
-Output folder: `dist/`
+1. On each staff browser that has important local-only records, open DevTools → Application → Local Storage → copy `gayatri-vhms-v3`, or use the in-app backup helper `exportLocalDeskBackup()` from the console after login.
+2. Keep that JSON offline.
+3. Re-create critical bookings/payments via the desk (now saved to Postgres), or ask a developer to run a one-off import script against the API.
+4. Do **not** delete Postgres data to “match” an old browser.
 
 ---
 
-## 4. Upload to the VPS
+## Acceptance checks after deploy
 
-Upload **contents of `dist/`** into the nginx `root` (e.g. `/var/www/gayatri`):
-
-- FileZilla / Hostinger SFTP, or:
-
-```bash
-# From your PC (PowerShell / scp) — adjust user + path
-scp -r dist/* root@YOUR_VPS_IP:/var/www/gayatri/
-```
-
-Also redeploy the **backend** (new roles + create-user) on Railway or the VPS.
-
----
-
-## 5. BigRock DNS
-
-Point the domain at the VPS (A record):
-
-| Host | Type | Value |
-|------|------|--------|
-| `@` | A | your VPS public IP |
-| `www` | A or CNAME | VPS IP or `@` |
-
-You can **remove** the `app` subdomain later. Until then, the app redirects `app.…` → `gayatriconvention.com/staff`.
-
----
-
-## 6. Test
-
-1. `https://gayatriconvention.com/` → public site  
-2. `https://gayatriconvention.com/staff` → Team sign in (no browser popup)  
-3. Owner login → Settings → Users & audit → create staff  
-4. Staff login → limited menus only  
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| Popup username/password | Basic Auth still on — Step 1 |
-| `/staff` shows 404 | Missing `try_files` → `/index.html` |
-| Login “API offline” | Wrong `VITE_API_BASE` or API not running / `/api` proxy |
-| Old demo accounts still visible | Old `dist` on server — rebuild and re-upload |
+1. Customer enquiry on phone A → Owner sees it under desk enquiries / bookings on PC B.
+2. Owner creates booking + payment → Manager sees same after refresh on another device.
+3. Upload document → open on second device; still present after `docker compose up -d --no-deps gayatri-app`.
+4. Double-book same hall/date → 409 / clear error (no fake booking number).
+5. Roles: Staff cannot hit `/api/admin/users`; Owner can create staff; only Owner creates another Owner.
+6. `/staff` login; `/` public site; existing owner email still logs in; PWA start URL `/staff`.
+7. Logs show demo seed **SKIPPED**; live owner account unchanged.

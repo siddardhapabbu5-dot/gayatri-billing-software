@@ -1188,7 +1188,77 @@ export function convertEnquiry(enquiryId) {
   return persist(state);
 }
 
-export function createReservation(draft) {
+export async function createReservation(draft) {
+  const { getToken } = await import("./api/client.js");
+  if (getToken()) {
+    try {
+      const ops = await import("./api/ops.js");
+      const { hydrateDeskFromServer } = await import("./serverSync.js");
+      const state = load();
+      let guestServerId = null;
+      const existing = state.guests.find((g) => g.phone && g.phone === draft.guest?.phone && g.serverId);
+      if (existing?.serverId) {
+        guestServerId = existing.serverId;
+      } else {
+        const g = await ops.createGuest({
+          name: draft.guest.name,
+          phone: draft.guest.phone,
+          email: draft.guest.email,
+          address: draft.guest.address,
+          gstin: draft.guest.gstin,
+          nationality: draft.guest.nationality || "India",
+          idProofType: draft.guest.idProof?.type,
+          idProofNumber: draft.guest.idProof?.number,
+        });
+        guestServerId = g.id;
+      }
+      const hallIds = (draft.halls || [])
+        .map((h) => {
+          const hall = state.halls.find((x) => x.id === h.hallId);
+          return hall?.serverId || (String(h.hallId).startsWith("api-h-") ? Number(String(h.hallId).slice(6)) : null);
+        })
+        .filter(Boolean);
+      const roomIds = (draft.rooms || [])
+        .map((r) => {
+          const room = state.rooms.find((x) => x.id === r.roomId);
+          return room?.serverId || (String(r.roomId).startsWith("api-r-") ? Number(String(r.roomId).slice(6)) : null);
+        })
+        .filter(Boolean);
+      const firstRoom = (draft.rooms || [])[0];
+      const booking = await ops.createBooking({
+        guestId: guestServerId,
+        type: draft.type || "Event",
+        source: draft.source || "Direct",
+        eventDate: draft.eventDate,
+        guestsExpected: Number(draft.guestsExpected) || 0,
+        notes: draft.notes || "",
+        discount: Number(draft.discount) || 0,
+        hallIds,
+        roomIds,
+        slotType: (draft.halls || [])[0]?.slotType || "full-day",
+        roomCheckIn: firstRoom?.checkIn || null,
+        roomCheckOut: firstRoom?.checkOut || null,
+        advanceAmount: Number(draft.advanceAmount) || null,
+        advanceMethod: draft.advanceMethod || null,
+        advanceDate: draft.advanceDate || null,
+        advanceRef: draft.advanceRef || null,
+        finalAmount: Number(draft.finalAmount) || null,
+        finalMethod: draft.finalMethod || null,
+        finalDate: draft.finalDate || null,
+        finalRef: draft.finalRef || null,
+      });
+      const next = await hydrateDeskFromServer();
+      return { state: next, booking: next.bookings.find((b) => b.serverId === booking.id) || { id: `api-b-${booking.id}`, number: booking.number } };
+    } catch (err) {
+      return { error: err.message || "Could not save booking on the server." };
+    }
+  }
+
+  // Offline / no API session — local-only fallback (not shared across devices).
+  return createReservationLocal(draft);
+}
+
+function createReservationLocal(draft) {
   const state = load();
   let guest = state.guests.find((g) => g.phone === draft.guest.phone);
   if (!guest) {
@@ -1378,16 +1448,37 @@ export function createReservation(draft) {
   return { state: load(), booking };
 }
 
-export function addPayment(folioId, payload) {
+export async function addPayment(folioId, payload) {
+  const { getToken } = await import("./api/client.js");
+  const state0 = load();
+  const folio = state0.folios.find((f) => f.id === folioId);
+  const booking = folio ? state0.bookings.find((b) => b.id === folio.bookingId) : null;
+  if (getToken() && booking?.serverId) {
+    try {
+      const ops = await import("./api/ops.js");
+      const { hydrateDeskFromServer } = await import("./serverSync.js");
+      await ops.addPaymentApi(booking.serverId, {
+        amount: Number(payload.amount) || 0,
+        method: payload.method || "Cash",
+        type: payload.type || "Payment",
+        paidOn: (payload.at || "").slice(0, 10) || null,
+        refNo: payload.ref || null,
+      });
+      return { state: await hydrateDeskFromServer() };
+    } catch (err) {
+      return { error: err.message || "Payment could not be saved on the server." };
+    }
+  }
+
   const state = load();
-  const folio = state.folios.find((f) => f.id === folioId);
-  if (!folio) return { error: "Folio not found" };
+  const folioLocal = state.folios.find((f) => f.id === folioId);
+  if (!folioLocal) return { error: "Folio not found" };
   const user = state.users.find((u) => u.id === state.session.userId);
   const amount = Number(payload.amount) || 0;
   if (amount <= 0) return { error: "Enter a valid amount" };
   const type = payload.type || "Payment";
   if (type === "Refund" || type === "Deposit return") {
-    const { pays } = bookingFolio(state, folio.bookingId);
+    const { pays } = bookingFolio(state, folioLocal.bookingId);
     const maxRf = maxRefundable(pays);
     if (amount > maxRf) {
       return { error: `Refund cannot exceed net paid (${maxRf}). Remove or reverse an extra refund first.` };
@@ -1396,8 +1487,8 @@ export function addPayment(folioId, payload) {
   const pay = {
     id: uid("pay"),
     folioId,
-    bookingId: folio?.bookingId,
-    customerId: (state.bookings || []).find((b) => b.id === folio?.bookingId)?.guestId || "",
+    bookingId: folioLocal.bookingId,
+    customerId: (state.bookings || []).find((b) => b.id === folioLocal.bookingId)?.guestId || "",
     amount,
     method: payload.method || "Cash",
     type,
@@ -1423,7 +1514,7 @@ export function addPayment(folioId, payload) {
     id: uid("inv"),
     number: seqNo(state.invoices, "number", prefix),
     type: invType,
-    bookingId: folio?.bookingId,
+    bookingId: folioLocal.bookingId,
     folioId,
     at: pay.at,
     status: "Issued",
@@ -1431,8 +1522,8 @@ export function addPayment(folioId, payload) {
   pay.receiptNo = inv.number;
   state.invoices.unshift(inv);
   // Standalone refund is money only — do not mark a live booking Cancelled/Refunded.
-  const { totals } = bookingFolio(state, folio?.bookingId);
-  if (totals.balance <= 0 && folio && folio.status !== "Cancelled") folio.status = "Settled";
+  const { totals } = bookingFolio(state, folioLocal.bookingId);
+  if (totals.balance <= 0 && folioLocal.status !== "Cancelled") folioLocal.status = "Settled";
   audit(
     state,
     pay.type === "Refund" ? "Refund posted" : pay.type === "Final" ? "Final payment recorded" : "Payment recorded",
@@ -1626,7 +1717,28 @@ export async function removeExpense(id) {
   return persist(state);
 }
 
-export function cancelBooking(bookingId, refund, reason = "") {
+export async function cancelBooking(bookingId, refund, reason = "") {
+  const state0 = load();
+  const bk = state0.bookings.find((b) => b.id === bookingId);
+  const { getToken } = await import("./api/client.js");
+  if (getToken() && bk?.serverId) {
+    try {
+      const ops = await import("./api/ops.js");
+      const { hydrateDeskFromServer } = await import("./serverSync.js");
+      await ops.cancelBookingApi(bk.serverId);
+      if (Number(refund) > 0) {
+        await ops.createRefundApi(bk.serverId, {
+          amount: Number(refund),
+          reason: reason || "Cancellation",
+          paymentId: null,
+        });
+      }
+      return await hydrateDeskFromServer();
+    } catch (err) {
+      window.alert(err.message || "Cancel failed on the server.");
+      return getState();
+    }
+  }
   const out = processCancellation(bookingId, {
     reason,
     refundAmount: Number(refund) || 0,
@@ -2143,70 +2255,68 @@ export function addCatering(order) {
   return persist(state);
 }
 
-export function addEnquiry(enq) {
-  const state = load();
-  if (enq.date) {
-    const avail = publicAvailability(state, enq.hall, enq.date);
-    if (avail.blocked) return { error: avail.message };
+export async function addEnquiry(enq) {
+  try {
+    const { submitPublicEnquiry } = await import("./api/ops.js");
+    const res = await submitPublicEnquiry({
+      name: enq.name,
+      phone: enq.phone,
+      email: enq.email,
+      date: enq.date,
+      hall: enq.hall,
+      guests: enq.guests,
+      message:
+        [enq.type, enq.message].filter(Boolean).join(" — ") || null,
+      agreeHall: enq.agreeHall,
+      agreeRoom: enq.agreeRoom,
+    });
+    // Refresh desk cache if staff session exists (optional); public visitors only need the number.
+    try {
+      const { getToken } = await import("./api/client.js");
+      if (getToken()) {
+        const { hydrateDeskFromServer } = await import("./serverSync.js");
+        await hydrateDeskFromServer();
+      }
+    } catch {
+      /* ignore hydrate errors for public form */
+    }
+    return {
+      booking: {
+        number: res.bookingNumber,
+        id: res.bookingId != null ? `api-b-${res.bookingId}` : "",
+      },
+      enquiry: res,
+    };
+  } catch (err) {
+    return { error: err.message || "Could not save enquiry on the server. Please try again." };
   }
-
-  const guest = {
-    id: uid("g"),
-    name: enq.name,
-    phone: enq.phone,
-    email: enq.email || "",
-    nationality: "India",
-    idProof: { type: "", number: "" },
-    address: "",
-    company: "",
-    emergency: "",
-    preferences: "",
-    tags: ["Website"],
-  };
-  state.guests.unshift(guest);
-  const booking = {
-    id: uid("bk"),
-    number: seqNo(state.bookings, "number", "ENQ"),
-    guestId: guest.id,
-    type: enq.type || "Event",
-    source: "Website",
-    status: "Enquiry",
-    eventDate: enq.date,
-    guestsExpected: Number(enq.guests) || 0,
-    packageId: "",
-    notes: enq.message || "",
-    createdAt: new Date().toISOString(),
-    termsVersion: termSetsOf(state.property).version || 1,
-  };
-  state.bookings.unshift(booking);
-  const agreed = [];
-  if (enq.agreeHall) agreed.push("hall");
-  if (enq.agreeRoom) agreed.push("room");
-  recordAgreement(state, { bookingId: booking.id, guestId: guest.id, sections: agreed, source: "Website" });
-  state.enquiries.unshift({
-    id: uid("en"),
-    bookingId: booking.id,
-    name: enq.name,
-    phone: enq.phone,
-    date: enq.date,
-    hall: enq.hall || "",
-    guests: enq.guests,
-    message: enq.message,
-    status: "Open",
-  });
-  state.notifications.unshift({
-    id: uid("n"),
-    at: new Date().toISOString(),
-    channel: "WhatsApp",
-    title: "Online enquiry",
-    body: `${enq.name} · ${enq.date}`,
-  });
-  audit(state, "Enquiry received", booking.number, enq.name);
-  persist(state);
-  return { state: load(), booking };
 }
 
-export function issueDocument(bookingId, type) {
+export async function issueDocument(bookingId, type) {
+  const state0 = load();
+  const booking = state0.bookings.find((b) => b.id === bookingId);
+  const { getToken } = await import("./api/client.js");
+  if (getToken() && booking?.serverId) {
+    try {
+      const ops = await import("./api/ops.js");
+      const { hydrateDeskFromServer } = await import("./serverSync.js");
+      const inv = await ops.issueInvoiceApi(booking.serverId, type);
+      const next = await hydrateDeskFromServer();
+      return {
+        state: next,
+        invoice: next.invoices.find((i) => i.serverId === inv.id) || {
+          id: `api-i-${inv.id}`,
+          number: inv.number,
+          type: inv.type,
+          bookingId,
+          status: inv.status,
+        },
+      };
+    } catch (err) {
+      return { error: err.message || "Could not issue invoice on the server." };
+    }
+  }
+
   const state = load();
   const folio = state.folios.find((f) => f.bookingId === bookingId);
   const codes = {
@@ -2259,6 +2369,27 @@ export async function attachDocument({ bookingId, guestId, typeId, file }) {
   if (!isAllowedUpload(file)) {
     return { error: "Upload PDF, image (JPG, PNG, WebP) or video (MP4, MOV, WebM)." };
   }
+
+  const { getToken } = await import("./api/client.js");
+  if (getToken()) {
+    try {
+      const ops = await import("./api/ops.js");
+      const { hydrateDeskFromServer } = await import("./serverSync.js");
+      const state = load();
+      const booking = state.bookings.find((b) => b.id === bookingId);
+      const guest = state.guests.find((g) => g.id === guestId);
+      await ops.uploadDocumentApi({
+        file,
+        bookingId: booking?.serverId || null,
+        guestId: guest?.serverId || null,
+        typeCode: typeId || "other",
+      });
+      return { state: await hydrateDeskFromServer() };
+    } catch (err) {
+      return { error: err.message || "Upload failed on the server." };
+    }
+  }
+
   const spec = specById(typeId);
   const id = uid("doc");
   await putBlob(id, file);
