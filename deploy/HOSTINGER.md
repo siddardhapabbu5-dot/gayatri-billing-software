@@ -5,7 +5,7 @@ One domain for public site + staff desk:
 | URL | Purpose |
 |-----|---------|
 | `https://gayatriconvention.com/` | Public website |
-| `https://gayatriconvention.com/staff` | Staff login → desk |
+| `https://gayatriconvention.com/staff` | Staff login → desk (address bar stays `/staff`) |
 
 You do **not** need `app.gayatriconvention.com` (legacy visits redirect to `/staff`).
 

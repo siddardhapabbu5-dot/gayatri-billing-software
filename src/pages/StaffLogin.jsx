@@ -41,28 +41,28 @@ export default function StaffLogin({ onSuccess, onBack, lockToDesk = false }) {
 
   return (
     <div className="staff-login">
-      <div className="staff-login-shade" aria-hidden="true" />
-
-      <header className="staff-login-hero">
-        <div className="staff-login-hero-actions">
-          <InstallAppButton tone="light" />
+      <aside className="staff-login-visual" aria-hidden="true">
+        <div className="staff-login-visual-shade" />
+        <div className="staff-login-brand">
+          <img src="/site/images/logo-gold.png" alt="" />
+          <p>Gayatri Convention</p>
+          <h1>Staff desk</h1>
+          <span>Palagummi · Konaseema</span>
         </div>
-        <img src="/site/images/logo-gold.png" alt="Gayatri" />
-        <p>Gayatri Convention</p>
-        <h1>Staff desk</h1>
-        <span>Palagummi · Konaseema</span>
-      </header>
+      </aside>
 
-      <section className="staff-login-dock">
-        <div className="staff-login-dock-inner">
-          <div className="staff-login-dock-copy">
-            <p className="staff-login-sheet-kicker">Team sign in</p>
-            <h2>Enter the desk</h2>
-            <p className="staff-login-sub">
-              Use your role account
-              {apiUp === false ? " · API offline" : apiUp ? " · API online" : ""}
-            </p>
-          </div>
+      <section className="staff-login-panel">
+        <div className="staff-login-panel-top">
+          <InstallAppButton tone="dark" />
+        </div>
+
+        <div className="staff-login-panel-body">
+          <p className="staff-login-sheet-kicker">Team sign in</p>
+          <h2>Enter the desk</h2>
+          <p className="staff-login-sub">
+            Sign in with your staff account
+            {apiUp === false ? " · API offline" : ""}
+          </p>
 
           <form className="staff-login-form" onSubmit={submit}>
             <label>
@@ -86,17 +86,18 @@ export default function StaffLogin({ onSuccess, onBack, lockToDesk = false }) {
               />
             </label>
             {error && <p className="staff-login-error">{error}</p>}
-            <div className="staff-login-actions">
-              <button className="btn staff-login-submit" type="submit" disabled={busy}>
-                {busy ? "Signing in…" : "Sign in"}
-              </button>
-              {onBack && (
-                <button className="btn ghost staff-login-back" type="button" onClick={onBack}>
-                  {lockToDesk ? "Public website" : "Public site"}
-                </button>
-              )}
-            </div>
+            <button className="btn staff-login-submit" type="submit" disabled={busy}>
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
           </form>
+
+          {onBack && (
+            <div className="staff-login-panel-foot">
+              <button className="staff-login-public" type="button" onClick={onBack}>
+                {lockToDesk ? "Public website" : "Public site"}
+              </button>
+            </div>
+          )}
         </div>
       </section>
     </div>

@@ -14,7 +14,7 @@ import {
   isStaffPath,
   publicHomeHref,
   redirectLegacyStaffHost,
-  staffLoginHref,
+  STAFF_PATH,
   staffPageHref,
   syncAppModeFromUrl,
 } from "./lib/appMode.js";
@@ -246,12 +246,17 @@ function goPublicHome() {
   }
 }
 
+/**
+ * Ensure we are on /staff for the login gate.
+ * Does not append #staff/login — keep the address bar as /staff on fresh visits.
+ * Leaves an existing #staff/login (or other #staff/…) bookmark hash alone.
+ */
 function ensureStaffLoginUrl() {
-  const target = staffLoginHref();
-  const cur = `${window.location.pathname}${window.location.hash}`;
-  if (cur !== "/staff#staff/login" && cur !== "/staff/#staff/login") {
-    window.history.replaceState(null, "", target);
-  }
+  const path = String(window.location.pathname || "/").replace(/\/+$/, "") || "/";
+  const hash = String(window.location.hash || "");
+  if (path === STAFF_PATH || path.startsWith(`${STAFF_PATH}/`)) return;
+  const keepHash = hash === "#staff/login" || (hash.startsWith("#staff/") && hash !== "#staff/login");
+  window.history.replaceState(null, "", keepHash ? `${STAFF_PATH}${hash}` : STAFF_PATH);
 }
 
 function pageFromHash() {

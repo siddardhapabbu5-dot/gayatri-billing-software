@@ -227,7 +227,7 @@ export default function InstallAppButton({ className = "", tone = "light" }) {
               )}
 
               {staffMode ? (
-                <a className="btn ghost install-app-close" href="/staff#staff/login">
+                <a className="btn ghost install-app-close" href="/staff">
                   Open Staff login instead
                 </a>
               ) : null}

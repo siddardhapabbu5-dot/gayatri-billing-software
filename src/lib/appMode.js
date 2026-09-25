@@ -76,11 +76,13 @@ export function isStaffEntryUnsigned() {
 }
 
 export function staffLoginHref() {
-  return `${STAFF_PATH}#staff/login`;
+  /** Clean staff entry — no hash in the address bar. */
+  return STAFF_PATH;
 }
 
 export function staffPageHref(pageId = "desk") {
   if (pageId === "home" || pageId === "portal") return "/#home";
+  if (pageId === "login") return STAFF_PATH;
   return `${STAFF_PATH}#staff/${pageId}`;
 }
 
@@ -183,8 +185,8 @@ export function redirectLegacyStaffHost() {
   const host = currentHostname();
   if (!STAFF_HOSTS.has(host)) return false;
   const targetHost = "gayatriconvention.com";
-  const hash = window.location.hash || "#staff/login";
-  const nextHash = hash.startsWith("#staff") ? hash : "#staff/login";
+  const hash = window.location.hash || "";
+  const nextHash = hash.startsWith("#staff/") && hash !== "#staff/login" ? hash : "";
   window.location.replace(`https://${targetHost}${STAFF_PATH}${nextHash}`);
   return true;
 }
