@@ -1,11 +1,18 @@
 /** Shared PWA install helpers — one deferred prompt for the whole app. */
 
 let deferredPrompt = null;
+let promptFired = false;
 const listeners = new Set();
+const dialogListeners = new Set();
+let dialogOpen = false;
 let captureStarted = false;
 
 function notify() {
   for (const fn of listeners) fn(deferredPrompt);
+}
+
+function notifyDialog() {
+  for (const fn of dialogListeners) fn(dialogOpen);
 }
 
 export function isStandaloneApp() {
@@ -45,6 +52,7 @@ export function initPwaInstallCapture() {
 
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
+    promptFired = true;
     deferredPrompt = e;
     notify();
   });
@@ -55,6 +63,26 @@ export function initPwaInstallCapture() {
   });
 
   return () => {};
+}
+
+export function didBeforeInstallPromptFire() {
+  return promptFired;
+}
+
+export function openPwaInstallDialog() {
+  dialogOpen = true;
+  notifyDialog();
+}
+
+export function closePwaInstallDialog() {
+  dialogOpen = false;
+  notifyDialog();
+}
+
+export function subscribePwaDialog(fn) {
+  dialogListeners.add(fn);
+  fn(dialogOpen);
+  return () => dialogListeners.delete(fn);
 }
 
 export async function promptPwaInstall() {
@@ -70,5 +98,28 @@ export async function promptPwaInstall() {
     deferredPrompt = null;
     notify();
     return { ok: false, reason: "failed" };
+  }
+}
+
+/** Chrome install prompt, or a signal to show the manual guide. */
+export async function installPWA() {
+  if (!deferredPrompt) {
+    openPwaInstallDialog();
+    return { ok: false, reason: "manual" };
+  }
+  const result = await promptPwaInstall();
+  return result.ok ? result : { ...result, reason: result.reason === "unavailable" ? "manual" : result.reason };
+}
+
+/** True only when /downloads/staff-app.apk is a real Android package (a zip), not the website HTML. */
+export async function apkIsAvailable() {
+  try {
+    const res = await fetch("/downloads/staff-app.apk", { headers: { Range: "bytes=0-3" } });
+    const type = res.headers.get("content-type") || "";
+    if (!res.ok || type.includes("text/html")) return false;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return bytes[0] === 0x50 && bytes[1] === 0x4b;
+  } catch {
+    return false;
   }
 }

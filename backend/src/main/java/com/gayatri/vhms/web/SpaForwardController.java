@@ -26,4 +26,14 @@ public class SpaForwardController {
   public String staffNested() {
     return "forward:/index.html";
   }
+
+  @GetMapping({"/app-preview", "/app-preview/"})
+  public String phoneAppRoot() {
+    return "forward:/index.html";
+  }
+
+  @GetMapping("/app-preview/**")
+  public String phoneAppNested() {
+    return "forward:/index.html";
+  }
 }

@@ -2481,12 +2481,76 @@ tr.clickable.is-selected td { background: #edf7f6; }
 .install-app-steps li {
   margin-bottom: 0.35rem;
 }
+.install-app-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f6e7b4;
+}
+.install-app-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0 0 0.9rem;
+}
+.install-app-actions .btn,
+.install-app-actions a.btn {
+  width: 100%;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 999px;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+}
+.install-app-sheet .btn.ghost,
 .install-app-close {
   width: 100%;
   margin-top: 0.35rem;
   border-color: rgba(244, 239, 228, 0.28);
   color: #f4efe4;
   background: transparent;
+}
+.pwa-debug {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 18px 48px;
+  font-family: Jost, "Segoe UI", sans-serif;
+  color: #102027;
+}
+.pwa-debug h1 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.pwa-debug ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.pwa-debug li {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 2px 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(16, 32, 39, 0.12);
+}
+.pwa-debug li em {
+  grid-column: 2;
+  font-style: normal;
+  color: #5c6b73;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.pwa-debug li.is-ok strong { color: #1f7a4d; }
+.pwa-debug li.is-no strong { color: #9a4d1c; }
+.pwa-debug pre {
+  background: #102027;
+  color: #f4efe4;
+  border-radius: 12px;
+  padding: 12px;
+  overflow: auto;
 }
 
 .staff-login-panel-top .install-app-btn {
