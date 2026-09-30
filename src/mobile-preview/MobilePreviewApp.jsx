@@ -113,6 +113,7 @@ export default function MobilePreviewApp() {
     go("detail");
   }
 
+  const staffPhone = /^\/staff(\/|$)/.test(window.location.pathname);
   const tabOn = ["home"].includes(screen) ? "home"
     : ["reservations", "new", "calendar", "detail", "rooms", "room-avail"].includes(screen) ? "reservations"
       : ["guests"].includes(screen) && role === "Receptionist" ? "guests"
@@ -124,15 +125,16 @@ export default function MobilePreviewApp() {
   return (
     <div className="mapp">
       <div className="mapp-frame">
-        <p className="mapp-banner">Preview only. Sample data stays on this phone. Not the live staff desk.</p>
+        <p className="mapp-banner">{staffPhone ? "Gayatri phone app. Changes stay on this phone." : "Preview only. Sample data stays on this phone. Not the live staff desk."}</p>
         {screen === "login" ? (
           <Login
+            staffPhone={staffPhone}
             phone={phone}
             setPhone={setPhone}
             password={password}
             setPassword={setPassword}
             note={loginNote}
-            onForgot={() => setLoginNote("Ask the owner to reset this preview password. A reset is not sent from this phone.")}
+            onForgot={() => setLoginNote(staffPhone ? "Ask the owner to reset this password. A reset is not sent from this phone." : "Ask the owner to reset this preview password. A reset is not sent from this phone.")}
             onLogin={() => {
               if (!phone.trim() || !password.trim()) {
                 setLoginNote("Enter the mobile number and password.");
@@ -273,7 +275,7 @@ export default function MobilePreviewApp() {
   );
 }
 
-function Login({ phone, setPhone, password, setPassword, note, onForgot, onLogin }) {
+function Login({ staffPhone, phone, setPhone, password, setPassword, note, onForgot, onLogin }) {
   return (
     <div className="mapp-login">
       <div className="mapp-brand">
@@ -293,7 +295,7 @@ function Login({ phone, setPhone, password, setPassword, note, onForgot, onLogin
         <button type="button" className="mapp-ghost" onClick={onForgot}>Forgot password?</button>
         <button type="button" className="mapp-cta" onClick={onLogin}>Login</button>
         {note ? <p className="sub">{note}</p> : null}
-        <p className="sub">Don't have an account? Contact the owner. This preview does not open the live staff desk.</p>
+        <p className="sub">{staffPhone ? "Don't have an account? Contact the owner." : "Don't have an account? Contact the owner. This preview does not open the live staff desk."}</p>
       </div>
     </div>
   );
