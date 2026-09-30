@@ -20,7 +20,26 @@ export function digits(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-/** Map a /staff account onto the phone screens. No separate phone-app passwords. */
+/** Phone app sign-in. The staff desk at /staff keeps its own accounts. */
+export const PHONE_APP_LOGIN = {
+  email: "gayatriconventionandresorts@gmail.com",
+  password: "gayatri123",
+};
+
+export function phoneAppUser(email, password) {
+  const sameEmail = String(email || "").trim().toLowerCase() === PHONE_APP_LOGIN.email;
+  const samePassword = String(password || "") === PHONE_APP_LOGIN.password;
+  if (!sameEmail || !samePassword) return null;
+  return {
+    id: "phone-owner",
+    name: "Gayatri",
+    role: "Owner",
+    email: PHONE_APP_LOGIN.email,
+    phone: "",
+  };
+}
+
+/** Map a /staff account onto the phone screens. */
 export function phoneUserFromStaff(user) {
   const role = String(user?.role || "").toLowerCase();
   const mapped = role === "admin" || role === "owner" || role === "administrator"

@@ -1,7 +1,6 @@
 import { useMemo, useReducer, useState } from "react";
-import { clearAuth, getAuthUser, healthCheck, login } from "../api/client.js";
 import {
-  HALLS, ROOM_TYPES, TODAY, allow, balanceOf, gstSplit, hallName, inr, inSpan, initialState, kpis, money, phoneUserFromStaff, rangeFor, reducer, screenAllowed, showDate,
+  HALLS, ROOM_TYPES, TODAY, allow, balanceOf, gstSplit, hallName, inr, inSpan, initialState, kpis, money, phoneAppUser, rangeFor, reducer, screenAllowed, showDate,
 } from "./previewState.js";
 import "./mobile-preview.css";
 
@@ -72,23 +71,14 @@ function Top({ title, onBack, onBell }) {
   );
 }
 
-function signedInStaff() {
-  const existing = getAuthUser();
-  return existing ? phoneUserFromStaff(existing) : null;
-}
-
 export default function MobilePreviewApp() {
-  const [state, dispatch] = useReducer(reducer, initialState, (base) => {
-    const user = signedInStaff();
-    return user ? { ...base, user } : base;
-  });
-  const [stack, setStack] = useState(() => (signedInStaff() ? ["home"] : ["login"]));
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const [stack, setStack] = useState(["login"]);
   const [notice, setNotice] = useState("");
   const [alerts, setAlerts] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginNote, setLoginNote] = useState("");
-  const [loginBusy, setLoginBusy] = useState(false);
   const [selectedId, setSelectedId] = useState("b1");
   const [draft, setDraft] = useState(null);
   const [expenseId, setExpenseId] = useState(null);
@@ -134,7 +124,7 @@ export default function MobilePreviewApp() {
   return (
     <div className="mapp">
       <div className="mapp-frame">
-        <p className="mapp-banner">Same staff account as the desk.</p>
+        <p className="mapp-banner">Phone app sign in</p>
         {screen === "login" ? (
           <Login
             email={email}
@@ -142,29 +132,20 @@ export default function MobilePreviewApp() {
             password={password}
             setPassword={setPassword}
             note={loginNote}
-            busy={loginBusy}
-            onLogin={async () => {
+            onLogin={() => {
               if (!email.trim() || !password.trim()) {
-                setLoginNote("Enter your staff email and password.");
+                setLoginNote("Enter your email and password.");
                 return;
               }
-              setLoginBusy(true);
-              setLoginNote("");
-              try {
-                const up = await healthCheck();
-                if (!up) {
-                  setLoginNote("The staff desk is offline. Use the same account when the desk is reachable.");
-                  return;
-                }
-                const out = await login(email.trim(), password);
-                dispatch({ type: "login", user: phoneUserFromStaff(out.user) });
-                setPassword("");
-                setStack(["home"]);
-              } catch (err) {
-                setLoginNote(err.message || "Login failed");
-              } finally {
-                setLoginBusy(false);
+              const user = phoneAppUser(email, password);
+              if (!user) {
+                setLoginNote("Wrong email or password.");
+                return;
               }
+              dispatch({ type: "login", user });
+              setLoginNote("");
+              setPassword("");
+              setStack(["home"]);
             }}
           />
         ) : (
@@ -263,7 +244,7 @@ export default function MobilePreviewApp() {
               {screen === "refunds" && <RefundQueue state={state} dispatch={dispatch} flash={flash} />}
               {screen === "staff" && role === "Owner" && <StaffAdmin state={state} dispatch={dispatch} flash={flash} />}
               {screen === "settings" && role === "Owner" && <Settings state={state} dispatch={dispatch} flash={flash} />}
-              {screen === "more" && <More state={state} go={go} onLogout={() => { clearAuth(); dispatch({ type: "logout" }); setPassword(""); setStack(["login"]); }} />}
+              {screen === "more" && <More state={state} go={go} onLogout={() => { dispatch({ type: "logout" }); setPassword(""); setStack(["login"]); }} />}
             </main>
             {screen === "reservations" && allow(role, "booking.create") ? <button type="button" className="mapp-fab" aria-label="New reservation" onClick={() => go("new")}>+</button> : null}
             <nav className="mapp-nav">
@@ -287,7 +268,7 @@ export default function MobilePreviewApp() {
   );
 }
 
-function Login({ email, setEmail, password, setPassword, note, busy, onLogin }) {
+function Login({ email, setEmail, password, setPassword, note, busy = false, onLogin }) {
   return (
     <div className="mapp-login">
       <div className="mapp-brand">
@@ -297,7 +278,7 @@ function Login({ email, setEmail, password, setPassword, note, busy, onLogin }) 
       </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Enter the desk</h2>
-        <p className="sub">Sign in with your staff account</p>
+        <p className="sub">Sign in with your phone app account</p>
         <label>Email
           <input type="email" value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} />
         </label>
