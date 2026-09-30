@@ -2,6 +2,7 @@ package com.gayatri.vhms.service;
 
 import com.gayatri.vhms.dto.ApiDtos.BookingRequest;
 import com.gayatri.vhms.dto.ApiDtos.BookingResponse;
+import com.gayatri.vhms.dto.ApiDtos.BookingUpdateRequest;
 import com.gayatri.vhms.dto.ApiDtos.GuestRequest;
 import com.gayatri.vhms.dto.ApiDtos.GuestResponse;
 import com.gayatri.vhms.dto.ApiDtos.HallResponse;
@@ -267,6 +268,30 @@ public class OperationsService {
     return toBooking(bookings.save(b));
   }
 
+  @Transactional
+  public BookingResponse updateBooking(Long id, BookingUpdateRequest req) {
+    Booking b = bookings.findById(id).orElseThrow(() -> notFound("Booking"));
+    if (CANCELLED.equalsIgnoreCase(b.getStatus())) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Cancelled bookings cannot be edited");
+    }
+    if (req.eventDate() != null && !req.eventDate().equals(b.getEventDate())) {
+      for (HallReservation hr : hallReservations.findByBookingId(b.getId())) {
+        conflicts.requireHallFree(hr.getHall().getId(), hr.getHall().getName(), req.eventDate(), b.getId());
+        hr.setEventDate(req.eventDate());
+        hallReservations.save(hr);
+      }
+      b.setEventDate(req.eventDate());
+    }
+    if (req.guestsExpected() != null) {
+      b.setGuestsExpected(req.guestsExpected());
+    }
+    if (req.notes() != null) {
+      b.setNotes(req.notes());
+    }
+    b.setUpdatedAt(Instant.now());
+    return toBooking(bookings.save(b));
+  }
+
   public List<PaymentResponse> listPayments(Long bookingId) {
     return payments.findByBookingIdOrderByPaidAtAsc(bookingId).stream().map(this::toPayment).toList();
   }
@@ -387,11 +412,21 @@ public class OperationsService {
     Map<Long, List<String>> roomNumbers = labels(roomReservations.findRoomNumbers(ids));
     Map<Long, BigDecimal> paid = totals(payments.sumByBookingIds(ids));
     Map<Long, Long> folioIds = new HashMap<>();
-    for (Folio f : folios.findByBookingIdIn(ids)) {
+    Map<Long, BigDecimal> charges = new HashMap<>();
+    List<Folio> folioRows = folios.findByBookingIdIn(ids);
+    for (Folio f : folioRows) {
       folioIds.put(f.getBookingId(), f.getId());
     }
+    if (!folioIds.isEmpty()) {
+      Map<Long, BigDecimal> lineTotals = totals(folioLines.sumByFolioIds(folioIds.values()));
+      for (Folio f : folioRows) {
+        BigDecimal lines = lineTotals.getOrDefault(f.getId(), BigDecimal.ZERO);
+        BigDecimal net = lines.subtract(nz(f.getDiscount()));
+        charges.put(f.getBookingId(), net.signum() < 0 ? BigDecimal.ZERO : net);
+      }
+    }
     return list.stream()
-        .map(b -> toBooking(b, hallCodes, roomNumbers, paid, folioIds))
+        .map(b -> toBooking(b, hallCodes, roomNumbers, paid, charges, folioIds))
         .toList();
   }
 
@@ -404,6 +439,7 @@ public class OperationsService {
       Map<Long, List<String>> hallCodes,
       Map<Long, List<String>> roomNumbers,
       Map<Long, BigDecimal> paid,
+      Map<Long, BigDecimal> charges,
       Map<Long, Long> folioIds
   ) {
     Guest g = b.getGuest();
@@ -414,7 +450,8 @@ public class OperationsService {
         hallCodes.getOrDefault(b.getId(), List.of()),
         roomNumbers.getOrDefault(b.getId(), List.of()),
         paid.getOrDefault(b.getId(), BigDecimal.ZERO),
-        folioIds.get(b.getId())
+        folioIds.get(b.getId()),
+        charges.getOrDefault(b.getId(), BigDecimal.ZERO)
     );
   }
 

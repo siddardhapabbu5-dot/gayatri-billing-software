@@ -417,7 +417,7 @@ export default function App() {
       }
     }
     sync();
-    const t = window.setInterval(sync, 30000);
+    const t = window.setInterval(sync, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(t);

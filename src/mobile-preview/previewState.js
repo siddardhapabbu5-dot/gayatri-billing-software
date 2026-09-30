@@ -215,10 +215,17 @@ export function money(state, from, to) {
   return { revenue, expense, refund, net: revenue - refund, profit: revenue - refund - expense, byMode, pay, expenses };
 }
 
+function localIso(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function kpis(state) {
-  const month = money(state, "2026-09-01", TODAY);
-  const today = money(state, TODAY, TODAY);
-  const bookingsToday = state.bookings.filter((b) => b.date === TODAY && b.status !== "Cancelled").length;
+  const todayIso = localIso();
+  const monthStart = `${todayIso.slice(0, 8)}01`;
+  const month = money(state, monthStart, todayIso);
+  const today = money(state, todayIso, todayIso);
+  const bookingsToday = state.bookings.filter((b) => b.date === todayIso && b.status !== "Cancelled").length;
   const pending = state.bookings.filter((b) => b.status !== "Cancelled").reduce((n, b) => n + balanceOf(b), 0);
   const occupied = Object.values(state.occupied).reduce((n, v) => n + v, 0);
   return {
@@ -229,7 +236,9 @@ export function kpis(state) {
     pending,
     revenueMonth: month.revenue,
     expensesMonth: month.expense,
-    profit: month.revenue - month.expense,
+    profit: month.profit,
+    expensesToday: today.expense,
+    profitToday: today.profit,
     occupied,
     available: ROOM_STOCK - occupied,
     todayModes: today.byMode,

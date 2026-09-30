@@ -64,7 +64,13 @@ public final class ApiDtos {
       String type, String source, LocalDate eventDate, Integer guestsExpected,
       String status, String notes, BigDecimal discount, Instant createdAt,
       List<String> hallCodes, List<String> roomNumbers,
-      BigDecimal paymentsTotal, Long folioId
+      BigDecimal paymentsTotal, Long folioId, BigDecimal chargesTotal
+  ) {}
+
+  public record BookingUpdateRequest(
+      LocalDate eventDate,
+      Integer guestsExpected,
+      String notes
   ) {}
 
   public record PaymentRequest(

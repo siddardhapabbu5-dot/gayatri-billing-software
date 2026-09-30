@@ -115,7 +115,7 @@ export default function MobilePreviewApp() {
       }
     }
     pull();
-    const timer = setInterval(pull, 15000);
+    const timer = setInterval(pull, 5000);
     window.addEventListener("focus", pull);
     return () => {
       stop = true;
@@ -351,7 +351,7 @@ function Dashboard({ state, figures, go, dispatch, flash }) {
         {allow(role, "dash.bookings") ? <button type="button" className="mapp-kpi blue" onClick={() => go("reservations")}><span className="sub">Today's Bookings</span><b>{figures.bookingsToday}</b></button> : null}
         {allow(role, "dash.pending") ? <button type="button" className="mapp-kpi rose" onClick={() => go("pay-history")}><span className="sub">Pending Payments</span><b>{inr(figures.pending)}</b></button> : null}
         {role === "Owner" ? <button type="button" className="mapp-kpi mint" onClick={() => go("reports")}><span className="sub">Monthly Revenue</span><b>{inr(figures.revenueMonth)}</b></button> : null}
-        {role === "Owner" ? <button type="button" className="mapp-kpi peach" onClick={() => go("expense-list")}><span className="sub">Monthly Expenses</span><b>{inr(figures.expensesMonth)}</b></button> : null}
+        {role === "Owner" ? <button type="button" className="mapp-kpi peach" onClick={() => go("expense-list")}><span className="sub">Today's Expenses</span><b>{inr(figures.expensesToday)}</b></button> : null}
         {role === "Owner" ? <button type="button" className="mapp-kpi lilac" onClick={() => go("period")}><span className="sub">Net Profit</span><b>{inr(figures.profit)}</b></button> : null}
         {allow(role, "dash.rooms") ? <button type="button" className="mapp-kpi" onClick={() => go("rooms")}><span className="sub">Occupied Rooms</span><b>{figures.occupied}</b></button> : null}
         {allow(role, "dash.rooms") ? <button type="button" className="mapp-kpi" onClick={() => go("room-avail")}><span className="sub">Available Rooms</span><b>{figures.available}</b></button> : null}

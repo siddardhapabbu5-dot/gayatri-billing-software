@@ -5,6 +5,7 @@ import {
   approveRefundApi,
   cancelBookingApi,
   createBooking,
+  updateBookingApi,
   createExpenseApi,
   createGuest,
   createRefundApi,
@@ -49,6 +50,7 @@ export function snapshotToPhone(snap) {
   const rooms = snap?.rooms || [];
   const serverBookings = snap?.bookings || [];
   const bookingById = new Map(serverBookings.map((booking) => [booking.id, booking]));
+  const guestById = new Map((snap?.guests || []).map((guest) => [guest.id, guest]));
   const guestCounts = {};
   serverBookings.forEach((booking) => {
     if (String(booking.status || "").toLowerCase() === "cancelled") return;
@@ -57,23 +59,26 @@ export function snapshotToPhone(snap) {
 
   const bookings = serverBookings.map((booking) => {
     const paid = money(booking.paymentsTotal);
+    const charges = money(booking.chargesTotal);
+    const guest = guestById.get(booking.guestId);
     return {
       id: `api-${booking.id}`,
       serverId: booking.id,
+      guestServerId: booking.guestId,
       no: booking.number || "",
-      guest: booking.guestName || "Guest",
-      phone: booking.guestPhone || "",
-      email: "",
-      gst: "",
-      address: "",
+      guest: booking.guestName || guest?.name || "Guest",
+      phone: booking.guestPhone || guest?.phone || "",
+      email: guest?.email || "",
+      gst: guest?.gstin || "",
+      address: guest?.address || "",
       hallId: phoneHall(booking.hallCodes),
-      roomId: "",
+      roomId: (booking.roomNumbers || []).length ? "deluxe" : "",
       date: day(booking.eventDate),
       guests: booking.guestsExpected || 0,
       status: booking.status || "Confirmed",
-      total: paid,
+      total: charges || paid,
       paid,
-      package: "Hall",
+      package: booking.notes || "Hall",
       requirements: [],
       approval: "done",
       createdBy: "",
@@ -223,6 +228,27 @@ export async function pushPhoneAction(action, state) {
     return;
   }
 
+  if (action.type === "update-booking") {
+    const booking = action.booking || {};
+    if (booking.guestServerId) {
+      await updateGuest(booking.guestServerId, {
+        name: booking.guest || "Guest",
+        phone: booking.phone || null,
+        email: booking.email || null,
+        address: booking.address || null,
+        gstin: booking.gst || null,
+      });
+    }
+    if (booking.serverId) {
+      await updateBookingApi(booking.serverId, {
+        eventDate: booking.date || null,
+        guestsExpected: Number(booking.guests) || 0,
+        notes: booking.package || "",
+      });
+    }
+    return;
+  }
+
   if (action.type === "add-payment") {
     const booking = bookingOf(state, action.bookingId);
     if (!booking?.serverId) throw new Error("Save the booking on the staff desk before taking a payment.");
@@ -268,7 +294,7 @@ export async function pushPhoneAction(action, state) {
 
   if (action.type === "add-expense") {
     const expense = action.expense || {};
-    await createExpenseApi({
+    const created = await createExpenseApi({
       category: expense.dept || "Hotel",
       description: expense.type || "Expense",
       amount: Number(expense.amount) || 0,
@@ -277,6 +303,9 @@ export async function pushPhoneAction(action, state) {
       vendor: expense.taken || null,
       notes: expense.note || null,
     });
+    if (state.user?.role === "Owner" && created?.id) {
+      await verifyExpenseApi(created.id, true);
+    }
     return;
   }
 
@@ -306,6 +335,7 @@ export async function pushPhoneAction(action, state) {
 
 const SERVER_ACTIONS = new Set([
   "add-booking",
+  "update-booking",
   "add-payment",
   "cancel-booking",
   "delete-booking",

@@ -2,6 +2,7 @@ package com.gayatri.vhms.web;
 
 import com.gayatri.vhms.dto.ApiDtos.BookingRequest;
 import com.gayatri.vhms.dto.ApiDtos.BookingResponse;
+import com.gayatri.vhms.dto.ApiDtos.BookingUpdateRequest;
 import com.gayatri.vhms.dto.ApiDtos.GuestRequest;
 import com.gayatri.vhms.dto.ApiDtos.GuestResponse;
 import com.gayatri.vhms.dto.ApiDtos.HallResponse;
@@ -122,6 +123,12 @@ public class OperationsController {
       @AuthenticationPrincipal StaffUserDetails actor
   ) {
     return ops.createBooking(req, actor);
+  }
+
+  @PutMapping("/bookings/{id}")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BOOKING_CREATE') or hasAuthority('PERM_RESERVATIONS')")
+  public BookingResponse updateBooking(@PathVariable Long id, @RequestBody BookingUpdateRequest req) {
+    return ops.updateBooking(id, req);
   }
 
   @PostMapping("/bookings/{id}/cancel")

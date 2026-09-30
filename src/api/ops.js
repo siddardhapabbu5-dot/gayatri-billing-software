@@ -53,6 +53,13 @@ export async function createBooking(body) {
   });
 }
 
+export async function updateBookingApi(id, body) {
+  return api(`/api/bookings/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function cancelBookingApi(id) {
   return api(`/api/bookings/${id}/cancel`, { method: "POST" });
 }
