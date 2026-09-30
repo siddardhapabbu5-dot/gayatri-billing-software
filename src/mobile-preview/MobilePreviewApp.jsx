@@ -1,6 +1,7 @@
 import { useMemo, useReducer, useState } from "react";
+import { clearAuth, getAuthUser, healthCheck, login } from "../api/client.js";
 import {
-  HALLS, ROOM_TYPES, TODAY, allow, balanceOf, findAccount, gstSplit, hallName, inr, inSpan, initialState, kpis, money, rangeFor, reducer, screenAllowed, showDate,
+  HALLS, ROOM_TYPES, TODAY, allow, balanceOf, gstSplit, hallName, inr, inSpan, initialState, kpis, money, phoneUserFromStaff, rangeFor, reducer, screenAllowed, showDate,
 } from "./previewState.js";
 import "./mobile-preview.css";
 
@@ -71,14 +72,23 @@ function Top({ title, onBack, onBell }) {
   );
 }
 
+function signedInStaff() {
+  const existing = getAuthUser();
+  return existing ? phoneUserFromStaff(existing) : null;
+}
+
 export default function MobilePreviewApp() {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const [stack, setStack] = useState(["login"]);
+  const [state, dispatch] = useReducer(reducer, initialState, (base) => {
+    const user = signedInStaff();
+    return user ? { ...base, user } : base;
+  });
+  const [stack, setStack] = useState(() => (signedInStaff() ? ["home"] : ["login"]));
   const [notice, setNotice] = useState("");
   const [alerts, setAlerts] = useState(false);
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginNote, setLoginNote] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
   const [selectedId, setSelectedId] = useState("b1");
   const [draft, setDraft] = useState(null);
   const [expenseId, setExpenseId] = useState(null);
@@ -113,7 +123,6 @@ export default function MobilePreviewApp() {
     go("detail");
   }
 
-  const staffPhone = /^\/staff(\/|$)/.test(window.location.pathname);
   const tabOn = ["home"].includes(screen) ? "home"
     : ["reservations", "new", "calendar", "detail", "rooms", "room-avail"].includes(screen) ? "reservations"
       : ["guests"].includes(screen) && role === "Receptionist" ? "guests"
@@ -125,34 +134,37 @@ export default function MobilePreviewApp() {
   return (
     <div className="mapp">
       <div className="mapp-frame">
-        <p className="mapp-banner">{staffPhone ? "Gayatri phone app. Changes stay on this phone." : "Preview only. Sample data stays on this phone. Not the live staff desk."}</p>
+        <p className="mapp-banner">Same staff account as the desk.</p>
         {screen === "login" ? (
           <Login
-            staffPhone={staffPhone}
-            phone={phone}
-            setPhone={setPhone}
+            email={email}
+            setEmail={setEmail}
             password={password}
             setPassword={setPassword}
             note={loginNote}
-            onForgot={() => setLoginNote(staffPhone ? "Ask the owner to reset this password. A reset is not sent from this phone." : "Ask the owner to reset this preview password. A reset is not sent from this phone.")}
-            onLogin={() => {
-              if (!phone.trim() || !password.trim()) {
-                setLoginNote("Enter the mobile number and password.");
+            busy={loginBusy}
+            onLogin={async () => {
+              if (!email.trim() || !password.trim()) {
+                setLoginNote("Enter your staff email and password.");
                 return;
               }
-              const account = findAccount(state.staff, phone, password);
-              if (!account) {
-                setLoginNote("Wrong mobile number or password.");
-                return;
-              }
-              if (!account.active) {
-                setLoginNote("This account is disabled. Ask the owner to enable it.");
-                return;
-              }
-              dispatch({ type: "login", phone, password });
+              setLoginBusy(true);
               setLoginNote("");
-              setPassword("");
-              setStack(["home"]);
+              try {
+                const up = await healthCheck();
+                if (!up) {
+                  setLoginNote("The staff desk is offline. Use the same account when the desk is reachable.");
+                  return;
+                }
+                const out = await login(email.trim(), password);
+                dispatch({ type: "login", user: phoneUserFromStaff(out.user) });
+                setPassword("");
+                setStack(["home"]);
+              } catch (err) {
+                setLoginNote(err.message || "Login failed");
+              } finally {
+                setLoginBusy(false);
+              }
             }}
           />
         ) : (
@@ -251,7 +263,7 @@ export default function MobilePreviewApp() {
               {screen === "refunds" && <RefundQueue state={state} dispatch={dispatch} flash={flash} />}
               {screen === "staff" && role === "Owner" && <StaffAdmin state={state} dispatch={dispatch} flash={flash} />}
               {screen === "settings" && role === "Owner" && <Settings state={state} dispatch={dispatch} flash={flash} />}
-              {screen === "more" && <More state={state} go={go} onLogout={() => { dispatch({ type: "logout" }); setPassword(""); setStack(["login"]); }} />}
+              {screen === "more" && <More state={state} go={go} onLogout={() => { clearAuth(); dispatch({ type: "logout" }); setPassword(""); setStack(["login"]); }} />}
             </main>
             {screen === "reservations" && allow(role, "booking.create") ? <button type="button" className="mapp-fab" aria-label="New reservation" onClick={() => go("new")}>+</button> : null}
             <nav className="mapp-nav">
@@ -275,7 +287,7 @@ export default function MobilePreviewApp() {
   );
 }
 
-function Login({ staffPhone, phone, setPhone, password, setPassword, note, onForgot, onLogin }) {
+function Login({ email, setEmail, password, setPassword, note, busy, onLogin }) {
   return (
     <div className="mapp-login">
       <div className="mapp-brand">
@@ -284,18 +296,16 @@ function Login({ staffPhone, phone, setPhone, password, setPassword, note, onFor
         <small>Venues & Convention</small>
       </div>
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Welcome Back</h2>
-        <p className="sub">Login with your mobile number</p>
-        <label>Mobile number
-          <input value={phone} inputMode="tel" autoComplete="username" placeholder="10-digit mobile" onChange={(e) => setPhone(e.target.value)} />
+        <h2 style={{ marginTop: 0 }}>Enter the desk</h2>
+        <p className="sub">Sign in with your staff account</p>
+        <label>Email
+          <input type="email" value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label>Password
           <input type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
         </label>
-        <button type="button" className="mapp-ghost" onClick={onForgot}>Forgot password?</button>
-        <button type="button" className="mapp-cta" onClick={onLogin}>Login</button>
+        <button type="button" className="mapp-cta" onClick={onLogin} disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
         {note ? <p className="sub">{note}</p> : null}
-        <p className="sub">{staffPhone ? "Don't have an account? Contact the owner." : "Don't have an account? Contact the owner. This preview does not open the live staff desk."}</p>
       </div>
     </div>
   );
@@ -1029,43 +1039,11 @@ function RefundQueue({ state, dispatch, flash }) {
   );
 }
 
-function StaffAdmin({ state, dispatch, flash }) {
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "Receptionist" });
+function StaffAdmin() {
   return (
     <>
       <h1>Staff</h1>
-      {state.staff.map((user) => (
-        <article key={user.id} className="mapp-card">
-          <div className="mapp-row"><strong>{user.name}</strong><span className={`mapp-status ${user.active ? "is-confirmed" : "is-cancelled"}`}>{user.active ? "Active" : "Disabled"}</span></div>
-          <p className="sub">{user.role} · {user.phone}</p>
-          {user.role === "Owner" ? <p className="sub">The owner account stays active.</p> : (
-            <button type="button" className="mapp-ghost" onClick={() => { dispatch({ type: "toggle-user", id: user.id }); flash(user.active ? `${user.name} disabled. They cannot log in.` : `${user.name} enabled.`); }}>{user.active ? "Disable" : "Enable"}</button>
-          )}
-        </article>
-      ))}
-      <h2>Add staff</h2>
-      <div className="mapp-chips">
-        {["Manager", "Receptionist"].map((item) => (
-          <button key={item} type="button" className={form.role === item ? "is-on" : ""} onClick={() => setForm({ ...form, role: item })}>{item}</button>
-        ))}
-      </div>
-      <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-      <label>Mobile<input inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
-      <label>Password<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
-      <button type="button" className="mapp-cta" onClick={() => {
-        const phoneDigits = form.phone.replace(/\D/g, "");
-        if (!form.name.trim() || phoneDigits.length !== 10 || !form.password.trim()) {
-          flash("Enter a name, 10-digit mobile, and password.");
-          return;
-        }
-        if (state.staff.some((user) => user.phone === phoneDigits)) {
-          flash("That mobile number is already used.");
-          return;
-        }
-        dispatch({ type: "add-user", user: form });
-        flash(`${form.role} added. They can log in with this mobile number.`);
-        setForm({ name: "", phone: "", password: "", role: "Receptionist" });
-      }}>Add {form.role}</button>
+      <p className="sub">Use the staff accounts already created on the desk. This phone does not keep a separate login.</p>
     </>
   );
 }

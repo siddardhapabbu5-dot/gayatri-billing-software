@@ -20,11 +20,22 @@ export function digits(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
-export const SEED_STAFF = [
-  { id: "u1", name: "Owner", phone: "9849600555", password: "Surya@123", role: "Owner", active: true },
-  { id: "u2", name: "Manager", phone: "9490876877", password: "Manager@123", role: "Manager", active: true },
-  { id: "u3", name: "Receptionist", phone: "9795441113", password: "Gayatri@123", role: "Receptionist", active: true },
-];
+/** Map a /staff account onto the phone screens. No separate phone-app passwords. */
+export function phoneUserFromStaff(user) {
+  const role = String(user?.role || "").toLowerCase();
+  const mapped = role === "admin" || role === "owner" || role === "administrator"
+    ? "Owner"
+    : role === "manager"
+      ? "Manager"
+      : "Receptionist";
+  return {
+    id: user?.id || user?.email || "staff",
+    name: user?.name || user?.email || "Staff",
+    role: mapped,
+    email: user?.email || "",
+    phone: "",
+  };
+}
 
 const MANAGER_KEYS = new Set([
   "dash.collection", "dash.bookings", "dash.pending", "dash.rooms",
@@ -56,11 +67,6 @@ export function screenAllowed(role, screen) {
   if (role === "Manager") return MANAGER_SCREENS.has(screen);
   if (role === "Receptionist") return DESK_SCREENS.has(screen);
   return false;
-}
-
-export function findAccount(staff, phone, password) {
-  const phoneDigits = digits(phone);
-  return (staff || []).find((user) => user.phone === phoneDigits && user.password === password) || null;
 }
 
 function filler(i) {
@@ -124,7 +130,7 @@ export const initialState = {
   refunds: [
     { id: "rf1", bookingId: "b2", bookingNo: "BK-2026-0002", guest: "Priya Sharma", amount: 5000, mode: "UPI", reason: "Date change", status: "requested", by: "Receptionist" },
   ],
-  staff: SEED_STAFF,
+  staff: [],
   settings: { property: "Gayatri Convention", refundNote: "A refund is paid only after the owner approves it." },
   guests: [
     { id: "g1", name: "Ramesh Kumar", phone: "9876543210", email: "ramesh@gayatri.com", address: "Razole", bookings: 4 },
@@ -232,9 +238,9 @@ function releaseRoom(occupied, booking) {
 export function reducer(state, action) {
   const role = roleOf(state);
   if (action.type === "login") {
-    const account = findAccount(state.staff, action.phone, action.password);
-    if (!account || !account.active) return state;
-    return { ...state, user: { id: account.id, name: account.name, role: account.role, phone: account.phone } };
+    const user = action.user;
+    if (!user?.role) return state;
+    return { ...state, user };
   }
   if (action.type === "logout") return { ...state, user: null };
   if (action.type === "add-booking") {
