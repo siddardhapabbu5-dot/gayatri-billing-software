@@ -150,6 +150,9 @@ export const initialState = {
     { id: "rf1", bookingId: "b2", bookingNo: "BK-2026-0002", guest: "Priya Sharma", amount: 5000, mode: "UPI", reason: "Date change", status: "requested", by: "Receptionist" },
   ],
   staff: [],
+  linked: false,
+  serverHalls: [],
+  serverRooms: [],
   settings: { property: "Gayatri Convention", refundNote: "A refund is paid only after the owner approves it." },
   guests: [
     { id: "g1", name: "Ramesh Kumar", phone: "9876543210", email: "ramesh@gayatri.com", address: "Razole", bookings: 4 },
@@ -261,7 +264,10 @@ export function reducer(state, action) {
     if (!user?.role) return state;
     return { ...state, user };
   }
-  if (action.type === "logout") return { ...state, user: null };
+  if (action.type === "logout") return { ...state, user: null, linked: false };
+  if (action.type === "hydrate") {
+    return { ...state, ...action.patch, user: state.user, linked: true };
+  }
   if (action.type === "add-booking") {
     if (!allow(role, "booking.create")) return state;
     const approval = role === "Receptionist" ? "manager" : "done";

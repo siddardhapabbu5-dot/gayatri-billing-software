@@ -1,6 +1,9 @@
-import { useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { clearAuth, getToken, healthCheck, login } from "../api/client.js";
+import { fetchDeskSnapshot } from "../api/ops.js";
+import { pushPhoneAction, savesToDesk, snapshotToPhone } from "./deskSync.js";
 import {
-  HALLS, ROOM_TYPES, TODAY, allow, balanceOf, gstSplit, hallName, inr, inSpan, initialState, kpis, money, phoneAppUser, rangeFor, reducer, screenAllowed, showDate,
+  HALLS, ROOM_TYPES, TODAY, allow, balanceOf, gstSplit, hallName, inr, inSpan, initialState, kpis, money, phoneUserFromStaff, rangeFor, reducer, screenAllowed, showDate,
 } from "./previewState.js";
 import "./mobile-preview.css";
 
@@ -82,10 +85,44 @@ export default function MobilePreviewApp() {
   const [selectedId, setSelectedId] = useState("b1");
   const [draft, setDraft] = useState(null);
   const [expenseId, setExpenseId] = useState(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const screen = stack[stack.length - 1];
   const role = state.user?.role || "";
   const figures = useMemo(() => kpis(state), [state]);
   const booking = state.bookings.find((b) => b.id === selectedId) || state.bookings[0];
+
+  function commit(action) {
+    if (!savesToDesk(action.type) || !getToken()) {
+      dispatch(action);
+      return;
+    }
+    pushPhoneAction(action, stateRef.current)
+      .then(() => fetchDeskSnapshot())
+      .then((snap) => commit({ type: "hydrate", patch: snapshotToPhone(snap) }))
+      .catch((err) => setNotice(err.message || "The staff desk did not save this."));
+  }
+
+  useEffect(() => {
+    if (!state.user || !getToken()) return undefined;
+    let stop = false;
+    async function pull() {
+      try {
+        const snap = await fetchDeskSnapshot();
+        if (!stop) commit({ type: "hydrate", patch: snapshotToPhone(snap) });
+      } catch {
+        /* Keep the last desk copy if this refresh fails. */
+      }
+    }
+    pull();
+    const timer = setInterval(pull, 15000);
+    window.addEventListener("focus", pull);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+      window.removeEventListener("focus", pull);
+    };
+  }, [state.user]);
 
   function go(next) {
     if (state.user && !screenAllowed(state.user.role, next)) {
@@ -124,7 +161,7 @@ export default function MobilePreviewApp() {
   return (
     <div className="mapp">
       <div className="mapp-frame">
-        <p className="mapp-banner">Phone app sign in</p>
+        <p className="mapp-banner">{state.linked ? "Synced with the staff desk." : "Same login as the staff desk."}</p>
         {screen === "login" ? (
           <Login
             email={email}
@@ -132,20 +169,28 @@ export default function MobilePreviewApp() {
             password={password}
             setPassword={setPassword}
             note={loginNote}
-            onLogin={() => {
+            onLogin={async () => {
               if (!email.trim() || !password.trim()) {
                 setLoginNote("Enter your email and password.");
                 return;
               }
-              const user = phoneAppUser(email, password);
-              if (!user) {
-                setLoginNote("Wrong email or password.");
-                return;
-              }
-              dispatch({ type: "login", user });
               setLoginNote("");
-              setPassword("");
-              setStack(["home"]);
+              try {
+                const up = await healthCheck();
+                if (!up) {
+                  setLoginNote("The staff desk is offline. Sign in when the desk is reachable.");
+                  return;
+                }
+                const out = await login(email.trim(), password);
+                const user = phoneUserFromStaff(out.user);
+                dispatch({ type: "login", user });
+                const snap = await fetchDeskSnapshot();
+                dispatch({ type: "hydrate", patch: snapshotToPhone(snap) });
+                setPassword("");
+                setStack(["home"]);
+              } catch (err) {
+                setLoginNote(err.message || "Wrong email or password.");
+              }
             }}
           />
         ) : (
@@ -154,8 +199,8 @@ export default function MobilePreviewApp() {
             <main className="mapp-body">
               {notice ? <p className="mapp-note">{notice}</p> : null}
               {state.user && !screenAllowed(role, screen) ? <p className="mapp-note">This page is not available for the {role} login.</p> : null}
-              {screen === "home" && <Dashboard state={state} figures={figures} go={go} flash={flash} dispatch={dispatch} />}
-              {screen === "reservations" && <ReservationList state={state} onOpen={openBooking} onNew={() => go("new")} dispatch={dispatch} flash={flash} />}
+              {screen === "home" && <Dashboard state={state} figures={figures} go={go} flash={flash} dispatch={commit} />}
+              {screen === "reservations" && <ReservationList state={state} onOpen={openBooking} onNew={() => go("new")} dispatch={commit} flash={flash} />}
               {screen === "new" && (
                 <NewReservation
                   onHall={(hallId) => { setDraft({ hallId, roomId: "", date: TODAY, slot: "9:00 AM", guests: 2, package: "Half Day", requirements: [], guest: "", phone: "", email: "", gst: "", address: "" }); go("calendar"); }}
@@ -171,23 +216,23 @@ export default function MobilePreviewApp() {
                   setDraft={setDraft}
                   onSave={(next) => {
                     if (draft) {
-                      dispatch({ type: "add-booking", booking: next });
+                      commit({ type: "add-booking", booking: next });
                       setDraft(null);
                       flash(role === "Receptionist" ? "Booking sent to the manager for review." : "Booking added. The reservation list and dashboard now include it.");
                       setStack(["reservations"]);
                     } else {
-                      dispatch({ type: "update-booking", booking: next });
+                      commit({ type: "update-booking", booking: next });
                       flash("Booking updated on the list and the dashboard.");
                     }
                   }}
                   onPay={() => go("pay")}
                   onInvoice={() => go("invoice")}
-                  onCancel={() => { dispatch({ type: "cancel-booking", id: booking.id }); flash("Booking cancelled."); }}
-                  onDelete={() => { dispatch({ type: "delete-booking", id: booking.id }); flash("Booking deleted."); setStack(["reservations"]); }}
-                  onReview={() => { dispatch({ type: "review-booking", id: booking.id }); flash("Sent to the owner. Owner confirmation is optional."); }}
-                  onConfirm={() => { dispatch({ type: "confirm-booking", id: booking.id }); flash("Owner confirmed this booking."); }}
-                  onCheckIn={() => { dispatch({ type: "check-in", id: booking.id }); flash("Guest checked in."); }}
-                  onCheckOut={() => { dispatch({ type: "check-out", id: booking.id }); flash("Guest checked out."); }}
+                  onCancel={() => { commit({ type: "cancel-booking", id: booking.id }); flash("Booking cancelled."); }}
+                  onDelete={() => { commit({ type: "delete-booking", id: booking.id }); flash("Booking deleted."); setStack(["reservations"]); }}
+                  onReview={() => { commit({ type: "review-booking", id: booking.id }); flash("Sent to the owner. Owner confirmation is optional."); }}
+                  onConfirm={() => { commit({ type: "confirm-booking", id: booking.id }); flash("Owner confirmed this booking."); }}
+                  onCheckIn={() => { commit({ type: "check-in", id: booking.id }); flash("Guest checked in."); }}
+                  onCheckOut={() => { commit({ type: "check-out", id: booking.id }); flash("Guest checked out."); }}
                 />
               )}
               {screen === "rooms" && <RoomsBooking state={state} onContinue={() => go("room-avail")} />}
@@ -197,11 +242,11 @@ export default function MobilePreviewApp() {
                   role={role}
                   booking={booking}
                   onCollect={(amount, mode) => {
-                    dispatch({ type: "add-payment", bookingId: booking.id, amount, mode, date: TODAY });
+                    commit({ type: "add-payment", bookingId: booking.id, amount, mode, date: TODAY });
                     flash("Payment received. Saved payments cannot be edited.");
                   }}
                   onRefund={(amount, mode, reason) => {
-                    dispatch({ type: "request-refund", bookingId: booking.id, amount, mode, reason });
+                    commit({ type: "request-refund", bookingId: booking.id, amount, mode, reason });
                     flash("Refund requested. Manager verifies it, then the owner approves it.");
                   }}
                   onCancel={back}
@@ -209,8 +254,8 @@ export default function MobilePreviewApp() {
                   onQueue={() => go("refunds")}
                 />
               )}
-              {screen === "guests" && <Guests state={state} dispatch={dispatch} flash={flash} />}
-              {screen === "documents" && <Documents state={state} booking={booking} dispatch={dispatch} flash={flash} />}
+              {screen === "guests" && <Guests state={state} dispatch={commit} flash={flash} />}
+              {screen === "documents" && <Documents state={state} booking={booking} dispatch={commit} flash={flash} />}
               {screen === "reports" && screenAllowed(role, screen) && <ReportSummary state={state} role={role} go={go} />}
               {screen === "today" && screenAllowed(role, screen) && <TodayReport state={state} role={role} figures={figures} />}
               {screen === "period" && screenAllowed(role, screen) && <PeriodReport state={state} role={role} />}
@@ -220,8 +265,8 @@ export default function MobilePreviewApp() {
                 <ExpenseEntry
                   existing={state.expenses.find((e) => e.id === expenseId)}
                   onSave={(expense) => {
-                    if (expense.id) dispatch({ type: "update-expense", expense });
-                    else dispatch({ type: "add-expense", expense });
+                    if (expense.id) commit({ type: "update-expense", expense });
+                    else commit({ type: "add-expense", expense });
                     setExpenseId(null);
                     flash(role === "Owner" ? "Expense added to the books." : "Bill uploaded. It is added to the books only after the owner approves it.");
                     setStack(role === "Receptionist" ? ["more"] : ["expense-list"]);
@@ -235,16 +280,16 @@ export default function MobilePreviewApp() {
                   userId={state.user?.id}
                   onAdd={() => { setExpenseId(null); go("expense"); }}
                   onEdit={(id) => { setExpenseId(id); go("expense"); }}
-                  onVerify={(id) => { dispatch({ type: "verify-expense", id }); flash("Expense verified. The owner still has to approve it."); }}
-                  onApprove={(id) => { dispatch({ type: "approve-expense", id }); flash("Expense approved and added to profit and loss."); }}
-                  onReject={(id) => { dispatch({ type: "reject-expense", id }); flash("Expense rejected. It is not in the books."); }}
+                  onVerify={(id) => { commit({ type: "verify-expense", id }); flash("Expense verified. The owner still has to approve it."); }}
+                  onApprove={(id) => { commit({ type: "approve-expense", id }); flash("Expense approved and added to profit and loss."); }}
+                  onReject={(id) => { commit({ type: "reject-expense", id }); flash("Expense rejected. It is not in the books."); }}
                 />
               )}
               {screen === "invoice" && <Invoice booking={booking} role={role} />}
-              {screen === "refunds" && <RefundQueue state={state} dispatch={dispatch} flash={flash} />}
-              {screen === "staff" && role === "Owner" && <StaffAdmin state={state} dispatch={dispatch} flash={flash} />}
-              {screen === "settings" && role === "Owner" && <Settings state={state} dispatch={dispatch} flash={flash} />}
-              {screen === "more" && <More state={state} go={go} onLogout={() => { dispatch({ type: "logout" }); setPassword(""); setStack(["login"]); }} />}
+              {screen === "refunds" && <RefundQueue state={state} dispatch={commit} flash={flash} />}
+              {screen === "staff" && role === "Owner" && <StaffAdmin state={state} dispatch={commit} flash={flash} />}
+              {screen === "settings" && role === "Owner" && <Settings state={state} dispatch={commit} flash={flash} />}
+              {screen === "more" && <More state={state} go={go} onLogout={() => { clearAuth(); commit({ type: "logout" }); setPassword(""); setStack(["login"]); }} />}
             </main>
             {screen === "reservations" && allow(role, "booking.create") ? <button type="button" className="mapp-fab" aria-label="New reservation" onClick={() => go("new")}>+</button> : null}
             <nav className="mapp-nav">
@@ -278,7 +323,7 @@ function Login({ email, setEmail, password, setPassword, note, busy = false, onL
       </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Enter the desk</h2>
-        <p className="sub">Sign in with your phone app account</p>
+        <p className="sub">Sign in with the same staff account used on the computer</p>
         <label>Email
           <input type="email" value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} />
         </label>
@@ -332,8 +377,8 @@ function Dashboard({ state, figures, go, dispatch, flash }) {
             <div key={b.id} className="mapp-row" style={{ marginTop: 8 }}>
               <span className="sub">{b.guest} · {b.no}</span>
               <span className="mapp-actions">
-                {b.stay !== "in" && b.stay !== "out" ? <button type="button" onClick={() => { dispatch({ type: "check-in", id: b.id }); flash(`${b.guest} checked in.`); }}>Check in</button> : null}
-                {b.stay === "in" ? <button type="button" onClick={() => { dispatch({ type: "check-out", id: b.id }); flash(`${b.guest} checked out.`); }}>Check out</button> : null}
+                {b.stay !== "in" && b.stay !== "out" ? <button type="button" onClick={() => { commit({ type: "check-in", id: b.id }); flash(`${b.guest} checked in.`); }}>Check in</button> : null}
+                {b.stay === "in" ? <button type="button" onClick={() => { commit({ type: "check-out", id: b.id }); flash(`${b.guest} checked out.`); }}>Check out</button> : null}
                 {b.stay === "out" ? <span className="sub">Checked out</span> : null}
                 {b.stay === "in" ? <span className="sub">In house</span> : null}
               </span>
@@ -383,10 +428,10 @@ function ReservationList({ state, onOpen, onNew, dispatch, flash }) {
         </button>
       ))}
       {state.user?.role === "Manager" ? state.bookings.filter((b) => b.approval === "manager").map((b) => (
-        <button key={`review-${b.id}`} type="button" className="mapp-ghost" onClick={() => { dispatch({ type: "review-booking", id: b.id }); flash(`${b.no} reviewed. Owner confirmation is optional.`); }}>Review {b.no}</button>
+        <button key={`review-${b.id}`} type="button" className="mapp-ghost" onClick={() => { commit({ type: "review-booking", id: b.id }); flash(`${b.no} reviewed. Owner confirmation is optional.`); }}>Review {b.no}</button>
       )) : null}
       {state.user?.role === "Owner" ? state.bookings.filter((b) => b.approval === "owner" || b.approval === "manager").map((b) => (
-        <button key={`confirm-${b.id}`} type="button" className="mapp-ghost" onClick={() => { dispatch({ type: "confirm-booking", id: b.id }); flash(`${b.no} confirmed by owner.`); }}>Confirm {b.no}</button>
+        <button key={`confirm-${b.id}`} type="button" className="mapp-ghost" onClick={() => { commit({ type: "confirm-booking", id: b.id }); flash(`${b.no} confirmed by owner.`); }}>Confirm {b.no}</button>
       )) : null}
       <button type="button" className="mapp-cta" onClick={onNew}>New Reservation</button>
     </>
@@ -623,7 +668,7 @@ function Guests({ state, dispatch, flash }) {
           <label>Phone<input value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} /></label>
           <label>Email<input value={editing.email || ""} onChange={(e) => setEditing({ ...editing, email: e.target.value })} /></label>
           <label>Address<input value={editing.address || ""} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></label>
-          <button type="button" className="mapp-cta" onClick={() => { dispatch({ type: "update-guest", guest: editing }); setEditing(null); flash("Guest details updated."); }}>Save guest</button>
+          <button type="button" className="mapp-cta" onClick={() => { commit({ type: "update-guest", guest: editing }); setEditing(null); flash("Guest details updated."); }}>Save guest</button>
         </section>
       ) : null}
       <h2>Add Guest</h2>
@@ -633,7 +678,7 @@ function Guests({ state, dispatch, flash }) {
       <label>Address<input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
       <button type="button" className="mapp-cta" onClick={() => {
         if (!form.name || !form.phone) return;
-        dispatch({ type: "add-guest", guest: form });
+        commit({ type: "add-guest", guest: form });
         setForm({ name: "", phone: "", email: "", address: "" });
         flash("Guest added to CRM.");
       }}>Add Guest</button>
@@ -660,7 +705,7 @@ function Documents({ state, booking, dispatch, flash }) {
       </label>
       <button type="button" className="mapp-cta" onClick={() => {
         if (!file) return;
-        dispatch({ type: "add-document", document: { bookingNo: booking.no, kind, name: file } });
+        commit({ type: "add-document", document: { bookingNo: booking.no, kind, name: file } });
         setFile("");
         flash("Document saved on this booking only. Not uploaded to the live desk.");
       }}>Save</button>
@@ -1009,9 +1054,9 @@ function RefundQueue({ state, dispatch, flash }) {
           <p className="sub">{refund.guest} · {refund.mode} · {refund.reason}</p>
           <p className="sub">Status · {refund.status} · requested by {refund.by}</p>
           <div className="mapp-actions">
-            {role === "Manager" && refund.status === "requested" ? <button type="button" onClick={() => { dispatch({ type: "verify-refund", id: refund.id }); flash("Refund verified. The owner must approve it."); }}>Verify</button> : null}
-            {role === "Owner" && refund.status === "verified" ? <button type="button" onClick={() => { dispatch({ type: "approve-refund", id: refund.id }); flash("Refund approved."); }}>Approve</button> : null}
-            {role === "Owner" && refund.status === "approved" ? <button type="button" onClick={() => { dispatch({ type: "process-refund", id: refund.id }); flash("Refund processed and recorded."); }}>Mark processed</button> : null}
+            {role === "Manager" && refund.status === "requested" ? <button type="button" onClick={() => { commit({ type: "verify-refund", id: refund.id }); flash("Refund verified. The owner must approve it."); }}>Verify</button> : null}
+            {role === "Owner" && refund.status === "verified" ? <button type="button" onClick={() => { commit({ type: "approve-refund", id: refund.id }); flash("Refund approved."); }}>Approve</button> : null}
+            {role === "Owner" && refund.status === "approved" ? <button type="button" onClick={() => { commit({ type: "process-refund", id: refund.id }); flash("Refund processed and recorded."); }}>Mark processed</button> : null}
           </div>
         </article>
       ))}
@@ -1037,7 +1082,7 @@ function Settings({ state, dispatch, flash }) {
       <h1>Settings</h1>
       <label>Property name<input value={property} onChange={(e) => setProperty(e.target.value)} /></label>
       <label>Refund rule<input value={refundNote} onChange={(e) => setRefundNote(e.target.value)} /></label>
-      <button type="button" className="mapp-cta" onClick={() => { dispatch({ type: "update-settings", settings: { property, refundNote } }); flash("Settings saved on this phone preview."); }}>Save settings</button>
+      <button type="button" className="mapp-cta" onClick={() => { commit({ type: "update-settings", settings: { property, refundNote } }); flash("Settings saved on this phone preview."); }}>Save settings</button>
       <section className="mapp-card">
         <strong>Protected rules</strong>
         <p className="sub">Only the owner can add a manager or receptionist, disable a login, approve a refund, and approve an expense.</p>

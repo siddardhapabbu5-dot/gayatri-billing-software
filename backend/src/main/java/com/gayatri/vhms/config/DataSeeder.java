@@ -32,6 +32,14 @@ public class DataSeeder {
   }
 
   void run(AppUserRepository users, PasswordEncoder encoder) {
+    ensureAccount(
+        users,
+        encoder,
+        "gayatriconventionandresorts@gmail.com",
+        "Gayatri",
+        StaffRole.ADMIN,
+        "gayatri123"
+    );
     if (!seedDemoUsers) {
       log.info(
           "Demo user seeding SKIPPED (app.seed.demo-users=false). "
@@ -47,6 +55,23 @@ public class DataSeeder {
     seed(users, encoder, "hk@gayatrifunctionhall.com", "Housekeeping", StaffRole.HOUSEKEEPING, "Hk@123");
     seed(users, encoder, "accounts@gayatrifunctionhall.com", "Accounts", StaffRole.ACCOUNTS, "Accounts@123");
     log.info("Demo staff seed users ready (see backend/README.md for passwords)");
+  }
+
+  /** Creates the shared phone and desk login once. Never changes a password that is already saved. */
+  private static void ensureAccount(
+      AppUserRepository users,
+      PasswordEncoder encoder,
+      String email,
+      String name,
+      StaffRole role,
+      String rawPassword
+  ) {
+    if (users.existsByEmailIgnoreCase(email)) {
+      log.info("Staff account already exists, password left unchanged: {}", email);
+      return;
+    }
+    seed(users, encoder, email, name, role, rawPassword);
+    log.info("Created shared staff login {}", email);
   }
 
   private static void seed(
