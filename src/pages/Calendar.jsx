@@ -273,7 +273,7 @@ export default function Calendar({ state, go, focusDate }) {
                   <button
                     key={iso}
                     type="button"
-                    className={`cal-day${iso === cursor ? " is-on" : ""}${iso === today ? " is-today" : ""}${tips.length ? " has-tip" : ""}${edge ? ` ${edge}` : ""}`}
+                    className={`cal-day${iso === cursor ? " is-on" : ""}${iso === today ? " is-today" : ""}${tips.length ? " is-booked has-tip" : ""}${edge ? ` ${edge}` : ""}`}
                     onClick={() => setCursor(iso)}
                     aria-label={tips.length ? `${day}. ${tips.map((t) => `${t.title}: ${t.body}`).join(". ")}` : `${day}. Nothing booked`}
                   >

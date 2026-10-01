@@ -27,6 +27,7 @@ import { money } from "./lib";
 import { KEY } from "./lib";
 import { clearAuth, getAuthUser, getToken } from "./api/client";
 import { hydrateDeskFromServer } from "./serverSync.js";
+import { saveBookingExtras, setBookingGst, updateRoomStatusApi } from "./api/ops.js";
 import {
   addCatering,
   addEnquiry,
@@ -319,6 +320,7 @@ export default function App() {
   const [bookingId, setBookingId] = useState(null);
   const [navStack, setNavStack] = useState([]);
   const [authUser, setAuthUser] = useState(() => (getToken() ? getAuthUser() : null));
+  const [deskLink, setDeskLink] = useState("live");
   const [staffGate, setStaffGate] = useState(() => {
     if (isStaffEntryGate()) return true;
     const fromLoc = pageFromLocation();
@@ -334,6 +336,18 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(readNavOpen);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileDrawerGroup, setMobileDrawerGroup] = useState(null);
+
+  function pushRoomStatus(room, status, hkStatus) {
+    if (!room?.serverId) return;
+    updateRoomStatusApi(room.serverId, status, hkStatus || null).catch(async () => {
+      window.alert("Room status was not saved. It will switch back.");
+      try {
+        setState(await hydrateDeskFromServer());
+      } catch {
+        /* desk poll will refresh */
+      }
+    });
+  }
 
   function toggleNavOpen() {
     setNavOpen((prev) => {
@@ -411,16 +425,36 @@ export default function App() {
     async function sync() {
       try {
         const next = await hydrateDeskFromServer();
-        if (!cancelled) setState(applyAuthUser(authUser, next) || next);
+        if (!cancelled) {
+          setState(applyAuthUser(authUser, next) || next);
+          setDeskLink("live");
+        }
       } catch (err) {
-        console.warn("Desk sync failed", err);
+        if (err?.status === 401 && err.auth) {
+          sessionStorage.setItem(
+            "gayatri-session-ended",
+            err.auth === "expired"
+              ? "Session expired. Sign in again."
+              : "Your password was changed. Sign in with the new password."
+          );
+          logoutStaff();
+          return;
+        }
+        if (!cancelled) setDeskLink("reconnecting");
       }
     }
     sync();
-    const t = window.setInterval(sync, 5000);
+    const t = window.setInterval(sync, 3000);
+    function onVisible() {
+      if (document.visibilityState === "visible") sync();
+    }
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       window.clearInterval(t);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [authUser]);
 
@@ -799,6 +833,7 @@ export default function App() {
                 {state.company.group} / {state.property.name}
               </div>
               <h2>{titles[page]}</h2>
+              {deskLink === "reconnecting" ? <p className="muted">Reconnecting to the server…</p> : null}
             </div>
           </div>
           <div className="row">
@@ -844,15 +879,34 @@ export default function App() {
                   setState(out);
                   return out;
                 }}
-                onStatus={(id, s) => setState(setRoomStatus(id, s))}
-                onHousekeeping={(id, s) => setState(setRoomHousekeeping(id, s))}
+                onStatus={(id, s) => {
+                  const next = setRoomStatus(id, s);
+                  setState(next);
+                  const room = next.rooms.find((r) => r.id === id);
+                  pushRoomStatus(room, s, room?.hkStatus);
+                }}
+                onHousekeeping={(id, s) => {
+                  const next = setRoomHousekeeping(id, s);
+                  setState(next);
+                  const room = next.rooms.find((r) => r.id === id);
+                  pushRoomStatus(room, room?.status || "Available", s);
+                }}
                 onCheckIn={(id) => {
                   const stay = state.roomReservations.find((s) => s.id === id);
                   const cov = stay ? coverage(state, stay.bookingId) : { ok: true };
                   if (!cov.ok && !window.confirm("Required hotel documents are missing. Check in anyway?")) return;
-                  setState(checkInRoom(id));
+                  const next = checkInRoom(id);
+                  setState(next);
+                  const room = next.rooms.find((r) => r.id === stay?.roomId);
+                  pushRoomStatus(room, "Occupied", room?.hkStatus);
                 }}
-                onCheckOut={(id) => setState(checkOutRoom(id))}
+                onCheckOut={(id) => {
+                  const stay = state.roomReservations.find((s) => s.id === id);
+                  const next = checkOutRoom(id);
+                  setState(next);
+                  const room = next.rooms.find((r) => r.id === stay?.roomId);
+                  pushRoomStatus(room, "Available", "Dirty");
+                }}
                 onTransfer={(id, room) => {
                   const out = transferRoom(id, room);
                   if (out.state) setState(out.state);
@@ -944,11 +998,33 @@ export default function App() {
                 onClose={() => setBookingId(null)}
                 onPay={(id, p) => setState(addPayment(id, p))}
                 onDiscount={(id, d) => setState(setFolioDiscount(id, d))}
-                onGstMode={(id, mode) => {
-                  const out = setFolioGstMode(id, mode);
-                  if (out?.error) return out;
-                  setState(out);
-                  return out;
+                onGstMode={async (id, mode) => {
+                  const next = setFolioGstMode(id, mode);
+                  if (next?.error) return next;
+                  setState(next);
+                  const folio = next.folios.find((item) => item.id === id);
+                  const booking = next.bookings.find((item) => item.id === folio?.bookingId);
+                  if (!booking?.serverId) return next;
+                  try {
+                    await setBookingGst(booking.serverId, mode);
+                    setState(await hydrateDeskFromServer());
+                  } catch (err) {
+                    window.alert(err.message || "GST was not saved.");
+                  }
+                  return next;
+                }}
+                onSaveExtras={async (bookingId, lines) => {
+                  const booking = getState().bookings.find((item) => item.id === bookingId);
+                  if (!booking?.serverId) {
+                    window.alert("This booking is not on the server yet.");
+                    return;
+                  }
+                  try {
+                    await saveBookingExtras(booking.serverId, lines);
+                    setState(await hydrateDeskFromServer());
+                  } catch (err) {
+                    window.alert(err.message || "Charges were not saved.");
+                  }
                 }}
                 onCharge={(id, payload) => {
                   const out = addFolioCharge(id, payload);

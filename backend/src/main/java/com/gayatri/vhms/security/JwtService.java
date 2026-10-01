@@ -27,6 +27,7 @@ public class JwtService {
         .claim("uid", user.getUser().getId())
         .claim("name", user.getUser().getFullName())
         .claim("role", user.getRole().name())
+        .claim("tv", user.getUser().getTokenVersion())
         .issuedAt(new Date(now))
         .expiration(new Date(now + props.getExpirationMs()))
         .signWith(key)
@@ -43,7 +44,10 @@ public class JwtService {
 
   public boolean isValid(String token, StaffUserDetails user) {
     Claims claims = parse(token);
+    Object rawVersion = claims.get("tv");
+    int tokenVersion = rawVersion instanceof Number number ? number.intValue() : 0;
     return claims.getSubject().equalsIgnoreCase(user.getUsername())
+        && tokenVersion == user.getUser().getTokenVersion()
         && claims.getExpiration().after(new Date());
   }
 

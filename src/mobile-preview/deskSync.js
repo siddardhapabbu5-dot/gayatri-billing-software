@@ -4,7 +4,9 @@ import {
   addPaymentApi,
   approveRefundApi,
   cancelBookingApi,
+  deleteBookingApi,
   createBooking,
+  setBookingGst,
   updateBookingApi,
   createExpenseApi,
   createGuest,
@@ -27,7 +29,21 @@ function money(value) {
 
 function phoneHall(codes) {
   const code = String((codes || [])[0] || "").toUpperCase();
-  return PHONE_HALL[code] || "imperial";
+  if (!code) return "";
+  return PHONE_HALL[code] || "";
+}
+
+function phoneRoomId(numbers, rooms) {
+  const room = (rooms || []).find((item) => (numbers || []).some((number) => String(item.number) === String(number)));
+  if (!room) return "";
+  return roomBucket(room.typeName);
+}
+
+function nextDay(iso) {
+  const [year, month, day] = String(iso || "").split("-").map(Number);
+  if (!year || !month || !day) return iso || null;
+  const date = new Date(year, month - 1, day + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function refundStatus(status) {
@@ -57,6 +73,20 @@ export function snapshotToPhone(snap) {
     guestCounts[booking.guestId] = (guestCounts[booking.guestId] || 0) + 1;
   });
 
+  const extrasByBooking = new Map();
+  for (const line of snap?.folioLines || []) {
+    const bucket = extrasByBooking.get(line.bookingId) || [];
+    bucket.push({
+      id: line.id,
+      category: line.category,
+      description: line.description || "",
+      qty: Number(line.qty) || 0,
+      unitPrice: Number(line.unitPrice) || 0,
+      amount: Math.round(Number(line.amount) || 0),
+    });
+    extrasByBooking.set(line.bookingId, bucket);
+  }
+
   const bookings = serverBookings.map((booking) => {
     const paid = money(booking.paymentsTotal);
     const charges = money(booking.chargesTotal);
@@ -72,7 +102,9 @@ export function snapshotToPhone(snap) {
       gst: guest?.gstin || "",
       address: guest?.address || "",
       hallId: phoneHall(booking.hallCodes),
-      roomId: (booking.roomNumbers || []).length ? "deluxe" : "",
+      roomId: phoneRoomId(booking.roomNumbers, rooms),
+      roomNumbers: booking.roomNumbers || [],
+      slot: phoneRoomId(booking.roomNumbers, rooms) && !phoneHall(booking.hallCodes) ? "Night" : (booking.slotType || ""),
       date: day(booking.eventDate),
       guests: booking.guestsExpected || 0,
       status: booking.status || "Confirmed",
@@ -83,6 +115,8 @@ export function snapshotToPhone(snap) {
       approval: "done",
       createdBy: "",
       stay: "",
+      gstMode: booking.gstMode === "with" ? "with" : "without",
+      charges: extrasByBooking.get(booking.id) || [],
     };
   });
 
@@ -94,10 +128,13 @@ export function snapshotToPhone(snap) {
       serverId: payment.id,
       bookingNo: booking?.number || "",
       guest: booking?.guestName || "",
-      hall: phoneHall(booking?.hallCodes),
+      hall: phoneHall(booking?.hallCodes) || phoneRoomId(booking?.roomNumbers, rooms),
       amount: money(payment.amount),
       mode: payment.method || "Cash",
       date: day(payment.paidAt),
+      at: payment.paidAt || "",
+      type: payment.type || "Payment",
+      ref: payment.refNo || "",
       kind,
     };
   });
@@ -142,6 +179,9 @@ export function snapshotToPhone(snap) {
     email: guest.email || "",
     address: guest.address || "",
     bookings: guestCounts[guest.id] || 0,
+    leadStatus: guest.leadStatus || "",
+    leadSource: guest.leadSource || "",
+    notes: guest.notes || "",
   }));
 
   const documents = (snap?.documents || []).map((doc) => {
@@ -150,15 +190,23 @@ export function snapshotToPhone(snap) {
       id: `api-d-${doc.id}`,
       serverId: doc.id,
       bookingNo: booking?.number || "",
+      guestId: doc.guestId || null,
       kind: doc.typeCode || "File",
       name: doc.fileName || "Document",
+      createdAt: doc.createdAt || "",
     };
   });
 
+  const reservedNumbers = new Set();
+  serverBookings.forEach((booking) => {
+    if (String(booking.status || "").toLowerCase() === "cancelled") return;
+    (booking.roomNumbers || []).forEach((number) => reservedNumbers.add(String(number)));
+  });
   const occupied = { suite: 0, deluxe: 0, standard: 0 };
   rooms.forEach((room) => {
     const status = String(room.status || "").toLowerCase();
-    if (!status.includes("occup") && status !== "reserved") return;
+    const held = reservedNumbers.has(String(room.number || ""));
+    if (!held && !status.includes("occup") && status !== "reserved") return;
     occupied[roomBucket(room.typeName)] += 1;
   });
 
@@ -169,6 +217,7 @@ export function snapshotToPhone(snap) {
       number: room.number,
       typeName: room.typeName,
       status: room.status,
+      baseRate: Number(room.baseRate) || 0,
     })),
     bookings,
     payments,
@@ -177,6 +226,11 @@ export function snapshotToPhone(snap) {
     guests,
     documents,
     occupied,
+    notices: (snap?.notices || []).map((notice) => ({
+      id: notice.id,
+      title: notice.title || "Update",
+      body: notice.body || "",
+    })),
   };
 }
 
@@ -186,13 +240,19 @@ function hallServerId(state, hallId) {
   return hall?.id || null;
 }
 
-function roomServerId(state, roomType) {
+function roomServerId(state, roomType, date, roomNumber) {
   const bucket = roomBucket(roomType);
-  const room = (state.serverRooms || []).find((item) => {
-    const status = String(item.status || "").toLowerCase();
-    return roomBucket(item.typeName) === bucket && (status === "available" || status === "");
+  const held = new Set();
+  (state.bookings || []).forEach((booking) => {
+    if (String(booking.status || "").toLowerCase() === "cancelled") return;
+    if (date && booking.date && booking.date !== date) return;
+    (booking.roomNumbers || []).forEach((number) => held.add(String(number)));
   });
-  return room?.id || null;
+  const rooms = (state.serverRooms || [])
+    .filter((item) => roomBucket(item.typeName) === bucket && !held.has(String(item.number)))
+    .sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+  if (roomNumber) return rooms.find((item) => String(item.number) === String(roomNumber))?.id || null;
+  return rooms[0]?.id || null;
 }
 
 function bookingOf(state, id) {
@@ -209,11 +269,15 @@ export async function pushPhoneAction(action, state) {
       address: booking.address || null,
       gstin: booking.gst || null,
     });
-    const hallId = hallServerId(state, booking.hallId);
-    const roomId = booking.roomId ? roomServerId(state, booking.roomId) : null;
+    const roomOnly = Boolean(booking.roomId) && !booking.hallId;
+    const hallId = roomOnly ? null : hallServerId(state, booking.hallId);
+    const roomId = booking.roomId ? roomServerId(state, booking.roomId, booking.date, booking.roomNumber) : null;
+    if (booking.roomId && !roomId) {
+      throw new Error(booking.roomNumber ? `Room ${booking.roomNumber} is already booked that night.` : "No free room of that type is available. Pick another date.");
+    }
     await createBooking({
       guestId: guest.id,
-      type: booking.roomId ? "Room" : "Event",
+      type: roomOnly ? "Room" : "Event",
       source: "Phone",
       eventDate: booking.date,
       guestsExpected: Number(booking.guests) || 0,
@@ -221,9 +285,10 @@ export async function pushPhoneAction(action, state) {
       discount: 0,
       hallIds: hallId ? [hallId] : [],
       roomIds: roomId ? [roomId] : [],
-      slotType: String(booking.package || "").toLowerCase().includes("half") ? "half-day" : "full-day",
+      slotType: roomOnly ? "full-day" : (booking.slot || (String(booking.package || "").toLowerCase().includes("half") ? "half-day" : "full-day")),
       roomCheckIn: booking.roomId ? booking.date : null,
-      roomCheckOut: null,
+      roomCheckOut: booking.roomId ? nextDay(booking.date) : null,
+      gstMode: booking.gstMode === "with" ? "with" : "without",
     });
     return;
   }
@@ -249,23 +314,37 @@ export async function pushPhoneAction(action, state) {
     return;
   }
 
+  if (action.type === "set-gst") {
+    const booking = bookingOf(state, action.id);
+    if (!booking?.serverId) return;
+    await setBookingGst(booking.serverId, action.gstMode === "with" ? "with" : "without");
+    return;
+  }
+
   if (action.type === "add-payment") {
     const booking = bookingOf(state, action.bookingId);
     if (!booking?.serverId) throw new Error("Save the booking on the staff desk before taking a payment.");
     await addPaymentApi(booking.serverId, {
       amount: Number(action.amount) || 0,
       method: action.mode || "Cash",
-      type: "Payment",
+      type: action.payType || "Payment",
       paidOn: action.date || null,
-      refNo: null,
+      refNo: action.ref || null,
     });
     return;
   }
 
-  if (action.type === "cancel-booking" || action.type === "delete-booking") {
+  if (action.type === "cancel-booking") {
     const booking = bookingOf(state, action.id);
     if (!booking?.serverId) return;
     await cancelBookingApi(booking.serverId);
+    return;
+  }
+
+  if (action.type === "delete-booking") {
+    const booking = bookingOf(state, action.id);
+    if (!booking?.serverId) return;
+    await deleteBookingApi(booking.serverId);
     return;
   }
 
@@ -276,6 +355,9 @@ export async function pushPhoneAction(action, state) {
       phone: guest.phone || null,
       email: guest.email || null,
       address: guest.address || null,
+      leadStatus: guest.leadStatus || null,
+      leadSource: guest.leadSource || null,
+      notes: guest.notes || null,
     });
     return;
   }
@@ -288,6 +370,9 @@ export async function pushPhoneAction(action, state) {
       phone: guest.phone || null,
       email: guest.email || null,
       address: guest.address || null,
+      leadStatus: guest.leadStatus || "",
+      leadSource: guest.leadSource || "",
+      notes: guest.notes || "",
     });
     return;
   }
@@ -336,6 +421,7 @@ export async function pushPhoneAction(action, state) {
 const SERVER_ACTIONS = new Set([
   "add-booking",
   "update-booking",
+  "set-gst",
   "add-payment",
   "cancel-booking",
   "delete-booking",

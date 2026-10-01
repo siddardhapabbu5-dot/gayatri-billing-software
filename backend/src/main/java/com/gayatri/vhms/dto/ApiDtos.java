@@ -18,12 +18,16 @@ public final class ApiDtos {
       String gstin,
       String nationality,
       String idProofType,
-      String idProofNumber
+      String idProofNumber,
+      String leadStatus,
+      String leadSource,
+      String notes
   ) {}
 
   public record GuestResponse(
       Long id, String name, String phone, String email, String address,
-      String gstin, String nationality, String idProofType, String idProofNumber
+      String gstin, String nationality, String idProofType, String idProofNumber,
+      String leadStatus, String leadSource, String notes
   ) {}
 
   public record HallResponse(
@@ -56,7 +60,8 @@ public final class ApiDtos {
       BigDecimal finalAmount,
       String finalMethod,
       LocalDate finalDate,
-      String finalRef
+      String finalRef,
+      String gstMode
   ) {}
 
   public record BookingResponse(
@@ -64,8 +69,22 @@ public final class ApiDtos {
       String type, String source, LocalDate eventDate, Integer guestsExpected,
       String status, String notes, BigDecimal discount, Instant createdAt,
       List<String> hallCodes, List<String> roomNumbers,
-      BigDecimal paymentsTotal, Long folioId, BigDecimal chargesTotal
+      BigDecimal paymentsTotal, Long folioId, BigDecimal chargesTotal,
+      String slotType, String gstMode
   ) {}
+
+  public record GstModeRequest(String gstMode) {}
+
+  public record ChargeLineRequest(String category, String description, BigDecimal qty, BigDecimal unitPrice) {}
+
+  public record ChargeLinesRequest(List<ChargeLineRequest> lines) {}
+
+  public record FolioLineResponse(
+      Long id, Long bookingId, Long folioId, String category, String description,
+      BigDecimal qty, BigDecimal unitPrice, BigDecimal amount
+  ) {}
+
+  public record NotificationResponse(Long id, String title, String body, Instant createdAt) {}
 
   public record BookingUpdateRequest(
       LocalDate eventDate,
@@ -165,6 +184,8 @@ public final class ApiDtos {
       List<ExpenseResponse> expenses,
       List<RefundResponse> refunds,
       List<DocumentResponse> documents,
-      List<InvoiceResponse> invoices
+      List<InvoiceResponse> invoices,
+      List<NotificationResponse> notices,
+      List<FolioLineResponse> folioLines
   ) {}
 }

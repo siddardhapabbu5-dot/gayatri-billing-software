@@ -78,8 +78,8 @@ export function allow(role, key) {
   return false;
 }
 
-const MANAGER_SCREENS = new Set(["home", "reservations", "new", "calendar", "detail", "rooms", "room-avail", "pay", "guests", "documents", "reports", "today", "period", "pay-history", "register", "expense", "expense-list", "invoice", "more", "refunds"]);
-const DESK_SCREENS = new Set(["home", "reservations", "new", "calendar", "detail", "rooms", "room-avail", "pay", "guests", "documents", "today", "pay-history", "invoice", "more", "expense", "refunds"]);
+const MANAGER_SCREENS = new Set(["home", "reservations", "new", "calendar", "detail", "rooms", "room-avail", "pay", "pay-detail", "guests", "lead-status", "source", "documents", "reports", "today", "period", "pay-history", "pay-ledger", "register", "expense", "expense-list", "invoice", "more", "refunds"]);
+const DESK_SCREENS = new Set(["home", "reservations", "new", "calendar", "detail", "rooms", "room-avail", "pay", "pay-detail", "guests", "lead-status", "source", "documents", "today", "pay-history", "pay-ledger", "invoice", "more", "expense", "refunds"]);
 
 export function screenAllowed(role, screen) {
   if (role === "Owner") return true;
@@ -191,12 +191,35 @@ function sum(rows) {
 }
 
 export function rangeFor(key) {
-  if (key === "today") return [TODAY, TODAY];
-  if (key === "week") return ["2026-09-24", TODAY];
-  if (key === "month") return ["2026-09-01", TODAY];
-  if (key === "half") return ["2026-04-01", TODAY];
-  if (key === "year") return ["2026-01-01", TODAY];
-  return ["2026-09-01", TODAY];
+  const today = kolkataToday();
+  const [year, month] = today.split("-").map(Number);
+  if (key === "today") return [today, today];
+  if (key === "week") return [addIsoDays(today, -6), today];
+  if (key === "month") return [`${year}-${String(month).padStart(2, "0")}-01`, today];
+  if (key === "half") return [`${year}-${month <= 6 ? "01" : "07"}-01`, today];
+  if (key === "year") return [`${year}-01-01`, today];
+  return [`${year}-${String(month).padStart(2, "0")}-01`, today];
+}
+
+function kolkataToday() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const pick = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+}
+
+function addIsoDays(iso, days) {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export function inSpan(iso, from, to) {
@@ -348,6 +371,12 @@ export function reducer(state, action) {
   if (action.type === "check-out") {
     if (!allow(role, "dash.checkout")) return state;
     return { ...state, bookings: state.bookings.map((b) => (b.id === action.id && b.stay === "in" ? { ...b, stay: "out" } : b)) };
+  }
+  if (action.type === "set-gst") {
+    return {
+      ...state,
+      bookings: state.bookings.map((b) => (b.id === action.id ? { ...b, gstMode: action.gstMode } : b)),
+    };
   }
   if (action.type === "add-payment") {
     if (!allow(role, "payment.receive")) return state;

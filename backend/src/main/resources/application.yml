@@ -37,6 +37,10 @@ app:
   seed:
     # Never true in production: it would create staff logins with published passwords.
     demo-users: ${APP_SEED_DEMO_USERS:false}
+  otp:
+    # Optional SMS gateway. When blank, the one-time code is shown on the sign-in screen.
+    sms-url: ${APP_OTP_SMS_URL:}
+    sms-key: ${APP_OTP_SMS_KEY:}
 
 logging:
   level:

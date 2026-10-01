@@ -47,6 +47,40 @@
 .mapp-hello { margin: 0 0 12px; }
 .mapp-hello strong { display: block; font-size: 18px; }
 .mapp label { display: block; font-size: 13px; font-weight: 600; margin: 8px 0; }
+.mapp label.mapp-check { display: flex; align-items: center; justify-content: flex-start; gap: 12px; font-weight: 500; margin-top: 14px; }
+.mapp label.mapp-check input { width: 22px; height: 22px; margin: 0; flex: 0 0 auto; }
+.mapp-month-brand { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: 8px; }
+.mapp-month-brand img { height: 36px; width: auto; }
+.mapp-month-brand span { letter-spacing: 0.28em; font-size: 12px; font-weight: 700; }
+.mapp-month-brand strong { font-size: 18px; }
+.mapp-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.mapp-month-head span { text-align: center; font-size: 10px; color: var(--muted); padding-bottom: 4px; }
+.mapp-month-grid button {
+  min-height: 54px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 2px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.mapp-month-grid button b { display: block; font-size: 12px; }
+.mapp-month-grid button em { display: block; color: #1f6f62; font-style: normal; font-size: 9px; font-weight: 700; line-height: 1.15; }
+.mapp-month-grid button.is-free { background: #e5f6ec; }
+.mapp-month-grid button.is-free b { color: #1f7a4d; }
+.mapp-month-grid button.is-booked { background: #fdeeee; }
+.mapp-month-grid button.is-booked b,
+.mapp-month-grid button.is-booked em { color: #c4473a; }
+.mapp-month-grid button.is-today:not(.is-booked) { background: #fff4e5; }
+.mapp-month-grid button.is-today:not(.is-booked) b { color: #c26a00; }
+.mapp-month-grid button.is-today.is-booked { box-shadow: inset 0 0 0 2px #e59a2f; }
+.mapp-month-grid button.is-on { border-color: #2563eb; box-shadow: inset 0 0 0 2px #2563eb; }
+.mapp-month-grid button.is-today.is-booked.is-on { box-shadow: inset 0 0 0 2px #2563eb, inset 0 0 0 4px #e59a2f; }
+.mapp-caltip { background: #143d38; color: #fff; border-radius: 12px; padding: 12px; margin-top: 10px; }
+.mapp-caltip p { margin: 0 0 10px; font-size: 13px; line-height: 1.4; }
+.mapp-caltip p:last-child { margin-bottom: 0; }
+.mapp-caltip strong { display: block; color: #8fe0b8; }
 .mapp input, .mapp select, .mapp textarea {
   width: 100%;
   margin-top: 4px;
@@ -67,6 +101,10 @@
   cursor: pointer;
   margin-top: 8px;
 }
+.mapp-share { display: flex; justify-content: center; gap: 28px; margin-top: 14px; }
+.mapp-share button { width: 84px; border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: var(--ink, #15202b); }
+.mapp-share svg { width: 56px; height: 56px; display: block; margin: 0 auto 6px; border-radius: 14px; box-shadow: 0 2px 8px rgba(16, 32, 39, 0.12); }
+.mapp-share span { display: block; font-size: 12px; font-weight: 650; }
 .mapp-cta { background: var(--g); color: #fff; }
 .mapp-ghost { background: #fff; color: var(--g); border: 1px solid var(--line); }
 .mapp-nav {
@@ -97,6 +135,21 @@
   overflow: auto;
 }
 .mapp-login .card { background: #fff; color: var(--ink); border-radius: 18px; padding: 16px; margin-top: 18px; }
+.mapp-textbtn {
+  border: 0;
+  background: transparent;
+  color: #0e3d32;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 8px 0 0;
+}
+.mapp-pass { display: flex; align-items: center; gap: 8px; }
+.mapp-pass input { flex: 1; width: auto; margin-top: 4px; }
+.mapp-pass .mapp-textbtn { padding: 0; white-space: nowrap; }
+.mapp-eye { border: 0; background: transparent; color: #0e3d32; padding: 0; display: flex; align-items: center; cursor: pointer; }
+.mapp-eye svg { width: 22px; height: 22px; }
 .mapp-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .mapp-kpi {
   background: #fff;
@@ -156,9 +209,10 @@
 .mapp-end { text-align: right; }
 .mapp-res .sub, .mapp-line .sub { display: block; }
 .mapp-status { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
-.mapp-status.is-confirmed, .mapp-status.is-completed { background: #e5f6ec; color: #1f7a4d; }
-.mapp-status.is-pending, .mapp-status.is-review { background: #fff6df; color: #9a6b00; }
-.mapp-status.is-cancelled { background: #fdecec; color: #c4473a; }
+.mapp-status.is-paid, .mapp-status.is-confirmed, .mapp-status.is-completed { background: #e5f6ec; color: #1f7a4d; }
+.mapp-status.is-partial { background: #fff4e5; color: #c26a00; }
+.mapp-status.is-pending, .mapp-status.is-review { background: #fdeeee; color: #c4473a; }
+.mapp-status.is-cancelled { background: #eef1f0; color: #6b7280; }
 .mapp-hall {
   display: flex;
   gap: 10px;
@@ -179,12 +233,45 @@
 .occ { color: var(--red); font-weight: 650; font-size: 12px; }
 .mapp-cal, .mapp-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
 .mapp-cal { color: var(--muted); font-size: 11px; margin-top: 8px; }
-.mapp-days button { border: 0; background: transparent; height: 34px; border-radius: 999px; cursor: pointer; }
-.mapp-days button.is-on { background: var(--g); color: #fff; }
-.mapp-days button.is-booked { box-shadow: inset 0 -3px 0 var(--red); }
-.mapp-legend { display: flex; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.mapp-days button { border: 0; background: transparent; width: 34px; height: 34px; justify-self: center; padding: 0; border-radius: 999px; cursor: pointer; }
+.mapp-days button:not(:disabled) { background: #1f7a4d; color: #fff; }
+.mapp-days button.is-booked { background: #c4473a; color: #fff; box-shadow: none; }
+.mapp-days button.is-today:not(.is-on):not(.is-booked) { background: #e59a2f; color: #fff; }
+.mapp-days button.is-today.is-booked:not(.is-on) { box-shadow: 0 0 0 2px #e59a2f; }
+.mapp-days button.is-on { background: #fff; color: #2563eb; font-weight: 700; box-shadow: inset 0 0 0 2px #2563eb; }
+.mapp-days button.is-on.is-booked { background: #fff; color: #2563eb; font-weight: 700; box-shadow: inset 0 0 0 2px #c4473a; }
+.mapp-days button.is-today.is-on { box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px #e59a2f; }
+.mapp-days button.is-today.is-on.is-booked { box-shadow: inset 0 0 0 2px #c4473a, 0 0 0 2px #e59a2f; }
+.mapp-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
 .mapp-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.mapp-legend i.is-free { background: #1f7a4d; }
+.mapp-legend i.is-booked { background: #c4473a; }
+.mapp-legend i.is-selected { background: #2563eb; }
+.mapp-legend i.is-today { background: #e59a2f; }
 .mapp-slots { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.mapp-slot:disabled { opacity: 0.55; }
+@media (min-width: 768px) {
+  html.phone-app,
+  html.phone-app body,
+  html.phone-app #root {
+    min-height: 100dvh;
+    background: #d7deda;
+  }
+  .mapp {
+    align-items: center;
+    padding: 24px 16px;
+  }
+  .mapp-frame {
+    height: min(920px, calc(100dvh - 48px));
+    border-radius: 28px;
+    box-shadow: 0 18px 48px rgba(16, 32, 39, 0.18);
+  }
+}
+@media (max-width: 360px) {
+  .mapp-slots { grid-template-columns: 1fr 1fr; }
+  .mapp-kpi b { font-size: 16px; }
+  .mapp-body { padding-left: 10px; padding-right: 10px; }
+}
 .mapp-fab {
   position: absolute;
   right: 16px;
@@ -203,7 +290,259 @@
 .mapp-bill { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .mapp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .mapp-actions button { border: 0; background: var(--mint); color: var(--g); border-radius: 999px; padding: 6px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.mapp-eventline {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.mapp-paystats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 12px; }
+.mapp-paystat {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 8px 4px;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.mapp-paystat span { display: block; font-size: 11px; color: var(--muted); }
+.mapp-paystat b { display: block; font-size: 18px; margin-top: 2px; }
+.mapp-paystat.is-on { box-shadow: 0 0 0 2px var(--g); }
+.mapp-paystat.paid { background: #e7f6ee; }
+.mapp-paystat.paid b { color: #1f7a4d; }
+.mapp-paystat.partial { background: #fff4e5; }
+.mapp-paystat.partial b { color: #c26a00; }
+.mapp-paystat.pending { background: #fdeeee; }
+.mapp-paystat.pending b { color: #c4473a; }
+.mapp-filter {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font: inherit;
+}
+.mapp-paycard {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
+  margin: 0 0 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.mapp-paycard img { width: 72px; height: 64px; object-fit: cover; border-radius: 12px; flex-shrink: 0; }
+.mapp-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.mapp-badge.is-paid { background: #e7f6ee; color: #1f7a4d; }
+.mapp-badge.is-partial { background: #fff4e5; color: #c26a00; }
+.mapp-badge.is-pending { background: #fdeeee; color: #c4473a; }
+.mapp-badge.is-cancelled { background: #eef1f0; color: #5c6b66; }
+.mapp-badge.is-refund { background: #e7f1fb; color: #1d4f91; }
+.mapp-payhero { display: flex; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 10px; }
+.mapp-payhero img { width: 96px; height: 72px; object-fit: cover; border-radius: 12px; }
+.mapp-payhero strong { display: block; margin-top: 6px; }
+.mapp-paybox { display: flex; justify-content: space-between; gap: 8px; border-radius: 14px; padding: 12px; margin: 10px 0; }
+.mapp-paybox span { display: flex; flex-direction: column; gap: 2px; }
+.mapp-paybox.is-paid { background: #e7f6ee; }
+.mapp-paybox.is-partial { background: #fff4e5; }
+.mapp-paybox.is-pending { background: #fdeeee; }
+.mapp-paybox.is-cancelled { background: #eef1f0; }
+.mapp-paybox.is-refund { background: #eef3f8; }
+.mapp-hist { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.mapp-register { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.mapp-sheet { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; }
+.mapp-sheet-back { position: absolute; inset: 0; border: 0; background: rgba(16, 32, 39, 0.45); }
+.mapp-sheet-card { position: relative; width: min(430px, 100%); background: #fff; border-radius: 20px 20px 0 0; padding: 16px 16px 24px; max-height: 80dvh; overflow: auto; }
+.mapp-choice { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 12px 4px; font: inherit; text-align: left; cursor: pointer; }
+.mapp-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #c5d0cb; flex-shrink: 0; }
+.mapp-choice.is-on .mapp-dot { border-color: #2563eb; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 8px #2563eb; }
+.mapp-dot.is-paid { background: #1f7a4d; border-color: #1f7a4d; }
+.mapp-dot.is-partial { background: #e59a2f; border-color: #e59a2f; }
+.mapp-dot.is-pending { background: #c4473a; border-color: #c4473a; }
+.mapp-dot.is-cancelled { background: #8b9692; border-color: #8b9692; }
+.mapp-dot.is-refund { background: #2563eb; border-color: #2563eb; }
+.mapp-dot.is-all { background: #0e3d32; border-color: #0e3d32; }
 .mapp-seg { display: grid; grid-template-columns: 1fr 1fr; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px; margin-bottom: 10px; }
 .mapp-seg button { border: 0; background: transparent; border-radius: 10px; padding: 10px; cursor: pointer; font-weight: 650; }
 .mapp-seg button.is-on { background: var(--g); color: #fff; }
 .mapp-seg.cols3 { grid-template-columns: 1fr 1fr 1fr; }
+.mapp-payhead strong { font-size: 18px; }
+.mapp-fold { width: 100%; border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
+.mapp-extra-total { display: flex; justify-content: space-between; margin-top: 8px; padding: 12px; border-radius: 12px; background: var(--mint); }
+.mapp label.mapp-check {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  font-weight: 500;
+}
+.mapp label.mapp-check span { flex: 1; min-width: 0; line-height: 1.35; }
+.mapp label.mapp-check input {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 22px;
+  border-radius: 4px;
+}
+.mapp-dates { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 4px 0 12px; }
+.mapp-dates button {
+  border: 1px solid #d7e0db;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 16px;
+  padding: 9px 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mapp-dates button.is-on { background: var(--g); color: #fff; border-color: var(--g); }
+.mapp-room-tabs { display: flex; align-items: center; gap: 2px; margin: 0 0 12px; }
+.mapp-room-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--g);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mapp-room-tabs button.is-on { background: var(--g); color: #fff; }
+.mapp-room-group { margin-bottom: 8px; }
+.mapp-room-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: #e7f6ee;
+  color: var(--g);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mapp-room-head strong { flex: 1; font-size: 15px; }
+.mapp-room-glyph, .mapp-room-chev, .mapp-room-meta svg, .mapp-avail svg {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.mapp-room-glyph svg, .mapp-room-chev svg, .mapp-room-meta svg, .mapp-avail svg { width: 18px; height: 18px; }
+.mapp-room-chev.is-up { transform: rotate(-90deg); }
+.mapp-room-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.mapp-room-card img { width: 72px; height: 56px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; }
+.mapp-room-card strong { display: block; font-size: 14px; }
+.mapp-room-rate { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.mapp-room-rate b { color: var(--ok); font-weight: 700; }
+.mapp-room-meta { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.mapp-room-meta svg { width: 14px; height: 14px; }
+.mapp-avail {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #e5f6ec;
+  color: #1f7a4d;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mapp-avail svg { width: 14px; height: 14px; }
+.mapp-avail.is-booked { background: #f6f3ff; color: #7c3aed; }
+.mapp-avail.is-block { background: #fff4e5; color: #c26a00; }
+.mapp-avatar { width: 42px; height: 42px; border-radius: 999px; display: grid; place-items: center; background: #e7f6ee; color: var(--g); font-weight: 750; flex: 0 0 auto; }
+.mapp-lead { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.mapp-lead.is-follow { background: #fff4d6; color: #a16207; }
+.mapp-lead.is-new { background: #e7f1fb; color: #1d4ed8; }
+.mapp-lead.is-quote { background: #f3eafb; color: #7c3aed; }
+.mapp-lead.is-confirmed { background: #e5f6ec; color: #1f7a4d; }
+.mapp-lead.is-lost { background: #fdeeee; color: #c4473a; }
+.mapp-lead.is-visit { background: #fff1e6; color: #c26a00; }
+.mapp-crm-add { width: 36px; height: 36px; border: 0; border-radius: 999px; background: var(--g); color: #fff; font-size: 22px; cursor: pointer; }
+.mapp-crm-head { display: flex; gap: 12px; align-items: center; }
+.mapp-crm-head strong, .mapp-crm-head .sub { display: block; }
+.mapp-crm-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.mapp-crm-stats span { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px; text-align: center; }
+.mapp-crm-stats b { display: block; font-size: 14px; }
+.mapp-crm-stats small { color: var(--muted); }
+.mapp-crm-actions { display: flex; gap: 8px; margin: 8px 0; }
+.mapp-crm-actions a, .mapp-crm-actions button { flex: 1; text-align: center; text-decoration: none; }
+.mapp-crm-tabs { overflow: auto; }
+.mapp-crm-tabs button { font-size: 12px; }
+.mapp-crm-option { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 12px; margin: 8px 0; font: inherit; cursor: pointer; text-align: left; }
+.mapp-crm-option.is-on { border-color: var(--g); }
+.mapp-crm-bar { height: 8px; border-radius: 999px; background: #e7f1ea; overflow: hidden; margin-top: 8px; }
+.mapp-crm-bar span { display: block; height: 100%; background: var(--g); }
+.mapp-chips.mapp-crm-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
+.mapp-chips.mapp-crm-chips button { padding: 8px 2px; font-size: 11px; text-align: center; }
+.mapp-crm-doc { display: flex; flex-direction: column; align-items: stretch; }
+.mapp-crm-doc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.mapp-crm-doc-top > span:first-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mapp-crm-doc-top strong, .mapp-crm-doc-top .sub { display: block; }
+.mapp label.mapp-crm-upload { display: inline-flex; width: auto; align-self: flex-end; margin-top: 10px; background: var(--g); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.mapp-crm-upload input { display: none; }
+.mapp-crm-saved { min-height: 280px; display: grid; place-items: center; text-align: center; align-content: center; gap: 8px; }
+.mapp-crm-tick { width: 72px; height: 72px; border-radius: 999px; display: grid; place-items: center; background: #e5f6ec; color: #1f7a4d; font-size: 36px; }
+.mapp-crm-total { display: flex; align-items: baseline; gap: 8px; }
+.mapp-crm-total strong { font-size: 28px; }
+.mapp-crm-count { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 12px; margin: 8px 0 0; font: inherit; cursor: pointer; text-align: left; }
+.mapp-crm-count strong { font-size: 20px; }

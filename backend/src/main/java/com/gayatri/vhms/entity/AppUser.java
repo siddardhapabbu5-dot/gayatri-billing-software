@@ -41,6 +41,14 @@ public class AppUser {
   @Column(name = "removed_at")
   private Instant removedAt;
 
+  /** 10-digit mobile used for password reset. Null until the owner saves one. */
+  @Column(length = 20)
+  private String phone;
+
+  /** Incremented on password change so older sign-in tokens stop working. */
+  @Column(name = "token_version", nullable = false)
+  private int tokenVersion;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -74,6 +82,10 @@ public class AppUser {
   public Instant getRemovedAt() { return removedAt; }
   public void setRemovedAt(Instant removedAt) { this.removedAt = removedAt; }
   public boolean isRemoved() { return removedAt != null; }
+  public String getPhone() { return phone; }
+  public void setPhone(String phone) { this.phone = phone; }
+  public int getTokenVersion() { return tokenVersion; }
+  public void setTokenVersion(int tokenVersion) { this.tokenVersion = tokenVersion; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

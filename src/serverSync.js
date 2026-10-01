@@ -66,6 +66,10 @@ function mapBooking(b) {
     roomNumbers: b.roomNumbers || [],
     folioId: b.folioId != null ? sid("api-f-", b.folioId) : "",
     paymentsTotal: Number(b.paymentsTotal || 0),
+    chargesTotal: Number(b.chargesTotal || 0),
+    slotType: b.slotType || "",
+    gstMode: b.gstMode === "with" ? "with" : "without",
+    charges: b.charges || [],
   };
 }
 
@@ -167,6 +171,8 @@ function reservationsFromBookings(bookings, halls, rooms) {
   const roomReservations = [];
   for (const b of bookings || []) {
     if (String(b.status || "").toLowerCase() === "cancelled") continue;
+    const eventDay = String(b.eventDate || "").slice(0, 10);
+    const slotType = b.slotType || (/half/i.test(b.notes || "") ? "half-day" : "full-day");
     for (const code of b.hallCodes || []) {
       const hall = hallByCode[String(code).toUpperCase()];
       hallReservations.push({
@@ -174,10 +180,12 @@ function reservationsFromBookings(bookings, halls, rooms) {
         bookingId: b.id,
         hallId: hall?.id || "",
         hallCode: code,
-        eventDate: b.eventDate,
-        slotType: "full-day",
+        eventDate: eventDay,
+        slotType,
         status: "Booked",
-        amount: 0,
+        amount: Number(b.chargesTotal || 0),
+        start: eventDay ? `${eventDay}T${slotType === "half-day" ? "09:00" : "08:00"}` : "",
+        end: eventDay ? `${eventDay}T${slotType === "half-day" ? "16:00" : "23:00"}` : "",
       });
     }
     for (const num of b.roomNumbers || []) {
@@ -206,17 +214,67 @@ function foliosFromBookings(bookings) {
       id: b.folioId,
       bookingId: b.id,
       status: String(b.status || "").toLowerCase() === "cancelled" ? "Cancelled" : "Open",
-      discount: Number(b.discount || 0),
+      discount: 0,
+      gstMode: b.gstMode === "with" ? "with" : "without",
+      gstIncluded: b.gstMode === "with",
     });
   }
   return folios;
+}
+
+function deskExtraCategory(category) {
+  const key = String(category || "").toLowerCase();
+  if (key === "other") return "othercharge";
+  return key || "othercharge";
+}
+
+/** Package stays one hall line. Saved generator, power, and service charges are extra lines. */
+function folioLinesFromBookings(bookings) {
+  const rows = [];
+  for (const b of bookings || []) {
+    if (!b.folioId || Number(b.chargesTotal) <= 0) continue;
+    const extras = (b.charges || []).filter((line) => Number(line.amount) > 0);
+    const extraSum = extras.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+    const packageAmount = Math.max(0, Number(b.chargesTotal) - extraSum);
+    if (packageAmount > 0) {
+      rows.push({
+        id: `api-fl-${b.serverId || b.id}`,
+        folioId: b.folioId,
+        category: "hall",
+        kind: "Hall",
+        description: "Booked charges",
+        qty: 1,
+        rate: packageAmount,
+        amount: packageAmount,
+      });
+    }
+    extras.forEach((line, index) => {
+      rows.push({
+        id: line.id ? `api-ex-${line.id}` : `api-ex-${b.id}-${index}`,
+        folioId: b.folioId,
+        category: deskExtraCategory(line.category),
+        description: line.description || line.category || "Extra charge",
+        qty: Number(line.qty) || 1,
+        unitPrice: Number(line.unitPrice) || Number(line.amount) || 0,
+        rate: Number(line.unitPrice) || Number(line.amount) || 0,
+        amount: Number(line.amount) || 0,
+      });
+    });
+  }
+  return rows;
 }
 
 export function applyDeskSnapshot(snap, base = getState()) {
   const halls = (snap.halls || []).map((h, i) => mapHall(h, i, base.halls));
   const rooms = (snap.rooms || []).map(mapRoom);
   const guests = (snap.guests || []).map(mapGuest);
-  const bookings = (snap.bookings || []).map(mapBooking);
+  const extrasByBooking = new Map();
+  for (const line of snap.folioLines || []) {
+    const bucket = extrasByBooking.get(line.bookingId) || [];
+    bucket.push(line);
+    extrasByBooking.set(line.bookingId, bucket);
+  }
+  const bookings = (snap.bookings || []).map((row) => mapBooking({ ...row, charges: extrasByBooking.get(row.id) || [] }));
   const payments = (snap.payments || []).map(mapPayment);
   const enquiries = (snap.enquiries || []).map(mapEnquiry);
   const expenses = (snap.expenses || []).map(mapExpense);
@@ -225,6 +283,10 @@ export function applyDeskSnapshot(snap, base = getState()) {
   const invoices = (snap.invoices || []).map(mapInvoice);
   const { hallReservations, roomReservations } = reservationsFromBookings(bookings, halls, rooms);
   const folios = foliosFromBookings(bookings);
+  const folioByBooking = new Map(bookings.map((b) => [b.id, b.folioId]));
+  for (const payment of payments) {
+    if (!payment.folioId) payment.folioId = folioByBooking.get(payment.bookingId) || "";
+  }
 
   // Keep property / catalogs / UI prefs from local seed; replace live ops from server.
   const next = {
@@ -248,7 +310,7 @@ export function applyDeskSnapshot(snap, base = getState()) {
     hallReservations,
     roomReservations,
     folios,
-    folioLines: base.folioLines || [],
+    folioLines: folioLinesFromBookings(bookings),
   };
 
   // Room types: derive from rooms if present

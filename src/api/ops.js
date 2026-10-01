@@ -1,6 +1,6 @@
 /** Server ops API — Postgres is source of truth for live desk data. */
 
-import { api } from "./client";
+import { api, apiUrl, getToken } from "./client";
 
 export async function fetchDeskSnapshot() {
   return api("/api/desk/snapshot");
@@ -35,8 +35,27 @@ export async function createGuest(body) {
       nationality: body.nationality || "India",
       idProofType: body.idProofType || body.idProof?.type || null,
       idProofNumber: body.idProofNumber || body.idProof?.number || null,
+      leadStatus: body.leadStatus || null,
+      leadSource: body.leadSource || null,
+      notes: body.notes || null,
     }),
   });
+}
+
+export async function uploadGuestDocument(guestId, typeCode, file) {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("guestId", String(guestId));
+  body.append("typeCode", typeCode);
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(apiUrl("/api/documents"), { method: "POST", headers, body });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+  if (!res.ok) throw new Error(data?.detail || data?.message || data?.error || "Upload failed");
+  return data;
 }
 
 export async function updateGuest(id, body) {
@@ -53,6 +72,13 @@ export async function createBooking(body) {
   });
 }
 
+export async function setBookingGst(id, gstMode) {
+  return api(`/api/bookings/${id}/gst`, {
+    method: "PUT",
+    body: JSON.stringify({ gstMode }),
+  });
+}
+
 export async function updateBookingApi(id, body) {
   return api(`/api/bookings/${id}`, {
     method: "PUT",
@@ -62,6 +88,10 @@ export async function updateBookingApi(id, body) {
 
 export async function cancelBookingApi(id) {
   return api(`/api/bookings/${id}/cancel`, { method: "POST" });
+}
+
+export async function deleteBookingApi(id) {
+  return api(`/api/bookings/${id}`, { method: "DELETE" });
 }
 
 export async function addPaymentApi(bookingId, body) {
@@ -129,6 +159,13 @@ export async function uploadDocumentApi({ file, bookingId, guestId, typeCode }) 
     throw new Error(data?.error || data?.message || `Upload failed (${res.status})`);
   }
   return data;
+}
+
+export async function saveBookingExtras(id, lines) {
+  return api(`/api/bookings/${id}/extras`, {
+    method: "PUT",
+    body: JSON.stringify({ lines: lines || [] }),
+  });
 }
 
 export async function issueInvoiceApi(bookingId, type) {

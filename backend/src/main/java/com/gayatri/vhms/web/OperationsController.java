@@ -3,6 +3,8 @@ package com.gayatri.vhms.web;
 import com.gayatri.vhms.dto.ApiDtos.BookingRequest;
 import com.gayatri.vhms.dto.ApiDtos.BookingResponse;
 import com.gayatri.vhms.dto.ApiDtos.BookingUpdateRequest;
+import com.gayatri.vhms.dto.ApiDtos.ChargeLinesRequest;
+import com.gayatri.vhms.dto.ApiDtos.GstModeRequest;
 import com.gayatri.vhms.dto.ApiDtos.GuestRequest;
 import com.gayatri.vhms.dto.ApiDtos.GuestResponse;
 import com.gayatri.vhms.dto.ApiDtos.HallResponse;
@@ -123,6 +125,22 @@ public class OperationsController {
       @AuthenticationPrincipal StaffUserDetails actor
   ) {
     return ops.createBooking(req, actor);
+  }
+
+  @PutMapping("/bookings/{id}/gst")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BOOKING_CREATE') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_BILLING')")
+  public BookingResponse bookingGst(@PathVariable Long id, @RequestBody GstModeRequest req) {
+    return ops.setGstMode(id, req == null ? null : req.gstMode());
+  }
+
+  @PutMapping("/bookings/{id}/extras")
+  @PreAuthorize("hasAuthority('PERM_ALL') or hasAuthority('PERM_BOOKING_CREATE') or hasAuthority('PERM_RESERVATIONS') or hasAuthority('PERM_BILLING')")
+  public BookingResponse bookingExtras(
+      @PathVariable Long id,
+      @RequestBody ChargeLinesRequest req,
+      @AuthenticationPrincipal StaffUserDetails actor
+  ) {
+    return ops.replaceExtras(id, req == null || req.lines() == null ? List.of() : req.lines(), actor);
   }
 
   @PutMapping("/bookings/{id}")

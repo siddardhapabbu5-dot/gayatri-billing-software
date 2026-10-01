@@ -12,8 +12,21 @@ const isMobilePreview = previewPath === "/app-preview" || previewPath.startsWith
 const isPwaDebug = previewPath === "/debug/pwa";
 const openPhoneApp = isMobilePreview;
 
-syncAppModeFromUrl();
+if (openPhoneApp) {
+  document.documentElement.classList.add("phone-app");
+} else {
+  syncAppModeFromUrl();
+}
 initPwaInstallCapture();
+
+if ("serviceWorker" in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+}
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 

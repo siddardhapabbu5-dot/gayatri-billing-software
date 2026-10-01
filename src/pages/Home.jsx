@@ -1543,9 +1543,9 @@ export default function Home({ state, onEnquire, onStaff }) {
                   <span className="visit-ico visit-ico-phone" aria-hidden="true" />
                   +91 98496 00555
                 </a>
-                <a className="visit-contact-link" href="mailto:events@gayatrifunctionhall.com">
+                <a className="visit-contact-link" href="mailto:gayatriconventionandresorts@gmail.com">
                   <span className="visit-ico visit-ico-mail" aria-hidden="true" />
-                  events@gayatrifunctionhall.com
+                  gayatriconventionandresorts@gmail.com
                 </a>
               </div>
 

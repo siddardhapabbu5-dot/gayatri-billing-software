@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import {
   BookingFinanceBar,
   CancelBookingModal,
@@ -9,9 +12,79 @@ import {
 } from "../components/CancelRefundDesk";
 import { bookingFolio, collectionsReport } from "../engine";
 import { CHARGE_CATEGORIES, chargeLabel, paymentStatus } from "../finance";
+import { draftExtrasTotal, formFromCharges, GENERATORS, linesFromExtras, powerAmount } from "../extraCharges.js";
 import { downloadCsv, formatDate, formatDateDMY, formatDateTime, gstinText, money, todayISO } from "../lib";
 import { canPerm, PERMS } from "../lib/permissions.js";
 import { PageHead, Pill } from "../ui";
+
+function invoiceDocumentHtml(root) {
+  const clone = root.cloneNode(true);
+  clone.querySelectorAll(".no-print").forEach((el) => el.remove());
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invoice</title>
+<style>
+  body { margin: 28px auto; max-width: 920px; color: #15202b; font-family: "Segoe UI", sans-serif; }
+  h1 { font-family: Georgia, serif; margin: 0; font-size: 30px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #d8dee6; vertical-align: top; }
+  .muted { color: #5d6b78; font-size: 13px; }
+  .orn { height: 6px; margin: 10px 0 16px; background: repeating-linear-gradient(90deg, #7a1f2b 0 8px, #c4a35a 8px 12px, transparent 12px 18px); }
+  .due-row td { color: #b42318; }
+  @media print { body { margin: 12mm; max-width: none; } }
+</style>
+</head>
+<body>
+${clone.outerHTML}
+</body>
+</html>`;
+}
+
+function invoiceClone() {
+  const root = document.querySelector(".content .invoice");
+  if (!root) return null;
+  const clone = root.cloneNode(true);
+  clone.querySelectorAll(".no-print").forEach((el) => el.remove());
+  return clone;
+}
+
+async function downloadInvoiceFile(bookingNumber) {
+  const root = document.querySelector(".content .invoice");
+  if (!root) return;
+  const hidden = [];
+  root.querySelectorAll(".no-print").forEach((el) => {
+    hidden.push([el, el.style.display]);
+    el.style.display = "none";
+  });
+  try {
+    const canvas = await html2canvas(root, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 8;
+    const imgW = pageW - margin * 2;
+    const imgH = (canvas.height * imgW) / canvas.width;
+    const img = canvas.toDataURL("image/jpeg", 0.92);
+    let left = imgH;
+    let position = margin;
+    pdf.addImage(img, "JPEG", margin, position, imgW, imgH);
+    left -= pageH - margin * 2;
+    while (left > 2) {
+      position = margin - (imgH - left);
+      pdf.addPage();
+      pdf.addImage(img, "JPEG", margin, position, imgW, imgH);
+      left -= pageH - margin * 2;
+    }
+    pdf.save(`${bookingNumber || "invoice"}-invoice.pdf`);
+  } finally {
+    hidden.forEach(([el, display]) => {
+      el.style.display = display;
+    });
+  }
+}
 
 const DOCS = ["Quotation", "Proforma invoice", "Tax invoice", "Advance receipt", "Payment receipt", "Credit note", "Debit note", "Refund receipt", "Final invoice"];
 const MODES = ["Cash", "UPI", "Card", "Bank transfer"];
@@ -128,6 +201,56 @@ function partyMatch(state, booking, pays, q) {
   return hay.includes(needle);
 }
 
+function ExtraChargesDesk({ lines, onSave }) {
+  const [form, setForm] = useState(() => formFromCharges(lines));
+  const [busy, setBusy] = useState(false);
+  const key = (lines || []).map((line) => `${line.category}:${line.amount}`).join("|");
+  useEffect(() => {
+    setForm(formFromCharges(lines));
+  }, [key]);
+  const power = powerAmount(form.units, form.rate);
+  const additional = draftExtrasTotal(form);
+  const set = (name, value) => setForm((current) => ({ ...current, [name]: value }));
+  return (
+    <div className="panel no-print" style={{ marginTop: 12 }}>
+      <h3>Additional charges</h3>
+      <p className="muted" style={{ margin: "0 0 8px" }}>
+        Generator, power bill, security, cleaning, dumping, and other charges are added to this booking total. Save charges before collecting payment.
+      </p>
+      <div className="fields two">
+        <label>Generator
+          <select value={form.generator} onChange={(e) => set("generator", e.target.value)}>
+            <option value="">Select KVA</option>
+            {GENERATORS.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>Units consumed<input inputMode="numeric" value={form.units} onChange={(e) => set("units", e.target.value)} /></label>
+        <label>Rate per unit<input inputMode="decimal" value={form.rate} onChange={(e) => set("rate", e.target.value)} /></label>
+        <label>Power amount<input value={power ? String(power) : ""} readOnly /></label>
+        <label>Security charges<input inputMode="numeric" value={form.security} onChange={(e) => set("security", e.target.value)} /></label>
+        <label>Cleaning charges<input inputMode="numeric" value={form.cleaning} onChange={(e) => set("cleaning", e.target.value)} /></label>
+        <label>Dumping charges<input inputMode="numeric" value={form.dumping} onChange={(e) => set("dumping", e.target.value)} /></label>
+        <label>Other charges<input inputMode="numeric" value={form.other} onChange={(e) => set("other", e.target.value)} /></label>
+      </div>
+      <p><strong>Additional charges total {money(additional)}</strong></p>
+      <button
+        type="button"
+        className="btn small"
+        disabled={busy || !onSave}
+        onClick={async () => {
+          if (!onSave) return;
+          setBusy(true);
+          try {
+            await onSave(linesFromExtras(form));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >{busy ? "Saving…" : "Save charges"}</button>
+    </div>
+  );
+}
+
 export default function Billing({
   state,
   focusId,
@@ -135,6 +258,7 @@ export default function Billing({
   onPay,
   onDiscount,
   onCharge,
+  onSaveExtras,
   onGstMode,
   onCancelRoom,
   onIssue,
@@ -157,6 +281,18 @@ export default function Billing({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [receiptId, setReceiptId] = useState(null);
+  const [invoiceFull, setInvoiceFull] = useState(false);
+  const fullSheet = useRef(null);
+  useEffect(() => {
+    setInvoiceFull(false);
+  }, [open]);
+  useEffect(() => {
+    if (!invoiceFull) return;
+    const sheet = fullSheet.current;
+    const clone = invoiceClone();
+    if (!sheet || !clone) return;
+    sheet.replaceChildren(clone);
+  }, [invoiceFull, open]);
   const booking = state.bookings.find((b) => b.id === open);
   const cur = state.property.currency;
   const loc = state.property.locale;
@@ -237,6 +373,8 @@ export default function Billing({
               Process refund
             </button>
           ) : null}
+          <button className="btn ghost" type="button" onClick={() => setInvoiceFull(true)}>Full view</button>
+          <button className="btn ghost" type="button" onClick={() => downloadInvoiceFile(booking.number)}>Download PDF</button>
           <button className="btn" onClick={() => window.print()}>Print / PDF</button>
         </PageHead>
         <BookingFinanceBar state={state} bookingId={booking.id} />
@@ -521,6 +659,10 @@ export default function Billing({
             </div>
           )}
         </div>
+        <ExtraChargesDesk
+          lines={(state.folioLines || []).filter((line) => line.folioId === folio?.id && ["power", "security", "cleaning", "dumping", "othercharge"].includes(line.category))}
+          onSave={onSaveExtras ? (rows) => onSaveExtras(booking.id, rows) : null}
+        />
         <div className="panel no-print" style={{ marginTop: 12 }}>
           <h3>Add extra charges</h3>
           <p className="muted" style={{ margin: "0 0 8px" }}>
@@ -740,6 +882,17 @@ export default function Billing({
           />
         ) : null}
         {receiptId ? <RefundReceiptView state={state} refundId={receiptId} onClose={() => setReceiptId(null)} /> : null}
+        {invoiceFull && createPortal(
+          <div className="invoice-fullview" role="dialog" aria-label="Invoice full view">
+            <div className="invoice-fullview-bar no-print">
+              <button className="btn ghost" type="button" onClick={() => downloadInvoiceFile(booking.number)}>Download PDF</button>
+              <button className="btn" type="button" onClick={() => window.print()}>Print / PDF</button>
+              <button className="btn ghost" type="button" onClick={() => setInvoiceFull(false)}>Close</button>
+            </div>
+            <div ref={fullSheet} />
+          </div>,
+          document.body,
+        )}
       </>
     );
   }

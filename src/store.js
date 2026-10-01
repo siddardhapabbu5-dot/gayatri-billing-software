@@ -52,6 +52,10 @@ function patchTermBrandingText(text) {
 function normalizePropertyLive(p) {
   if (!p) return false;
   let dirty = false;
+  if (!p.email || /events@gayatrifunctionhall\.com/i.test(String(p.email))) {
+    p.email = "gayatriconventionandresorts@gmail.com";
+    dirty = true;
+  }
   if (/Gayatri Convention Hall/i.test(p.name || "")) {
     p.name = "Gayatri Convention";
     dirty = true;
@@ -1246,6 +1250,7 @@ export async function createReservation(draft) {
         finalMethod: draft.finalMethod || null,
         finalDate: draft.finalDate || null,
         finalRef: draft.finalRef || null,
+        gstMode: draft.gstMode === "with" ? "with" : "without",
       });
       const next = await hydrateDeskFromServer();
       return { state: next, booking: next.bookings.find((b) => b.serverId === booking.id) || { id: `api-b-${booking.id}`, number: booking.number } };

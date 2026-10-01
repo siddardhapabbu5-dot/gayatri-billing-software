@@ -32,4 +32,11 @@ public interface HallReservationRepository extends JpaRepository<HallReservation
       order by r.hall.code
       """)
   List<BookingLabelRow> findHallCodes(@Param("bookingIds") Collection<Long> bookingIds);
+
+  @Query("""
+      select r.bookingId as bookingId, r.slotType as label
+      from HallReservation r
+      where r.bookingId in :bookingIds and upper(r.status) <> 'CANCELLED'
+      """)
+  List<BookingLabelRow> findSlotTypes(@Param("bookingIds") Collection<Long> bookingIds);
 }

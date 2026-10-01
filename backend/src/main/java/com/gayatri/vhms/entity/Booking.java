@@ -48,6 +48,9 @@ public class Booking {
   @Column(nullable = false)
   private java.math.BigDecimal discount = java.math.BigDecimal.ZERO;
 
+  @Column(name = "gst_mode", nullable = false, length = 16)
+  private String gstMode = "without";
+
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "created_by")
   private AppUser createdBy;
@@ -80,6 +83,8 @@ public class Booking {
   public void setNotes(String notes) { this.notes = notes; }
   public java.math.BigDecimal getDiscount() { return discount; }
   public void setDiscount(java.math.BigDecimal discount) { this.discount = discount; }
+  public String getGstMode() { return gstMode; }
+  public void setGstMode(String gstMode) { this.gstMode = gstMode; }
   public AppUser getCreatedBy() { return createdBy; }
   public void setCreatedBy(AppUser createdBy) { this.createdBy = createdBy; }
   public Instant getCancelledAt() { return cancelledAt; }

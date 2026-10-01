@@ -197,11 +197,23 @@ export default function StaffUsersPanel({ canManage, authRole, standalone = fals
                   className="btn ghost small"
                   disabled={busy}
                   onClick={() => {
-                    const pw = window.prompt("New password (min 8 characters)");
+                    const pw = window.prompt("New password: at least 8 characters, 1 uppercase letter, 1 number, and 1 special character");
                     if (pw) patchUser(u, { newPassword: pw });
                   }}
                 >
                   Reset password
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={busy}
+                  onClick={() => {
+                    const phone = window.prompt("Mobile number for Forgot password (10 digits)", u.phone || "");
+                    if (phone == null) return;
+                    patchUser(u, { phone });
+                  }}
+                >
+                  {u.phone ? `Mobile ${u.phone}` : "Set mobile"}
                 </button>
                 {canRemoveRow(u) ? (
                   <button

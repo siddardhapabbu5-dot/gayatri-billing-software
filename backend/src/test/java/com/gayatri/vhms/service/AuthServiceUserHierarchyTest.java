@@ -98,7 +98,7 @@ class AuthServiceUserHierarchyTest {
         ResponseStatusException.class,
         () -> auth.updateUser(
             1L,
-            new UpdateUserRequest(null, null, false, "HackedPass9"),
+            new UpdateUserRequest(null, null, false, "HackedPass9", null),
             manager
         )
     );
@@ -115,7 +115,7 @@ class AuthServiceUserHierarchyTest {
 
     ResponseStatusException ex = assertThrows(
         ResponseStatusException.class,
-        () -> auth.updateUser(3L, new UpdateUserRequest("New Name", null, null, null), manager)
+        () -> auth.updateUser(3L, new UpdateUserRequest("New Name", null, null, null, null), manager)
     );
     assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
   }
@@ -128,7 +128,7 @@ class AuthServiceUserHierarchyTest {
 
     ResponseStatusException ex = assertThrows(
         ResponseStatusException.class,
-        () -> auth.updateUser(10L, new UpdateUserRequest(null, "ACCOUNTS", null, null), manager)
+        () -> auth.updateUser(10L, new UpdateUserRequest(null, "ACCOUNTS", null, null, null), manager)
     );
     assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
   }
@@ -141,7 +141,7 @@ class AuthServiceUserHierarchyTest {
     when(permissions.effectivePermissions(StaffRole.FRONTDESK)).thenReturn(Set.of("billing"));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    UserResponse out = auth.updateUser(10L, new UpdateUserRequest(null, null, false, null), manager);
+    UserResponse out = auth.updateUser(10L, new UpdateUserRequest(null, null, false, null, null), manager);
     assertEquals(false, out.active());
   }
 
@@ -188,7 +188,7 @@ class AuthServiceUserHierarchyTest {
 
     ResponseStatusException ex = assertThrows(
         ResponseStatusException.class,
-        () -> auth.updateUser(1L, new UpdateUserRequest(null, null, false, null), owner)
+        () -> auth.updateUser(1L, new UpdateUserRequest(null, null, false, null, null), owner)
     );
     assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
   }

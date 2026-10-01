@@ -145,12 +145,6 @@ export function folioTotals(folio, lines, payments, taxPercent) {
   const subtotal = lines.reduce((s, l) => s + Number(l.amount || 0), 0);
   const discount = Number(folio?.discount || 0);
   const taxable = Math.max(0, subtotal - discount);
-  const gstMode = folio?.gstMode === "without" ? "without" : "with";
-  const rate = gstMode === "without" ? 0 : Number(taxPercent ?? folio?.taxPercent ?? 0) || 0;
-  const tax = Math.round((taxable * rate) / 100);
-  const cgst = Math.round(tax / 2);
-  const sgst = tax - cgst;
-  const total = taxable + tax;
   const paid = payments.reduce((s, p) => {
     const st = String(p.status || "SUCCESS").toUpperCase();
     if (st === "REVERSED" || st === "FAILED" || st === "REJECTED") return s;
@@ -162,6 +156,18 @@ export function folioTotals(folio, lines, payments, taxPercent) {
     if (p.type === "Deposit return") return s - Number(p.amount || 0);
     return s;
   }, 0);
+  if (folio?.gstIncluded) {
+    const tax = Math.round((taxable * 18) / 118);
+    const cgst = Math.round(tax / 2);
+    const sgst = tax - cgst;
+    return { subtotal, discount, taxable, tax, cgst, sgst, taxRate: 18, gstMode: "with", total: taxable, paid, balance: taxable - paid, deposit };
+  }
+  const gstMode = folio?.gstMode === "without" ? "without" : "with";
+  const rate = gstMode === "without" ? 0 : Number(taxPercent ?? folio?.taxPercent ?? 0) || 0;
+  const tax = Math.round((taxable * rate) / 100);
+  const cgst = Math.round(tax / 2);
+  const sgst = tax - cgst;
+  const total = taxable + tax;
   const balance = total - paid;
   return { subtotal, discount, taxable, tax, cgst, sgst, taxRate: rate, gstMode, total, paid, balance, deposit };
 }

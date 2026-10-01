@@ -1,5 +1,6 @@
 package com.gayatri.vhms.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.gayatri.vhms.domain.StaffRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -33,7 +34,8 @@ public final class AuthDtos {
       Set<String> permissions,
       boolean active,
       boolean removed,
-      java.time.Instant removedAt
+      java.time.Instant removedAt,
+      String phone
   ) {}
 
   public record RoleInfo(String role, String label, Set<String> permissions) {}
@@ -49,7 +51,8 @@ public final class AuthDtos {
       String fullName,
       String role,
       Boolean active,
-      String newPassword
+      String newPassword,
+      String phone
   ) {}
 
   public record RolePermissionsUpdateRequest(
@@ -66,8 +69,20 @@ public final class AuthDtos {
   public record RoleMatrixResponse(Map<String, Map<String, Boolean>> roles, List<String> catalog) {}
 
   public record AuditEntryResponse(
-      Long id, Long userId, String action, String entity, String detail, java.time.Instant createdAt
+      Long id, Long userId, String action, String entity, String detail, java.time.Instant createdAt,
+      String ipAddress
   ) {}
+
+  public record OtpRequest(@NotBlank String phone) {}
+
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record OtpResponse(String message, int expiresInSeconds, String otp) {}
+
+  public record VerifyOtpRequest(@NotBlank String phone, @NotBlank String otp) {}
+
+  public record VerifyOtpResponse(String resetToken, String message) {}
+
+  public record ResetPasswordRequest(@NotBlank String resetToken, @NotBlank String password) {}
 
   public record MessageResponse(String message) {}
 

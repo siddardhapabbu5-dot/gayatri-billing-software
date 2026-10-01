@@ -3,6 +3,8 @@ package com.gayatri.vhms.service;
 import com.gayatri.vhms.repository.HallReservationRepository;
 import com.gayatri.vhms.repository.RoomReservationRepository;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.Locale;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -34,12 +36,52 @@ public class ReservationConflictService {
   }
 
   public void requireHallFree(Long hallId, String hallLabel, LocalDate eventDate, Long ignoreBookingId) {
-    if (!isHallFree(hallId, eventDate, ignoreBookingId)) {
+    requireHallFree(hallId, hallLabel, eventDate, ignoreBookingId, "full-day");
+  }
+
+  /** Full-day blocks every slot. A timed slot blocks only an overlapping window. */
+  public void requireHallFree(
+      Long hallId, String hallLabel, LocalDate eventDate, Long ignoreBookingId, String slotType
+  ) {
+    Window incoming = windowFor(slotType);
+    boolean clash = hallReservations.findClashes(hallId, eventDate, ignoreBookingId).stream()
+        .anyMatch(row -> windowsOverlap(incoming, windowFor(row.getSlotType())));
+    if (clash) {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT,
-          hallLabel + " is already booked on " + eventDate + ". Pick another date or hall."
+          hallLabel + " is already booked on " + eventDate + " for " + incoming.label()
+              + ". Pick another slot, date, or hall."
       );
     }
+  }
+
+  public record Window(LocalTime start, LocalTime end, String label) {}
+
+  public static Window windowFor(String raw) {
+    String key = raw == null ? "full-day" : raw.trim().toLowerCase(Locale.ROOT).replace(' ', '-');
+    if (key.contains("half")) {
+      return new Window(LocalTime.of(9, 0), LocalTime.of(16, 0), "half-day");
+    }
+    if (key.contains("9:00-am") || key.equals("09:00")) {
+      return new Window(LocalTime.of(9, 0), LocalTime.of(12, 0), "9:00 AM");
+    }
+    if (key.contains("12:00")) {
+      return new Window(LocalTime.of(12, 0), LocalTime.of(15, 0), "12:00 PM");
+    }
+    if (key.contains("3:00") || key.contains("15:00")) {
+      return new Window(LocalTime.of(15, 0), LocalTime.of(18, 0), "3:00 PM");
+    }
+    if (key.contains("6:00") || key.contains("18:00")) {
+      return new Window(LocalTime.of(18, 0), LocalTime.of(21, 0), "6:00 PM");
+    }
+    if (key.contains("9:00-pm") || key.contains("21:00")) {
+      return new Window(LocalTime.of(21, 0), LocalTime.of(23, 59), "9:00 PM");
+    }
+    return new Window(LocalTime.MIN, LocalTime.of(23, 59), "full-day");
+  }
+
+  public static boolean windowsOverlap(Window a, Window b) {
+    return a.start().isBefore(b.end()) && b.start().isBefore(a.end());
   }
 
   public void requireRoomFree(

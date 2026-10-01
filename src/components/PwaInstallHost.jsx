@@ -121,17 +121,25 @@ export default function PwaInstallHost() {
       <div className="install-app-sheet">
         <h2>Install Staff App</h2>
         <p>For best experience install the app.</p>
-        {hint ? <p className="install-app-hint">{hint}</p> : inApp ? <p className="install-app-hint">You opened this link in {browserName(browser)}. Chrome can install the app.</p> : null}
+        {hint ? <p className="install-app-hint">{hint}</p> : inApp ? <p className="install-app-hint">Open in Chrome to Install App</p> : null}
         <div className="install-app-actions">
-          <button type="button" className="btn pwa-install-btn" disabled={busy} onClick={onInstall}>
-            {busy ? "Opening…" : "Install App"}
-          </button>
+          {inApp ? (
+            <button type="button" className="btn pwa-install-btn" onClick={onOpenChrome}>
+              Open in Chrome to Install App
+            </button>
+          ) : (
+            <button type="button" className="btn pwa-install-btn" disabled={busy} onClick={onInstall}>
+              {busy ? "Opening…" : "Install App"}
+            </button>
+          )}
           <a className="btn ghost" href={APK_HREF} download onClick={onApkClick}>
             Download APK
           </a>
-          <button type="button" className="btn ghost" onClick={onOpenChrome}>
-            Open In Chrome
-          </button>
+          {inApp ? null : (
+            <button type="button" className="btn ghost" onClick={onOpenChrome}>
+              Open In Chrome
+            </button>
+          )}
         </div>
         <p className="install-app-kicker">{inApp ? `${browserName(browser)} guide` : "Install guide"}</p>
         <ol className="install-app-steps">

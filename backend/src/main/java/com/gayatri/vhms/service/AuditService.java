@@ -16,11 +16,17 @@ public class AuditService {
 
   @Transactional
   public void record(StaffUserDetails actor, String action, String entity, String detail) {
+    record(actor == null ? null : actor.getUser().getId(), action, entity, detail, null);
+  }
+
+  @Transactional
+  public void record(Long userId, String action, String entity, String detail, String ipAddress) {
     AuditLog row = new AuditLog();
-    row.setUserId(actor == null ? null : actor.getUser().getId());
+    row.setUserId(userId);
     row.setAction(action);
     row.setEntity(entity);
     row.setDetail(detail);
+    row.setIpAddress(ipAddress);
     audits.save(row);
   }
 

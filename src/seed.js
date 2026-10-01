@@ -314,7 +314,7 @@ export function createSeed() {
       phone: "+91 98496 00555",
       notifyPhone: "+91 72043 01779",
       notifyWhatsApp: true,
-      email: "events@gayatrifunctionhall.com",
+      email: "gayatriconventionandresorts@gmail.com",
       desk: "Desk 10:00 – 20:00 · Tours by appointment",
       about: DEFAULT_ABOUT,
       banquetIntro: DEFAULT_BANQUET,

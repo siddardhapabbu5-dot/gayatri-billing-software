@@ -94,6 +94,27 @@ class ConflictCheckTest {
   }
 
   @Test
+  void eveningSlotDoesNotClashWithMorningHalfDay() {
+    HallReservation half = new HallReservation();
+    half.setSlotType("half-day");
+    when(hallReservations.findClashes(eq(1L), eq(EVENT_DATE), any())).thenReturn(List.of(half));
+
+    service().requireHallFree(1L, "Garden Pavilion", EVENT_DATE, null, "6:00 PM");
+  }
+
+  @Test
+  void morningSlotClashesWithHalfDay() {
+    HallReservation half = new HallReservation();
+    half.setSlotType("half-day");
+    when(hallReservations.findClashes(eq(1L), eq(EVENT_DATE), any())).thenReturn(List.of(half));
+
+    assertThatThrownBy(() -> service().requireHallFree(1L, "Garden Pavilion", EVENT_DATE, null, "9:00 AM"))
+        .isInstanceOf(ResponseStatusException.class)
+        .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+        .isEqualTo(HttpStatus.CONFLICT);
+  }
+
+  @Test
   void slotTypeDefaultsToFullDay() {
     assertThat(OperationsService.normalizeSlot(null)).isEqualTo("full-day");
     assertThat(OperationsService.normalizeSlot("  ")).isEqualTo("full-day");

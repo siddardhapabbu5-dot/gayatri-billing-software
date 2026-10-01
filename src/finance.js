@@ -23,6 +23,11 @@ export const CHARGE_CATEGORIES = [
   { id: "extraBed", label: "Extra bed" },
   { id: "decoration", label: "Decoration" },
   { id: "other", label: "Other service" },
+  { id: "power", label: "Power bill" },
+  { id: "security", label: "Security" },
+  { id: "cleaning", label: "Cleaning" },
+  { id: "dumping", label: "Dumping" },
+  { id: "othercharge", label: "Other charges" },
   { id: "hall", label: "Hall charge (extra)" },
   { id: "room", label: "Room charge (extra)" },
 ];

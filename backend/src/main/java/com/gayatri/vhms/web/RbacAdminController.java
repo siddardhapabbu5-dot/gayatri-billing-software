@@ -136,7 +136,7 @@ public class RbacAdminController {
   public List<AuditEntryResponse> auditLog() {
     return audit.recent().stream()
         .map(a -> new AuditEntryResponse(
-            a.getId(), a.getUserId(), a.getAction(), a.getEntity(), a.getDetail(), a.getCreatedAt()))
+            a.getId(), a.getUserId(), a.getAction(), a.getEntity(), a.getDetail(), a.getCreatedAt(), a.getIpAddress()))
         .toList();
   }
 }

@@ -42,6 +42,15 @@ public class Guest {
   @Column(name = "id_proof_number", length = 80)
   private String idProofNumber;
 
+  @Column(name = "lead_status", length = 40)
+  private String leadStatus;
+
+  @Column(name = "lead_source", length = 40)
+  private String leadSource;
+
+  @Column(columnDefinition = "TEXT")
+  private String notes;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -78,6 +87,12 @@ public class Guest {
   public void setIdProofType(String idProofType) { this.idProofType = idProofType; }
   public String getIdProofNumber() { return idProofNumber; }
   public void setIdProofNumber(String idProofNumber) { this.idProofNumber = idProofNumber; }
+  public String getLeadStatus() { return leadStatus; }
+  public void setLeadStatus(String leadStatus) { this.leadStatus = leadStatus; }
+  public String getLeadSource() { return leadSource; }
+  public void setLeadSource(String leadSource) { this.leadSource = leadSource; }
+  public String getNotes() { return notes; }
+  public void setNotes(String notes) { this.notes = notes; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

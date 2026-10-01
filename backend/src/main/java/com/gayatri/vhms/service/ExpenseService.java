@@ -17,9 +17,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ExpenseService {
   private final ExpenseRepository expenses;
+  private final AuditService audit;
+  private final StaffNoticeService notices;
 
-  public ExpenseService(ExpenseRepository expenses) {
+  public ExpenseService(ExpenseRepository expenses, AuditService audit, StaffNoticeService notices) {
     this.expenses = expenses;
+    this.audit = audit;
+    this.notices = notices;
   }
 
   @Transactional(readOnly = true)

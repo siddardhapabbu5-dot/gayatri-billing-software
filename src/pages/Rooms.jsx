@@ -39,6 +39,14 @@ function occClass(status) {
   return `occ-${String(status || "Available").replace(/\s+/g, "-")}`;
 }
 
+function boardOccupancy(room, stay) {
+  const manual = occupancyOf(room);
+  if (manual === "Out of order" || manual === "Maintenance" || manual === "Occupied") return manual;
+  if (stay) return "Reserved";
+  if (manual === "Reserved") return manual;
+  return "Available";
+}
+
 export default function Rooms({
   state,
   onRoomType,
@@ -101,7 +109,7 @@ export default function Rooms({
               {OCC.map((s) => (
                 <div className={`kpi${s === "Maintenance" ? " tone-maint" : ""}`} key={s}>
                   <div className="k">{OCC_LABEL[s] || s}</div>
-                  <div className="v">{state.rooms.filter((r) => occupancyOf(r) === s).length}</div>
+                  <div className="v">{state.rooms.filter((r) => boardOccupancy(r, stay(r.id)) === s).length}</div>
                 </div>
               ))}
             </div>
@@ -125,7 +133,7 @@ export default function Rooms({
                       {rooms.map((row) => {
                         const res = stay(row.id);
                         const guest = state.guests.find((g) => g.id === res?.guestId);
-                        const occ = occupancyOf(row);
+                        const occ = boardOccupancy(row, res);
                         const hk = housekeepingOf(row);
                         return (
                           <button
@@ -137,7 +145,7 @@ export default function Rooms({
                             <span className="room-tile-no">{row.number}</span>
                             <span className="room-tile-type">{typeName(row.typeId)}</span>
                             <span className="room-tile-badges">
-                              <Pill status={occ} />
+                              <span className="room-occ-pill"><Pill status={occ}>{OCC_LABEL[occ] || occ}</Pill></span>
                               <Pill status={hk === "Clean" || hk === "Inspected" ? "Paid" : "Due"}>{hk}</Pill>
                             </span>
                             <span className="room-tile-guest">{guest ? guest.name : "Vacant"}</span>
@@ -170,7 +178,7 @@ export default function Rooms({
                   <div className="room-detail-grid">
                     <div>
                       <span className="room-detail-label">Occupancy</span>
-                      <Pill status={occupancyOf(selected)} />
+                      <span className={`room-occ-pill is-${String(boardOccupancy(selected, selectedStay) || "").toLowerCase()}`}><Pill status={boardOccupancy(selected, selectedStay)}>{OCC_LABEL[boardOccupancy(selected, selectedStay)] || boardOccupancy(selected, selectedStay)}</Pill></span>
                     </div>
                     <div>
                       <span className="room-detail-label">Housekeeping</span>
@@ -247,7 +255,7 @@ export default function Rooms({
                   <div className="fields two" style={{ marginTop: 10 }}>
                     <label>
                       Occupancy
-                      <select value={occupancyOf(selected)} onChange={(e) => onStatus(selected.id, e.target.value)}>
+                      <select value={boardOccupancy(selected, selectedStay)} onChange={(e) => onStatus(selected.id, e.target.value)}>
                         {OCC.map((s) => (
                           <option key={s} value={s}>{OCC_LABEL[s] || s}</option>
                         ))}

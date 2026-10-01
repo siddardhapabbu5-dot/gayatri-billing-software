@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchRbacSettings, saveBookingPolicies } from "../api/client";
+import ServerStatus from "../components/ServerStatus.jsx";
 import { formatDateTime } from "../lib";
 import { DEFAULT_POLICIES, TERM_LANGS, TERM_SECTIONS, policiesOf, termSetsOf } from "../policies";
 import { PageHead } from "../ui";
@@ -89,6 +90,7 @@ export default function Settings({
   return (
     <>
       <PageHead title="Settings" sub="Property, terms, booking policies, and guest agreements." />
+      {authRole === "admin" ? <ServerStatus /> : null}
       {note && <p className="pill ok" style={{ marginBottom: 10 }}>{note}</p>}
       <div className="chips" style={{ marginBottom: 12 }}>
         {visibleTabs.map(([id, label]) => (

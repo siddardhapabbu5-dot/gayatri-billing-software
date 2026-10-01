@@ -22,6 +22,7 @@ public class DeskSnapshotService {
   private final RefundService refunds;
   private final DocumentService documents;
   private final PermissionService permissions;
+  private final StaffNoticeService notices;
 
   public DeskSnapshotService(
       OperationsService ops,
@@ -29,7 +30,8 @@ public class DeskSnapshotService {
       ExpenseService expenses,
       RefundService refunds,
       DocumentService documents,
-      PermissionService permissions
+      PermissionService permissions,
+      StaffNoticeService notices
   ) {
     this.ops = ops;
     this.enquiries = enquiries;
@@ -37,6 +39,7 @@ public class DeskSnapshotService {
     this.refunds = refunds;
     this.documents = documents;
     this.permissions = permissions;
+    this.notices = notices;
   }
 
   @Transactional(readOnly = true)
@@ -94,7 +97,9 @@ public class DeskSnapshotService {
         expensesOk ? expenses.list(null, null) : List.of(),
         finance ? refunds.listAll() : List.of(),
         docs ? documents.list(null, null) : List.of(),
-        finance ? ops.listInvoices() : List.of()
+        finance ? ops.listInvoices() : List.of(),
+        notices.recent(),
+        bookings ? ops.listExtraLines() : List.of()
     );
   }
 
@@ -104,7 +109,8 @@ public class DeskSnapshotService {
     }
     return new GuestResponse(
         g.id(), g.name(), g.phone(), g.email(), g.address(),
-        g.gstin(), g.nationality(), null, null
+        g.gstin(), g.nationality(), null, null,
+        g.leadStatus(), g.leadSource(), g.notes()
     );
   }
 }

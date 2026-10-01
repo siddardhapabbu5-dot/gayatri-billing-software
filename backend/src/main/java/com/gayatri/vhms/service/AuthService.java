@@ -16,10 +16,13 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,7 @@ public class AuthService {
   private final PasswordEncoder encoder;
   private final PermissionService permissions;
   private final AuditService audit;
+  private final Map<String, long[]> loginFails = new ConcurrentHashMap<>();
 
   public AuthService(
       AuthenticationManager authManager,
@@ -54,19 +58,51 @@ public class AuthService {
   }
 
   public LoginResponse login(LoginRequest req) {
-    AppUser existing = users.findByEmailIgnoreCase(req.email().trim().toLowerCase()).orElse(null);
+    String email = req.email().trim().toLowerCase();
+    if (loginBlocked(email)) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many sign-in attempts. Wait 15 minutes.");
+    }
+    AppUser existing = users.findByEmailIgnoreCase(email).orElse(null);
     if (existing != null && existing.isRemoved()) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "This account has been removed");
     }
-    var auth = authManager.authenticate(
-        new UsernamePasswordAuthenticationToken(req.email().trim().toLowerCase(), req.password())
-    );
-    StaffUserDetails principal = (StaffUserDetails) auth.getPrincipal();
-    if (!principal.isEnabled()) {
-      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Account is inactive or removed");
+    try {
+      var auth = authManager.authenticate(new UsernamePasswordAuthenticationToken(email, req.password()));
+      StaffUserDetails principal = (StaffUserDetails) auth.getPrincipal();
+      if (!principal.isEnabled()) {
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Account is inactive or removed");
+      }
+      loginFails.remove(email);
+      audit.record(principal, "auth.login", "app_users", email);
+      String token = jwtService.generateToken(principal);
+      return new LoginResponse(token, "Bearer", jwtProperties.getExpirationMs(), toUser(principal.getUser()));
+    } catch (ResponseStatusException ex) {
+      throw ex;
+    } catch (AuthenticationException ex) {
+      noteLoginFailure(email);
+      audit.record(null, "auth.login_failed", "app_users", email);
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Email or password is wrong");
     }
-    String token = jwtService.generateToken(principal);
-    return new LoginResponse(token, "Bearer", jwtProperties.getExpirationMs(), toUser(principal.getUser()));
+  }
+
+  private boolean loginBlocked(String email) {
+    long[] row = loginFails.get(email);
+    if (row == null) return false;
+    long now = Instant.now().getEpochSecond();
+    if (now - row[1] > 900) {
+      loginFails.remove(email);
+      return false;
+    }
+    return row[0] >= 8;
+  }
+
+  private void noteLoginFailure(String email) {
+    long now = Instant.now().getEpochSecond();
+    loginFails.compute(email, (key, row) -> {
+      if (row == null || now - row[1] > 900) return new long[] {1, now};
+      row[0] += 1;
+      return row;
+    });
   }
 
   public UserResponse me(StaffUserDetails principal) {
@@ -90,6 +126,7 @@ public class AuthService {
     user.setEmail(req.email().trim().toLowerCase());
     user.setFullName(req.fullName().trim());
     user.setRole(newRole);
+    PasswordPolicy.requireStrong(req.password());
     user.setPasswordHash(encoder.encode(req.password()));
     user.setActive(true);
     user.setRemovedAt(null);
@@ -112,6 +149,7 @@ public class AuthService {
         (req.fullName() != null && !req.fullName().isBlank())
             || (req.role() != null && !req.role().isBlank())
             || req.active() != null
+            || req.phone() != null
             || (req.newPassword() != null && !req.newPassword().isBlank());
     if (!mutating) {
       return toUser(user);
@@ -134,11 +172,24 @@ public class AuthService {
       }
       user.setActive(req.active());
     }
-    if (req.newPassword() != null && !req.newPassword().isBlank()) {
-      if (req.newPassword().length() < 8) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters");
+    if (req.phone() != null) {
+      String phone = req.phone().isBlank() ? null : PasswordPolicy.normalizePhone(req.phone());
+      if (phone == null && !req.phone().isBlank()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a 10-digit mobile number");
       }
+      if (phone != null) {
+        users.findActiveByPhone(phone)
+            .filter(other -> !other.getId().equals(user.getId()))
+            .ifPresent(other -> {
+              throw new ResponseStatusException(HttpStatus.CONFLICT, "This mobile number is already registered");
+            });
+      }
+      user.setPhone(phone);
+    }
+    if (req.newPassword() != null && !req.newPassword().isBlank()) {
+      PasswordPolicy.requireStrong(req.newPassword());
       user.setPasswordHash(encoder.encode(req.newPassword()));
+      user.setTokenVersion(user.getTokenVersion() + 1);
     }
     UserResponse out = toUser(users.save(user));
     audit.record(principal, "user.update", "app_users", "id=" + id + " email=" + out.email());
@@ -271,7 +322,8 @@ public class AuthService {
         perms,
         u.isActive(),
         u.isRemoved(),
-        u.getRemovedAt()
+        u.getRemovedAt(),
+        u.getPhone()
     );
   }
 

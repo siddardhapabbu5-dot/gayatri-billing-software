@@ -43,7 +43,7 @@ public class SecurityConfig {
         .cors(cors -> cors.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/api/health", "/api/auth/login", "/api/auth/roles").permitAll()
+            .requestMatchers("/api/health", "/api/auth/login", "/api/auth/roles", "/api/auth/forgot/**").permitAll()
             // Website forms (enquiry / contact) post without a token.
             .requestMatchers("/api/public/**").permitAll()
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
